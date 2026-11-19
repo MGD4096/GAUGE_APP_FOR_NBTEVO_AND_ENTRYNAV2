@@ -18,6 +18,8 @@ template <> BasicString<unsigned short>::BasicString(const unsigned short* s) {
 }
 template <> BasicString<unsigned short>::~BasicString() { free(m_data); }
 
+ImageID::ImageID(unsigned id) : m_id(id), m_type(1) {}
+
 Runnable::~Runnable() {}
 
 #define FAKE_SLOT_DEF(n) void PluginApp::s##n() { printf("FAKE slot %d\n", n); }
@@ -37,16 +39,8 @@ void PluginApp::onFinalize() { g_fake.baseOnFinalize++; }
 
 void PluginApp::post(Runnable* r, unsigned ms) { g_fake.posted.push_back(std::make_pair(r, ms)); }
 
-// The HMI stores the UTF-16 text; the test reads it back as UTF-8.
-void PluginApp::updateModel(unsigned id, const BasicString<unsigned short>& t) {
-    std::string out;
-    for (const unsigned short* p = t.m_data; *p; ++p) {
-        unsigned c = *p;
-        if (c < 0x80) out += (char)c;
-        else if (c < 0x800) { out += (char)(0xc0 | (c >> 6)); out += (char)(0x80 | (c & 0x3f)); }
-        else { out += (char)(0xe0 | (c >> 12)); out += (char)(0x80 | ((c >> 6) & 0x3f)); out += (char)(0x80 | (c & 0x3f)); }
-    }
-    g_fake.modelText[id] = out;
+void PluginApp::updateModel(unsigned id, const ImageID& img) {
+    g_fake.modelImage[id] = img.m_id;
     g_fake.modelWrites[id]++;
 }
 

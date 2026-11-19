@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Host-test stand-in for libAppFramework.A.so / libCoreFramework.A.so: a bmw::PluginApp with the same 34-slot vtable
-// layout, recording what the app does (updateModel texts, posted Runnables, CDS handlers). Not the real framework.
+// layout, recording what the app does (updateModel images, posted Runnables, CDS handlers). Not the real framework.
 #ifndef ENGINE_FAKE_APPFRAMEWORK_HPP
 #define ENGINE_FAKE_APPFRAMEWORK_HPP
 #include <stddef.h>
@@ -19,6 +19,12 @@ public:
     BasicString(const BasicString& o);
     ~BasicString();
     T* m_data;
+};
+
+class ImageID {
+public:
+    explicit ImageID(unsigned id);
+    unsigned m_id, m_type;
 };
 
 class Runnable {
@@ -48,7 +54,7 @@ public:
     FAKE_SLOT(24) FAKE_SLOT(25) FAKE_SLOT(26) FAKE_SLOT(27) FAKE_SLOT(28) FAKE_SLOT(29) FAKE_SLOT(30) FAKE_SLOT(31)
     FAKE_SLOT(32) FAKE_SLOT(33)
     void post(Runnable* r, unsigned ms);
-    void updateModel(unsigned modelId, const BasicString<unsigned short>& text);
+    void updateModel(unsigned modelId, const ImageID& image);
     void cdsAddPropertyChangedEventHandler(BasicString<char>& name, unsigned id, const CdsDelegate& d);
     char name[64];
 };
@@ -56,7 +62,7 @@ public:
 
 // Recorded by the fake.
 struct FakeState {
-    std::map<unsigned, std::string> modelText;     // modelId -> latest text, UTF-8
+    std::map<unsigned, unsigned> modelImage;       // modelId -> latest image id
     std::map<unsigned, int> modelWrites;           // modelId -> number of updateModel calls
     std::vector<std::pair<bmw::Runnable*, unsigned> > posted;   // not yet run
     std::map<std::string, bmw::CdsDelegate> cds;   // property name -> handler

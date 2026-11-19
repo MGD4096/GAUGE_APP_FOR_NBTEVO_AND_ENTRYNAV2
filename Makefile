@@ -6,12 +6,13 @@
 #   make                 NBT Evo: libGaugeApp.so and the text/image DBs          (needs qcc, see below)
 #   make entrynav2       EntryNav2: build/entrynav2/libGaugeApp.so               (needs the armhf GCC 4.7, see below)
 #   make entrynav2-dist  EntryNav2: dist/gauge-app-entrynav2.tar, ready to copy to the car
-#   make db              only the DBs (python3 + Pillow); the same files serve both head units
+#   make db              GaugeApp.xml, src/gauge_ids.hpp and the image / text DBs (python3 + Pillow, make_db.py);
+#                        the same files serve both head units. They are kept in git, so a build needs no Pillow.
 #   make check           host tests with the Linux g++ (no QNX / ARM compiler needed), both targets
-#   make clean
+#   make clean           build outputs only (not the generated files kept in git)
 #
 # NBT Evo: RHMI_LIBDIR must hold copies of the car's libAppFramework.A.so and libCoreFramework.A.so (opt/hmi/ID5/lib in
-# a firmware dump). They are BMW's files and are not part of this project; copy them from your own head unit.
+# a firmware dump; lib/NBT_evo_libs by default). They are BMW's files and are not part of this project.
 #
 # EntryNav2: EN2_LIBDIR must hold the EntryNav2 copies of the same two libraries (/opt/hmi/lib on that head unit;
 # NOT the NBT Evo ones from ./lib); lib/Entry_Evo_libs is used when it holds them. The compiler must match the car's
@@ -21,7 +22,7 @@
 #   bash toolchain/tc-entrynav2.sh make entrynav2-dist
 
 QCC ?= qcc
-RHMI_LIBDIR ?= ./lib
+RHMI_LIBDIR ?= ./lib/NBT_evo_libs
 RHMI_LIBS = $(wildcard $(RHMI_LIBDIR)/libAppFramework.A.so $(RHMI_LIBDIR)/libCoreFramework.A.so)
 
 PLUGIN_CXX      = $(QCC) -Vgcc_ntoarmv7le_gpp
@@ -43,12 +44,14 @@ EN2_OUT       = build/entrynav2
 EN2_PLUGIN    = opt/hmi/data/ro/Plugins/GaugeApp
 EN2_STAGE     = dist/entrynav2
 
+SRC = src/engine_data.cpp src/cds_values.hpp src/gauge_view.hpp src/gauge_ids.hpp
+
 .PHONY: all lib db check clean entrynav2 entrynav2-dist
-all: lib db
+all: lib
 
 lib: libGaugeApp.so
 
-libGaugeApp.so: src/engine_data.cpp src/cds_values.hpp
+libGaugeApp.so: $(SRC)
 	@test -n "$(RHMI_LIBS)" || { echo "put libAppFramework.A.so and libCoreFramework.A.so from the car into $(RHMI_LIBDIR) (or set RHMI_LIBDIR)"; exit 1; }
 	@echo [BUILD] $@
 	$(PLUGIN_CXX) $(PLUGIN_CXXFLAGS) -shared -Wl,-soname,libGaugeApp.so -o $@ src/engine_data.cpp $(RHMI_LIBS) -Wl,--allow-shlib-undefined -lang-c++
@@ -56,7 +59,7 @@ libGaugeApp.so: src/engine_data.cpp src/cds_values.hpp
 
 entrynav2: $(EN2_OUT)/libGaugeApp.so
 
-$(EN2_OUT)/libGaugeApp.so: src/engine_data.cpp src/cds_values.hpp
+$(EN2_OUT)/libGaugeApp.so: $(SRC)
 	@test -n "$(EN2_LIBS)" || { echo "put the EntryNav2 libAppFramework.A.so and libCoreFramework.A.so (/opt/hmi/lib of the car) into $(EN2_LIBDIR) (or set EN2_LIBDIR / SYSROOT)"; exit 1; }
 	@mkdir -p $(EN2_OUT)
 	@echo [BUILD] $@ for EntryNav2
@@ -75,9 +78,6 @@ entrynav2-dist: $(EN2_OUT)/libGaugeApp.so GaugeApp_ALL_Texts.zip GaugeApp_ALL_Im
 	tar -cf $(CURDIR)/dist/gauge-app-entrynav2.tar -C $(EN2_STAGE) MD5SUMS opt
 	@echo [DONE] dist/gauge-app-entrynav2.tar
 
-GaugeApp_ALL_Texts.zip GaugeApp_ALL_Images.zip:
-	python3 make_db.py
-
 db:
 	python3 make_db.py
 
@@ -85,6 +85,6 @@ check:
 	$(MAKE) -C tests check
 
 clean:
-	rm -f libGaugeApp.so GaugeApp_ALL_Texts.zip GaugeApp_ALL_Images.zip
+	rm -f libGaugeApp.so
 	rm -rf build dist
 	$(MAKE) -C tests clean
