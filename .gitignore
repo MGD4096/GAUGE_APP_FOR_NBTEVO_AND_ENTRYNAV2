@@ -1,0 +1,3 @@
+# Build outputs (make entrynav2 / entrynav2-dist, make check)
+build/
+dist/
