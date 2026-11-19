@@ -141,15 +141,105 @@ z `GaugeApp.xml` i sprawdzenia samego wiersza.
   `raDataModel` + `label` w `GaugeApp.xml` (ID 28 / 38…), zwiększ `kRowCount`, `kPropCount` i tablicę `kStubs`.
 - **Częstotliwość odświeżania:** `kRenderMs` w `src/engine_data.cpp`.
 
+## Wersja na EntryNav2 (EntryEVO)
+
+Ta sama aplikacja, z tych samych źródeł, w wersji na **EntryNav2** (Linux ARMv7 hard-float, glibc 2.15). Sposób
+osadzenia w iDrive jest wzorowany na projekcie entry-aad (Android Auto dla EntryNav2), który działa w aucie jako
+PluginApp: ten sam konstruktor `PluginApp`, ta sama vtable (34 sloty, onError 21 / onInit 22 / onFinalize 23), ta sama
+subskrypcja CDS, to samo miejsce w menu (stan 20, po wierszu 2270). Identyfikatory różnią się od entry-aad
+(`entryButtonFocusID` 32751 / 32752, `<id>` 211 / 210), więc obie aplikacje mogą być zainstalowane razem.
+
+Różnice względem NBT Evo (wszystko w `#ifdef GAUGE_ENTRYNAV2` w `src/engine_data.cpp`):
+
+| | NBT Evo | EntryNav2 |
+|---|---|---|
+| System / kompilator | QNX 6.5, `qcc` (GCC 4.4) | Linux armhf, `arm-linux-gnueabihf-g++` 4.6 (eglibc 2.15) |
+| Folder aplikacji | `/opt/hmi/ID5/data/ro/Plugins/GaugeApp` | `/opt/hmi/data/ro/Plugins/GaugeApp` |
+| Biblioteki BMW do linkowania | `/opt/hmi/ID5/lib` | `/opt/hmi/lib` (inne pliki niż z NBT Evo!) |
+| Log | `slog` + pendrive | `/var/local/data/GaugeApp/gauge-app.log` (max 512 KB, zawsze) + pendrive |
+| Wyłączenie | `/var/opt/gaugeapp/app.disable` | `/var/local/data/GaugeApp/app.disable` |
+| Ochrona przed pętlą restartów | brak | 3 restarty HMI w < 2 min po załadowaniu → aplikacja się wyłącza |
+| `updateModel(tekst)` | wywołanie bezpośrednie (sprawdzone `nm -D`) | szukane przez `dlsym`; brak → puste wiersze, iDrive działa dalej |
+
+**Sprawdzone `nm -D` na kopii bibliotek z EntryNav2 (`lib/Entry_Evo_libs`):** wszystkie symbole używane przez
+aplikację są eksportowane, także `bmw::PluginApp::updateModel(unsigned, BasicString<unsigned short> const&)`
+(libAppFramework) i konstruktor `BasicString<unsigned short>(unsigned short const*)` (libCoreFramework). entry-aad
+nigdy nie zapisuje tekstu do modelu, więc samo wywołanie w aucie nie jest jeszcze sprawdzone; biblioteka nadal szuka
+tych funkcji w czasie działania i zapisuje w logu `text model API: ... -> ok` albo `-> MISSING`. Sprawdzenie na innej
+wersji oprogramowania:
+
+```
+nm -D --defined-only /opt/hmi/lib/libAppFramework.A.so /opt/hmi/lib/libCoreFramework.A.so | \
+    grep -E '_ZN3bmw9PluginApp11updateModelEjRKNS_11BasicStringItEE|_ZN3bmw11BasicStringItEC1EPKt|_ZN3bmw11BasicStringItED1Ev'
+```
+
+Powinny być wszystkie trzy. Jak na NBT Evo, niesprawdzone są też `label` + `raDataModel` w XML i to, czy auto
+publikuje `engine.*` / `sensors.*` aplikacjom (entry-aad potwierdza `driving.gear`, `communication.callStatus*`,
+`vehicle.dayNightChangeOver`, `driving.mode`).
+
+### Budowanie (EntryNav2)
+
+Potrzebne są kopie `libAppFramework.A.so` i `libCoreFramework.A.so` z `/opt/hmi/lib` auta w `lib/Entry_Evo_libs`
+(pełna kopia systemu nie jest potrzebna) i obraz Dockera z `toolchain/Dockerfile` (Ubuntu 12.04: armhf GCC 4.6 i
+eglibc 2.15, ta sama wersja co w aucie). Obraz entry-aad (`FROM ubuntu:12.10`) nie buduje się już w aktualnym Dockerze
+(stary format manifestu). Kompilator musi pasować do glibc 2.15 auta: nowszy armhf GCC z Ubuntu podlinkuje np.
+`clock_gettime@GLIBC_2.17`, którego auto nie ma. Zbudowana biblioteka wymaga tylko `GLIBC_2.4`.
+
+```
+docker build -t gauge-entrynav2-tc toolchain        # raz
+bash toolchain/tc-entrynav2.sh make entrynav2-dist
+make check                                          # testy hostowe obu wersji
+```
+
+Na Windowsie bez basha: `docker run --rm -v "%CD%:/work" -w /work gauge-entrynav2-tc make entrynav2-dist`.
+
+Wynik: `build/entrynav2/libGaugeApp.so` i `dist/gauge-app-entrynav2.tar` (biblioteka, manifest, XML, dwa zipy,
+`MD5SUMS`). Bez Dockera: `make entrynav2 EN2_CXX=arm-linux-gnueabihf-g++ EN2_LIBDIR=<folder z bibliotekami EntryNav2>`.
+
+### Instalacja (EntryNav2)
+
+Przez SSH, kablem ENET, tak jak entry-aad (auto stoi, zapłon włączony, nie wyłączać w trakcie zapisu):
+
+```
+scp dist/gauge-app-entrynav2.tar root@169.254.1.0:/tmp/
+ssh root@169.254.1.0
+cd /tmp && mkdir -p gauge && tar -xf gauge-app-entrynav2.tar -C gauge && cd gauge && md5sum -c MD5SUMS
+LD_TRACE_LOADED_OBJECTS=1 LD_WARN=yes LD_BIND_NOW=yes LD_LIBRARY_PATH=/usr/local/lib:/opt/hmi/lib:/usr/lib:/lib \
+    /lib/ld-linux-armhf.so.3 ./opt/hmi/data/ro/Plugins/GaugeApp/libGaugeApp.so 2>&1 | grep -E 'not found|undefined symbol'
+mount -o remount,rw /
+mkdir -p /opt/hmi/data/ro/Plugins/GaugeApp
+rm -f /opt/hmi/data/ro/Plugins/GaugeApp/*
+cp opt/hmi/data/ro/Plugins/GaugeApp/* /opt/hmi/data/ro/Plugins/GaugeApp/
+chmod 755 /opt/hmi/data/ro/Plugins/GaugeApp/libGaugeApp.so
+sync
+mount -o remount,ro /
+cd / && md5sum -c /tmp/gauge/MD5SUMS && rm -rf /tmp/gauge /tmp/gauge-app-entrynav2.tar
+reboot
+```
+
+- Polecenie z `LD_TRACE_LOADED_OBJECTS` nie może nic wypisać (linia = brakująca biblioteka lub funkcja).
+- Folder `/var/local/data` jest zamontowany z `noexec`, dlatego biblioteka musi leżeć na partycji systemowej.
+- W **Media** powinien pojawić się wiersz **GAUGE APP**.
+
+**Log:** `cat /var/local/data/GaugeApp/gauge-app.log`. Można też położyć pusty plik `gauge-app.log` na pendrivie –
+biblioteka szuka go w każdym folderze bezpośrednio pod `/media`, `/mnt` i `/run/media` (punkt montowania pendrive’a
+na EntryNav2 nie jest pewny).
+
+**Wyłączenie bez kasowania:** `mkdir -p /var/local/data/GaugeApp && touch /var/local/data/GaugeApp/app.disable`.
+**Po zadziałaniu ochrony przed pętlą restartów:** sprawdź log, potem `rm -f /var/local/data/GaugeApp/app-guard` i
+restart. **Odinstalowanie:** `mount -o remount,rw /`, `rm -rf /opt/hmi/data/ro/Plugins/GaugeApp`, `sync`,
+`mount -o remount,ro /`, `rm -rf /var/local/data/GaugeApp`, `reboot`.
+
 ## Układ projektu
 
 ```
 src/cds_values.hpp     parsowanie CDS i formatowanie wierszy (czysta logika, testowana)
-src/engine_data.cpp    aplikacja: PluginApp, subskrypcja CDS, odświeżanie etykiet
-GaugeApp.xml         wiersz menu + ekran z 7 etykietami
-GaugeApp.manifest    manifest dla CAppManager
-make_db.py             bazy tekstów i obrazów (+ ikona 63x54)
-tests/                 testy hostowe i atrapa frameworka
+src/engine_data.cpp    aplikacja: PluginApp, subskrypcja CDS, odświeżanie etykiet (NBT Evo i EntryNav2)
+GaugeApp.xml         wiersz menu + ekran z 7 etykietami (wspólny)
+GaugeApp.manifest    manifest dla CAppManager (wspólny)
+make_db.py             bazy tekstów i obrazów (+ ikona 63x54, wspólne)
+toolchain/tc-entrynav2.sh  uruchamia polecenie w obrazie entrynav2-tc:4.7 (EntryNav2)
+tests/                 testy hostowe i atrapa frameworka (obie wersje)
 ```
 
 ## Licencja i pochodzenie

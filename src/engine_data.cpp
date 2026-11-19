@@ -14,6 +14,12 @@
 //
 // Logs: slog (code 0x4e47) always; plus <usb stick>/gauge-app.log if that file already exists on a stick
 // (create an empty one on a PC to switch it on).
+//
+// Two targets are built from this one file:
+//   NBT Evo (default)     QNX 6.5, qcc / GCC 4.4, installed in /opt/hmi/ID5/data/ro/Plugins/GaugeApp
+//   EntryNav2 (-DGAUGE_ENTRYNAV2)  EntryEVO, Linux ARMv7 hard-float, glibc 2.15, GCC 4.7, installed in
+//                         /opt/hmi/data/ro/Plugins/GaugeApp. The framework glue there is the one car-verified by
+//                         entry-aad (hmiapp/bmw_framework.cpp); its differences are in the "platform" block below.
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdint.h>
@@ -36,7 +42,12 @@
 #endif
 #include "cds_values.hpp"
 
-#define ENGINE_APP_VERSION "engine-data-0.1.0 (" __DATE__ " " __TIME__ ")"
+#ifdef GAUGE_ENTRYNAV2
+#define ENGINE_APP_TARGET "EntryNav2"
+#else
+#define ENGINE_APP_TARGET "NBT Evo"
+#endif
+#define ENGINE_APP_VERSION "engine-data-0.1.0 " ENGINE_APP_TARGET " (" __DATE__ " " __TIME__ ")"
 
 // ---- minimal declarations of BMW's RHMI app framework (libAppFramework.A.so / libCoreFramework.A.so) ----------------
 // Names and parameter types only (they produce the exported, mangled symbols); nothing here is defined. All of these
@@ -86,8 +97,25 @@ const unsigned    kFirstRowModel = 21;       // raDataModel ids 21..27 in GaugeA
 const unsigned    kSubscribeDelayMs = 1500;  // CDS handlers are registered ~1.5 s after onInit, like NBT-AAD / SecurityMenu
 const unsigned    kRenderMs = 500;           // label refresh period (only changed rows are written)
 const long        kNoDataWarnS = 25;         // log once when no CDS value arrived this long after subscribing
+#ifdef GAUGE_ENTRYNAV2
+// EntryEVO: /var/local is the writable data partition (mounted noexec: data only, as entry-aad keeps its settings in
+// /var/local/data/AA). Nothing is written outside this folder.
+#ifndef GAUGE_DATA_DIR
+#define GAUGE_DATA_DIR "/var/local/data/GaugeApp"   // host tests point it into their build folder
+#endif
+const char* const kDataDir = GAUGE_DATA_DIR;
+const char* const kDisableA = GAUGE_DATA_DIR "/app.disable";
+const char* const kDisableB = "/opt/hmi/data/ro/Plugins/GaugeApp/app.disable";
+const char* const kAppLog = GAUGE_DATA_DIR "/gauge-app.log";
+const char* const kAppLogOld = GAUGE_DATA_DIR "/gauge-app.old.log";
+const long        kAppLogMaxBytes = 512L * 1024L;
+const char* const kAppGuard = GAUGE_DATA_DIR "/app-guard";   // crash guard, see crashGuardAllows()
+const int         kCrashGuardMax = 3;        // HMI starts without kStableAfterS of uptime before the app turns off
+const long        kStableAfterS = 120;
+#else
 const char* const kDisableA = "/opt/gaugeapp/app.disable";
 const char* const kDisableB = "/var/opt/gaugeapp/app.disable";
+#endif
 const char* const kUsbLogName = "gauge-app.log";
 const long        kUsbLogMaxBytes = 4L * 1024L * 1024L;
 enum { kSlotOnError = 21, kSlotOnInit = 22, kSlotOnFinalize = 23, kVtblSlots = 34 };   // PluginApp vtable layout
@@ -102,21 +130,33 @@ bool fileExists(const char* p) {
     return stat(p, &st) == 0;
 }
 
-// <stick>/gauge-app.log of the first /mnt/umass* stick that already holds that file (an empty file made on a
-// PC switches the log on). Looked up at most every 5 s.
+// Folders a USB stick is mounted under, and the prefix of its mount point ("" = any). NBT Evo (QNX): /mnt/umass*.
+// EntryNav2 (Linux): the mount point is not known for sure, so every folder directly under /media and /mnt is tried.
+struct UsbRoot { const char* dir; const char* prefix; };
+#ifdef GAUGE_ENTRYNAV2
+const UsbRoot kUsbRoots[] = { { "/media", "" }, { "/mnt", "" }, { "/run/media", "" } };
+#else
+const UsbRoot kUsbRoots[] = { { "/mnt", "umass" } };
+#endif
+
+// <stick>/gauge-app.log of the first stick that already holds that file (an empty file made on a PC switches the
+// log on). Looked up at most every 5 s.
 bool usbLogPath(char* out, size_t n) {
     pthread_mutex_lock(&g_logMutex);
     time_t now = time(NULL);
     if (!g_logChecked || now - g_logChecked >= 5 || now < g_logChecked) {
         g_logChecked = now;
         g_logPath[0] = 0;
-        DIR* d = opendir("/mnt");
-        if (d) {
+        for (size_t r = 0; r < sizeof(kUsbRoots) / sizeof(kUsbRoots[0]) && !g_logPath[0]; ++r) {
+            DIR* d = opendir(kUsbRoots[r].dir);
+            if (!d) continue;
+            size_t plen = strlen(kUsbRoots[r].prefix);
             struct dirent* e;
             while ((e = readdir(d)) != NULL) {
-                if (strncmp(e->d_name, "umass", 5) != 0) continue;
+                if (e->d_name[0] == '.') continue;
+                if (strncmp(e->d_name, kUsbRoots[r].prefix, plen) != 0) continue;
                 char p[320];
-                snprintf(p, sizeof(p), "/mnt/%.200s/%s", e->d_name, kUsbLogName);
+                snprintf(p, sizeof(p), "%s/%.200s/%s", kUsbRoots[r].dir, e->d_name, kUsbLogName);
                 struct stat st;
                 if (stat(p, &st) == 0 && (long)st.st_size < kUsbLogMaxBytes && access(p, W_OK) == 0) {
                     snprintf(g_logPath, sizeof(g_logPath), "%s", p);
@@ -154,6 +194,19 @@ void elog(const char* fmt, ...) {
             close(fd);
         }
     }
+#ifdef GAUGE_ENTRYNAV2
+    // EntryEVO has no slog: a bounded log on the data partition, always on (read it over SSH).
+    pthread_mutex_lock(&g_logMutex);
+    struct stat st;
+    if (stat(kAppLog, &st) == 0 && (long)st.st_size > kAppLogMaxBytes) rename(kAppLog, kAppLogOld);
+    int fd = open(kAppLog, O_WRONLY | O_CREAT | O_APPEND, 0644);
+    if (fd >= 0) {
+        ssize_t w = write(fd, line, (size_t)n);
+        (void)w;
+        close(fd);
+    }
+    pthread_mutex_unlock(&g_logMutex);
+#endif
 #ifdef __QNX__
     slogf(_SLOG_SETCODE(0x4e47, 1), _SLOG_INFO, "[GaugeApp] %s", msg);
 #else
@@ -180,6 +233,46 @@ long monoSec() {
     return (long)ts.tv_sec;
 }
 
+// ---- crash guard (EntryNav2) ---------------------------------------------------------------------------------------
+// create() appends a line to app-guard; once the HMI has run kStableAfterS with the app, the render loop deletes the
+// file. kCrashGuardMax lines = HmiMain3D went down that many times shortly after loading this app: create() refuses
+// and iDrive starts without it (the scheme entry-aad uses on the same head unit). NBT Evo: no-op.
+long g_initAt = -1;                          // monotonic s of onInit, -1 before
+#ifdef GAUGE_ENTRYNAV2
+bool g_stableMarked = false;
+bool crashGuardAllows() {
+    int lines = 0;
+    FILE* f = fopen(kAppGuard, "r");
+    if (f) {
+        char b[64];
+        while (fgets(b, sizeof(b), f)) ++lines;
+        fclose(f);
+    }
+    if (lines >= kCrashGuardMax) {
+        elog("crash guard: the HMI restarted %d times shortly after loading this app: app turned off. Check the log, "
+             "then remove %s and restart the unit.", lines, kAppGuard);
+        return false;
+    }
+    f = fopen(kAppGuard, "a");
+    if (f) {
+        fprintf(f, "%ld\n", (long)time(NULL));
+        fflush(f);
+        fsync(fileno(f));
+        fclose(f);
+    }
+    return true;
+}
+void markStableWhenDue() {
+    if (g_stableMarked || g_initAt < 0 || monoSec() - g_initAt < kStableAfterS) return;
+    g_stableMarked = true;
+    unlink(kAppGuard);
+    elog("stable for %ld s: crash guard reset", kStableAfterS);
+}
+#else
+bool crashGuardAllows() { return true; }
+void markStableWhenDue() {}
+#endif
+
 // ---- bmw::Runnable stand-in (vtable: offset-to-top, typeinfo, ~D1, ~D0, run), copied from libCoreFramework's own
 // vtable so the type info is right. Static objects, so the destructor slots are no-ops. Same technique as NBT-AAD.
 struct StandInRunnable { void** vptr; };
@@ -201,12 +294,53 @@ void* g_subVtbl[5];
 void* g_renderVtbl[5];
 
 // ---- display -----------------------------------------------------------------------------------------------------
+#ifdef GAUGE_ENTRYNAV2
+// On EntryEVO, entry-aad (the car-verified reference) only ever writes TextID / ImageID / bool models; nobody has
+// checked yet that this HU's libAppFramework exports the UTF-16 text overload of updateModel or the
+// BasicString<unsigned short> constructor. A direct call would make HmiMain3D's dlopen (or, with lazy binding, the
+// first call) fail, so the three symbols are looked up at run time instead: if one is missing the rows stay empty and
+// the log says so, iDrive itself keeps running. Same ABI as the member calls (ARM EABI: this = first argument).
+typedef void (*WideCtorFn)(void* self, const unsigned short* s);   // bmw::BasicString<unsigned short>::BasicString
+typedef void (*WideDtorFn)(void* self);                            // bmw::BasicString<unsigned short>::~BasicString
+typedef void (*UpdateTextFn)(bmw::PluginApp* self, unsigned modelId, const void* text);   // PluginApp::updateModel
+WideCtorFn   g_wideCtor = NULL;
+WideDtorFn   g_wideDtor = NULL;
+UpdateTextFn g_updateText = NULL;
+int          g_textApi = -1;                 // -1 not looked up, 0 missing, 1 available
+
+bool textApi() {
+    if (g_textApi < 0) {
+        g_wideCtor = reinterpret_cast<WideCtorFn>(dlsym(RTLD_DEFAULT, "_ZN3bmw11BasicStringItEC1EPKt"));
+        g_wideDtor = reinterpret_cast<WideDtorFn>(dlsym(RTLD_DEFAULT, "_ZN3bmw11BasicStringItED1Ev"));
+        g_updateText = reinterpret_cast<UpdateTextFn>(
+            dlsym(RTLD_DEFAULT, "_ZN3bmw9PluginApp11updateModelEjRKNS_11BasicStringItEE"));
+        g_textApi = (g_wideCtor && g_wideDtor && g_updateText) ? 1 : 0;
+        elog("text model API: BasicString<ushort>() %p, ~BasicString<ushort>() %p, updateModel(text) %p -> %s",
+             reinterpret_cast<void*>(g_wideCtor), reinterpret_cast<void*>(g_wideDtor),
+             reinterpret_cast<void*>(g_updateText),
+             g_textApi ? "ok" : "MISSING: rows cannot be written on this head unit (see README, EntryNav2)");
+    }
+    return g_textApi == 1;
+}
+
+void writeRow(bmw::PluginApp* app, int row, const char* utf8) {
+    if (!textApi()) return;
+    unsigned short wide[eng::kRowLen];
+    eng::utf8to16(utf8, wide, eng::kRowLen);
+    void* text[4];                           // a BasicString holds one data pointer; spare room just in case
+    memset(text, 0, sizeof(text));
+    g_wideCtor(text, wide);
+    g_updateText(app, kFirstRowModel + (unsigned)row, text);
+    g_wideDtor(text);
+}
+#else
 void writeRow(bmw::PluginApp* app, int row, const char* utf8) {
     unsigned short wide[eng::kRowLen];
     eng::utf8to16(utf8, wide, eng::kRowLen);
     bmw::BasicString<unsigned short> text(wide);
     app->updateModel(kFirstRowModel + (unsigned)row, text);
 }
+#endif
 
 // Formats the current values and writes every row whose text changed. force = write all (first call).
 void renderRows(bmw::PluginApp* app, bool force) {
@@ -233,6 +367,7 @@ void renderRun(void* /*self*/) {
     dirty = g_dirty;
     pthread_mutex_unlock(&g_dataMutex);
     if (dirty) renderRows(app, false);
+    markStableWhenDue();
     if (!g_noDataLogged && g_subscribedAt >= 0 && g_totalSeen == 0 && monoSec() - g_subscribedAt >= kNoDataWarnS) {
         g_noDataLogged = true;
         elog("no CDS value arrived %ld s after subscribing: the car may not publish engine.* / sensors.* / driving.* to "
@@ -298,6 +433,7 @@ bool appOnInit(bmw::PluginApp* self) {
     g_subscribedAt = -1;
     g_noDataLogged = false;
     g_shownValid = false;
+    g_initAt = monoSec();
     renderRows(self, true);                              // "--" in every row until the first CDS values arrive
     initRunnable(g_subRunnable, g_subVtbl, &subscribeRun);
     self->post(reinterpret_cast<bmw::Runnable*>(&g_subRunnable), kSubscribeDelayMs);
@@ -319,9 +455,13 @@ void appOnFinalize(bmw::PluginApp* self) {
 
 bmw::PluginApp* createApp(bmw::IDispatcher& dispatcher, const char* name, const bmw::Bundle& params,
                           const bmw::Bundle& config) {
+#ifdef GAUGE_ENTRYNAV2
+    mkdir(kDataDir, 0755);
+#endif
     elog("create(name=%s) %s", name ? name : "(null)", ENGINE_APP_VERSION);
     if (fileExists(kDisableA) || fileExists(kDisableB)) { elog("disabled by app.disable"); return NULL; }
     if (g_app) { elog("create: already created"); return NULL; }
+    if (!crashGuardAllows()) return NULL;
 
     void* mem = ::operator new(bmw::kPluginAppStorage);
     memset(mem, 0, bmw::kPluginAppStorage);
@@ -350,6 +490,9 @@ void destroyApp(void* app) {
 }
 
 __attribute__((constructor)) void libraryLoaded() {
+#ifdef GAUGE_ENTRYNAV2
+    mkdir(kDataDir, 0755);
+#endif
     elog("library loaded into pid %d, %s", (int)getpid(), ENGINE_APP_VERSION);
 }
 

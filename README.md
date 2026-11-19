@@ -175,15 +175,58 @@ HMI log. If the XML is rejected, start by removing `label` from
   `kPropCount`, and the `kStubs` array.
 - **Refresh frequency:** `kRenderMs` in `src/engine_data.cpp`.
 
+## EntryNav2 (EntryEVO) version
+
+The same app, from the same sources, for **EntryNav2** (Linux ARMv7 hard-float, glibc 2.15). The iDrive integration
+follows entry-aad (Android Auto for EntryNav2), which runs in the car as a PluginApp: same `PluginApp` constructor,
+same 34-slot vtable (onError 21 / onInit 22 / onFinalize 23), same CDS subscription, same menu placement (state 20,
+after row 2270). The IDs differ from entry-aad's (`entryButtonFocusID` 32751 / 32752, `<id>` 211 / 210), so both can
+be installed together.
+
+Differences from NBT Evo (all under `#ifdef GAUGE_ENTRYNAV2` in `src/engine_data.cpp`):
+
+| | NBT Evo | EntryNav2 |
+|---|---|---|
+| OS / compiler | QNX 6.5, `qcc` (GCC 4.4) | Linux armhf, `arm-linux-gnueabihf-g++` 4.6 (eglibc 2.15) |
+| App folder | `/opt/hmi/ID5/data/ro/Plugins/GaugeApp` | `/opt/hmi/data/ro/Plugins/GaugeApp` |
+| BMW libraries to link | `/opt/hmi/ID5/lib` | `/opt/hmi/lib` (not the NBT Evo files!) |
+| Log | `slog` + USB stick | `/var/local/data/GaugeApp/gauge-app.log` (512 KB, always) + USB stick |
+| Off switch | `/var/opt/gaugeapp/app.disable` | `/var/local/data/GaugeApp/app.disable` |
+| Crash-loop guard | none | 3 HMI restarts < 2 min after loading → the app turns itself off |
+| `updateModel(text)` | direct call (checked with `nm -D`) | looked up with `dlsym`; missing → empty rows, iDrive keeps running |
+
+**Checked with `nm -D` on copies of the EntryNav2 libraries (`lib/Entry_Evo_libs`):** every symbol the app uses is
+exported, including `bmw::PluginApp::updateModel(unsigned, BasicString<unsigned short> const&)` (libAppFramework) and
+`BasicString<unsigned short>(unsigned short const*)` (libCoreFramework). entry-aad never writes text into a model, so
+the call itself is not car-verified yet; the library still resolves these at run time and logs
+`text model API: ... -> ok` or `-> MISSING`. To check another software version:
+
+```
+nm -D --defined-only /opt/hmi/lib/libAppFramework.A.so /opt/hmi/lib/libCoreFramework.A.so | \
+    grep -E '_ZN3bmw9PluginApp11updateModelEjRKNS_11BasicStringItEE|_ZN3bmw11BasicStringItEC1EPKt|_ZN3bmw11BasicStringItED1Ev'
+```
+
+All three should be listed. As on NBT Evo, `label` + `raDataModel` in the XML and whether the car publishes
+`engine.*` / `sensors.*` to plugin apps are not verified either.
+
+Build: put the car's `libAppFramework.A.so` / `libCoreFramework.A.so` (`/opt/hmi/lib`) into `lib/Entry_Evo_libs`,
+`docker build -t gauge-entrynav2-tc toolchain` once (Ubuntu 12.04: armhf GCC 4.6 against eglibc 2.15, the car's
+version; entry-aad's `ubuntu:12.10` image no longer pulls with current Docker, and a newer armhf toolchain would link
+symbols the car lacks), then `bash toolchain/tc-entrynav2.sh make entrynav2-dist` →
+`dist/gauge-app-entrynav2.tar`. Install over SSH like entry-aad: unpack in `/tmp`, `md5sum -c MD5SUMS`,
+`mount -o remount,rw /`, copy `opt/hmi/data/ro/Plugins/GaugeApp/*` to the same path, `chmod 755` the library, `sync`,
+`mount -o remount,ro /`, `reboot` (full commands in [README_PL.md](README_PL.md#instalacja-entrynav2)).
+
 ## Project layout
 
 ```
 src/cds_values.hpp     CDS parsing and row formatting logic (pure logic, tested)
-src/engine_data.cpp    app: PluginApp, CDS subscription, label refresh
-GaugeApp.xml         menu row + screen with 7 labels
-GaugeApp.manifest    manifest for CAppManager
-make_db.py             text and image databases (+ 63x54 icon)
-tests/                 host tests and framework mock
+src/engine_data.cpp    app: PluginApp, CDS subscription, label refresh (NBT Evo and EntryNav2)
+GaugeApp.xml         menu row + screen with 7 labels (shared)
+GaugeApp.manifest    manifest for CAppManager (shared)
+make_db.py             text and image databases (+ 63x54 icon, shared)
+toolchain/tc-entrynav2.sh  runs a command in the entrynav2-tc:4.7 image (EntryNav2)
+tests/                 host tests and framework mock (both versions)
 ```
 
 ## License and origin

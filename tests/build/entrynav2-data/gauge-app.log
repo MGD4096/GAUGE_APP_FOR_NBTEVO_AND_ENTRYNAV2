@@ -1,0 +1,93 @@
+[  207.157] [GaugeApp] library loaded into pid 443, engine-data-0.1.0 EntryNav2 (Nov 19 2026 23:11:47)
+[  207.161] [GaugeApp] create(name=GaugeApp) engine-data-0.1.0 EntryNav2 (Nov 19 2026 23:11:47)
+[  207.169] [GaugeApp] create: app 0x644c18857810 (PluginApp vtable 0x644c011aeb70)
+[  207.173] [GaugeApp] create(name=GaugeApp) engine-data-0.1.0 EntryNav2 (Nov 19 2026 23:11:47)
+[  207.177] [GaugeApp] create: already created
+[  207.179] [GaugeApp] text model API: BasicString<ushort>() 0x644c011a34de, ~BasicString<ushort>() 0x644c011a355a, updateModel(text) 0x644c011a3c4c -> ok
+[  207.182] [GaugeApp] onInit: base onInit -> 1, 7 label rows written, CDS subscription in 1500 ms
+[  207.185] [GaugeApp] CDS handler for engine.temperature registered
+[  207.187] [GaugeApp] CDS handler for engine.RPMSpeed registered
+[  207.190] [GaugeApp] CDS handler for driving.speedActual registered
+[  207.193] [GaugeApp] CDS handler for driving.gear registered
+[  207.196] [GaugeApp] CDS handler for sensors.fuel registered
+[  207.198] [GaugeApp] CDS handler for sensors.temperatureExterior registered
+[  207.201] [GaugeApp] CDS engine.temperature = '{"temperature":{"engine":92,"oil":104}}' -> ok
+[  207.203] [GaugeApp] CDS engine.RPMSpeed = '{"RPMSpeed":2453}' -> ok
+[  207.206] [GaugeApp] CDS driving.speedActual = '{"speedActual":87}' -> ok
+[  207.209] [GaugeApp] CDS driving.gear = '{"gear":6}' -> ok
+[  207.212] [GaugeApp] CDS sensors.fuel = '{"fuel":{"range":522,"reserve":0,"tanklevel":39}}' -> ok
+[  207.214] [GaugeApp] CDS sensors.temperatureExterior = '{"temperatureExterior":14.0}' -> ok
+[  207.217] [GaugeApp] CDS engine.RPMSpeed = '{"RPMSpeed":3100}' -> ok
+[  207.220] [GaugeApp] CDS engine.temperature = '{"temperature":{"engine":92,"oil":104}}' -> ok
+[  207.222] [GaugeApp] CDS engine.RPMSpeed = '{"RPMSpeed":3104}' -> ok
+[  207.225] [GaugeApp] CDS engine.temperature = '{"error":400}' -> not usable
+[  207.229] [GaugeApp] CDS sensors.temperatureExterior = '{"temperatureExterior":null}' -> not usable
+[  207.231] [GaugeApp] CDS sensors.temperatureExterior = '{"temperatureExterior":-3.5}' -> ok
+[  207.234] [GaugeApp] CDS driving.gear = '{"gear":1}' -> ok
+[  207.237] [GaugeApp] CDS driving.speedActual = '' -> not usable
+[  207.239] [GaugeApp] onError 7: integration error
+[  207.243] [GaugeApp] onFinalize
+[  207.246] [GaugeApp] destroy(0x644c18857810)
+[  207.262] [GaugeApp] library loaded into pid 448, engine-data-0.1.0 EntryNav2 (Nov 19 2026 23:11:47)
+[  207.265] [GaugeApp] create(name=GaugeApp) engine-data-0.1.0 EntryNav2 (Nov 19 2026 23:11:47)
+[  207.275] [GaugeApp] create: app 0x5ef02a90a810 (PluginApp vtable 0x5eeff62f7b70)
+[  207.278] [GaugeApp] create(name=GaugeApp) engine-data-0.1.0 EntryNav2 (Nov 19 2026 23:11:47)
+[  207.281] [GaugeApp] create: already created
+[  207.284] [GaugeApp] text model API: BasicString<ushort>() 0x5eeff62ec4de, ~BasicString<ushort>() 0x5eeff62ec55a, updateModel(text) 0x5eeff62ecc4c -> ok
+[  207.287] [GaugeApp] onInit: base onInit -> 1, 7 label rows written, CDS subscription in 1500 ms
+[  207.290] [GaugeApp] CDS handler for engine.temperature registered
+[  207.293] [GaugeApp] CDS handler for engine.RPMSpeed registered
+[  207.296] [GaugeApp] CDS handler for driving.speedActual registered
+[  207.299] [GaugeApp] CDS handler for driving.gear registered
+[  207.302] [GaugeApp] CDS handler for sensors.fuel registered
+[  207.304] [GaugeApp] CDS handler for sensors.temperatureExterior registered
+[  207.307] [GaugeApp] CDS engine.temperature = '{"temperature":{"engine":92,"oil":104}}' -> ok
+[  207.310] [GaugeApp] CDS engine.RPMSpeed = '{"RPMSpeed":2453}' -> ok
+[  207.313] [GaugeApp] CDS driving.speedActual = '{"speedActual":87}' -> ok
+[  207.316] [GaugeApp] CDS driving.gear = '{"gear":6}' -> ok
+[  207.318] [GaugeApp] CDS sensors.fuel = '{"fuel":{"range":522,"reserve":0,"tanklevel":39}}' -> ok
+[  207.321] [GaugeApp] CDS sensors.temperatureExterior = '{"temperatureExterior":14.0}' -> ok
+[  207.324] [GaugeApp] CDS engine.RPMSpeed = '{"RPMSpeed":3100}' -> ok
+[  207.327] [GaugeApp] CDS engine.temperature = '{"temperature":{"engine":92,"oil":104}}' -> ok
+[  207.329] [GaugeApp] CDS engine.RPMSpeed = '{"RPMSpeed":3104}' -> ok
+[  207.332] [GaugeApp] CDS engine.temperature = '{"error":400}' -> not usable
+[  207.335] [GaugeApp] CDS sensors.temperatureExterior = '{"temperatureExterior":null}' -> not usable
+[  207.338] [GaugeApp] CDS sensors.temperatureExterior = '{"temperatureExterior":-3.5}' -> ok
+[  207.340] [GaugeApp] CDS driving.gear = '{"gear":1}' -> ok
+[  207.343] [GaugeApp] CDS driving.speedActual = '' -> not usable
+[  207.346] [GaugeApp] onError 7: integration error
+[  207.349] [GaugeApp] onFinalize
+[  207.351] [GaugeApp] destroy(0x5ef02a90a810)
+[  207.362] [GaugeApp] library loaded into pid 450, engine-data-0.1.0 EntryNav2 (Nov 19 2026 23:11:47)
+[  207.365] [GaugeApp] create(name=GaugeApp) engine-data-0.1.0 EntryNav2 (Nov 19 2026 23:11:47)
+[  207.373] [GaugeApp] create: app 0x558cea7d0810 (PluginApp vtable 0x558cd8d0eb70)
+[  207.377] [GaugeApp] create(name=GaugeApp) engine-data-0.1.0 EntryNav2 (Nov 19 2026 23:11:47)
+[  207.380] [GaugeApp] create: already created
+[  207.383] [GaugeApp] text model API: BasicString<ushort>() 0x558cd8d034de, ~BasicString<ushort>() 0x558cd8d0355a, updateModel(text) 0x558cd8d03c4c -> ok
+[  207.386] [GaugeApp] onInit: base onInit -> 1, 7 label rows written, CDS subscription in 1500 ms
+[  207.388] [GaugeApp] CDS handler for engine.temperature registered
+[  207.391] [GaugeApp] CDS handler for engine.RPMSpeed registered
+[  207.394] [GaugeApp] CDS handler for driving.speedActual registered
+[  207.397] [GaugeApp] CDS handler for driving.gear registered
+[  207.399] [GaugeApp] CDS handler for sensors.fuel registered
+[  207.402] [GaugeApp] CDS handler for sensors.temperatureExterior registered
+[  207.405] [GaugeApp] CDS engine.temperature = '{"temperature":{"engine":92,"oil":104}}' -> ok
+[  207.407] [GaugeApp] CDS engine.RPMSpeed = '{"RPMSpeed":2453}' -> ok
+[  207.410] [GaugeApp] CDS driving.speedActual = '{"speedActual":87}' -> ok
+[  207.413] [GaugeApp] CDS driving.gear = '{"gear":6}' -> ok
+[  207.415] [GaugeApp] CDS sensors.fuel = '{"fuel":{"range":522,"reserve":0,"tanklevel":39}}' -> ok
+[  207.418] [GaugeApp] CDS sensors.temperatureExterior = '{"temperatureExterior":14.0}' -> ok
+[  207.421] [GaugeApp] CDS engine.RPMSpeed = '{"RPMSpeed":3100}' -> ok
+[  207.423] [GaugeApp] CDS engine.temperature = '{"temperature":{"engine":92,"oil":104}}' -> ok
+[  207.426] [GaugeApp] CDS engine.RPMSpeed = '{"RPMSpeed":3104}' -> ok
+[  207.429] [GaugeApp] CDS engine.temperature = '{"error":400}' -> not usable
+[  207.432] [GaugeApp] CDS sensors.temperatureExterior = '{"temperatureExterior":null}' -> not usable
+[  207.434] [GaugeApp] CDS sensors.temperatureExterior = '{"temperatureExterior":-3.5}' -> ok
+[  207.437] [GaugeApp] CDS driving.gear = '{"gear":1}' -> ok
+[  207.439] [GaugeApp] CDS driving.speedActual = '' -> not usable
+[  207.442] [GaugeApp] onError 7: integration error
+[  207.445] [GaugeApp] onFinalize
+[  207.448] [GaugeApp] destroy(0x558cea7d0810)
+[  207.457] [GaugeApp] library loaded into pid 452, engine-data-0.1.0 EntryNav2 (Nov 19 2026 23:11:47)
+[  207.461] [GaugeApp] create(name=GaugeApp) engine-data-0.1.0 EntryNav2 (Nov 19 2026 23:11:47)
+[  207.467] [GaugeApp] crash guard: the HMI restarted 3 times shortly after loading this app: app turned off. Check the log, then remove /mnt/c/Dev/BMW_Navi/NBTEVO_GAUGE_APP/tests/build/entrynav2-data/app-guard and restart the unit.
