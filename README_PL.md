@@ -165,19 +165,26 @@ Wynik: `dist/gauge-app-entrynav2.tar` (biblioteka, manifest, XML, dwa zipy, `MD5
 
 ## Instalacja
 
+Pełne instrukcje krok po kroku (po polsku / po angielsku):
+
+- **EntryNav2:** [docs/EntryEvo_Installation.md](docs/EntryEvo_Installation.md) /
+  [docs/EntryEvo_Installation_EN.md](docs/EntryEvo_Installation_EN.md)
+- **NBT Evo:** [docs/NbtEvo_Installation.md](docs/NbtEvo_Installation.md) /
+  [docs/NbtEvo_Installation_EN.md](docs/NbtEvo_Installation_EN.md)
+
 ### NBT Evo
 
-Pełna instrukcja krok po kroku: [NbtEvo_Installation.md](NbtEvo_Installation.md). W skrócie – na head unit, pliki
-z pendrive'a (`/fs/usb0` albo `/mnt/umass…`):
+W skrócie – na `hu-omap` (`on -f /net/hu-omap/ /bin/sh`), pliki z `dist\nbt\GaugeApp` na pendrivie (`/fs/usb0`
+albo `/mnt/umass…`):
 
 ```
+/bin/mount -u -o rw /fs/sda0
 mkdir -p /opt/hmi/ID5/data/ro/Plugins/GaugeApp
-cp /mnt/umassXXXX/libGaugeApp.so /mnt/umassXXXX/GaugeApp.manifest /mnt/umassXXXX/GaugeApp.xml \
-   /mnt/umassXXXX/GaugeApp_ALL_Texts.zip /mnt/umassXXXX/GaugeApp_ALL_Images.zip /opt/hmi/ID5/data/ro/Plugins/GaugeApp/
+cp /fs/usb0/GaugeApp/* /opt/hmi/ID5/data/ro/Plugins/GaugeApp/
+/bin/mount -u -o ro /fs/sda0
 ```
 
-Jeśli kopiowanie kończy się „read-only file system”, przemontuj cel do zapisu tak samo, jak przy NbtAad. Potem
-przytrzymaj przycisk zasilania ok. 30 s (restart).
+Potem przytrzymaj przycisk zasilania ok. 30 s (restart).
 
 ### EntryNav2
 

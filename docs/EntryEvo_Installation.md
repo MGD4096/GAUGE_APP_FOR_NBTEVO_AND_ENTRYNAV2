@@ -1,5 +1,7 @@
 # GAUGE APP – instalacja na EntryNav2 (EntryEVO)
 
+[English version](EntryEvo_Installation_EN.md)
+
 Instalacja odbywa się ręcznie, przez SSH, kilkoma poleceniami. Nic w systemie nie jest zastępowane: dochodzi jeden
 folder z aplikacją (`/opt/hmi/data/ro/Plugins/GaugeApp`) i jeden folder z danymi (`/var/local/data/GaugeApp`).
 Partycja systemowa jest w trybie zapisu tylko na czas kopiowania.
@@ -137,20 +139,19 @@ Prześlij:
 2. log aplikacji (patrz [niżej](#log)) – ważne są linie `diag: …`, zwłaszcza `diag: 50 animation frames in … ms`
    (pojawiają się, gdy strona E4 jest otwarta przez co najmniej 10 s).
 
-Na tej podstawie zostanie wybrany sposób rysowania docelowego ekranu.
-
-Na tej podstawie zostanie dopasowany układ zwykłej wersji.
+Późniejsze ustalenie: iDrive pokazuje najwyżej ok. 60 obrazków w jednym stanie, dlatego ekran ma ich 47.
 
 ### Zwykła wersja
 
-GAUGE APP otwiera ekran: płyn i olej po lewej, przeciążenie i bieg w środku, moc i moment po prawej, z maksimami.
+GAUGE APP otwiera ekran: płyn i olej po lewej, przeciążenie w środku z kafelkami biegów i paliwa pod nim, moc
+i moment po prawej, z maksimami.
 Zanim przyjdą pierwsze dane z auta (ok. 1,5 s), w miejscu wartości jest `--`.
 
 W logu przy starcie powinny być linie:
 - `settings: color=… temp=…` – wczytane ustawienia,
 - `GaugeApp_frames.bin: … frames, … bytes` i `GaugeApp_frames_c0.bin: … frames` – aplikacja wczytała klatki ekranu
   (wspólne i w wybranym kolorze),
-- `onInit: base onInit -> 1, 55 images written` – ekran został wysłany do iDrive,
+- `onInit: base onInit -> 1, 47 images written` – ekran został wysłany do iDrive,
 - **brak** `onError 9` (ten błąd był skutkiem zbyt dużej bazy obrazków w starszych wersjach).
 
 ### Ustawienia (klawisz OPTION)
@@ -168,13 +169,12 @@ przycisku przełącza na następną wartość; zmiana jest od razu widoczna na e
 | Paliwo | litry, galony (US) |
 
 Maksima są liczone w jednostkach bazowych (°C, KM, Nm), więc zmiana jednostek ich nie psuje – są tylko inaczej
-pokazane. Paliwo (ilość w zbiorniku) jest w polu biegów, po prawej.
+pokazane. Paliwo (ilość w zbiorniku) ma własny kafelek obok biegów.
 
 **Język** przełącza się sam razem z językiem iDrive: po polsku przy polskim, po angielsku przy każdym innym (tytuły,
 „PS” zamiast „KM”, kropka dziesiętna). W logu widać to jako `CDS vehicle.language = '{"language":18}'` (18 = polski).
 
-**Jeśli po instalacji zniknie wiersz GAUGE APP** (iDrive nie przyjął menu OPTION – ta część XML nie była jeszcze
-sprawdzona w aucie): usuń menu OPTION z XML i zrestartuj. Reszta (ekran, paliwo, zapisane ustawienia) działa dalej:
+**Jeśli po instalacji zniknie wiersz GAUGE APP** (iDrive nie przyjął menu OPTION): usuń menu OPTION z XML i zrestartuj. Reszta (ekran, paliwo, zapisane ustawienia) działa dalej:
 
 ```sh
 mount -o remount,rw /
@@ -195,7 +195,7 @@ cat /var/local/data/GaugeApp/gauge-app.log
 
 Log jest zawsze włączony i ma limit 512 KB (starszy trafia do `gauge-app.old.log`). Najważniejsze linie:
 
-- `onInit: base onInit -> 1, 55 images written` – aplikacja wystartowała i ustawiła obrazki;
+- `onInit: base onInit -> 1, 47 images written` – aplikacja wystartowała i ustawiła obrazki;
 - `onError …` – błąd zgłoszony przez iDrive (np. `onError 9`);
 - `CDS <nazwa> = '<wartość>' -> ok` – surowe dane z auta, pierwsze 5 odczytów każdej wartości.
 
@@ -205,7 +205,7 @@ włóż go do auta. Aplikacja szuka tego pliku w folderach pod `/media`, `/mnt` 
 ## Aktualizacja i zmiana wersji
 
 Powtórz kroki 1–3 z nową paczką (np. po diagnostyce z `gauge-app-entrynav2.tar`). Folder danych zostaje, więc
-maksima (`max.txt`) nie giną.
+ustawienia nie giną.
 
 ## Maksima
 
@@ -243,7 +243,7 @@ rm -rf /var/local/data/GaugeApp
 reboot
 ```
 
-Bez ostatniego `rm -rf /var/local/data/GaugeApp` zostaną maksima na wypadek ponownej instalacji.
+Bez ostatniego `rm -rf /var/local/data/GaugeApp` zostaną ustawienia na wypadek ponownej instalacji.
 
 ## W razie problemów
 
