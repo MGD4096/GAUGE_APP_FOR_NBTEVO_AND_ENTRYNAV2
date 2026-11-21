@@ -48,6 +48,39 @@ MUTED = (136, 135, 128, 255)
 FAINT = (95, 94, 90, 255)
 PILL = (12, 68, 124, 255)
 
+# Gauge colours (the OPTION menu): arcs, the g-meter dot and the lit gear. Each has its own frame pack
+# (GaugeApp_frames_c<k>.bin); the app loads the chosen one. (name, colour, light, pill behind the lit gear)
+COLORS = [
+    ("blue", ACCENT, ACCENT_LIGHT, PILL),
+    ("red", (222, 45, 50, 255), (240, 140, 140, 255), (110, 22, 26, 255)),
+    ("orange", (255, 122, 0, 255), (255, 185, 120, 255), (125, 58, 0, 255)),      # BMW M / iDrive sport orange
+    ("green", (40, 180, 90, 255), (140, 220, 165, 255), (16, 82, 42, 255)),
+]
+COLOR_NAMES_PL = ["niebieski", "czerwony", "pomaranczowy BMW", "zielony"]
+COLOR_NAMES_EN = ["blue", "red", "BMW orange", "green"]
+
+# Units the OPTION menu offers (order = kUnit* in gauge_ids.hpp)
+UNITS = ["°C", "°F", "KM", "kW", "hp", "Nm", "lb-ft", "l", "gal", "PS"]   # KM = PS in Polish
+
+# Texts drawn into the background, per HMI language (the app picks the picture from vehicle.language: 18 = Polish,
+# anything else English). Menu and settings texts are in the text DB, which the HMI picks itself.
+BG_TEXTS = {
+    "pl": {"COOLANT": "Płyn chłodniczy", "OIL": "Olej silnikowy", "POWER": "Moc", "TORQUE": "Moment obrotowy",
+           "G": "Przeciążenie", "LAT": "bok", "LON": "wzdł."},
+    "en": {"COOLANT": "Coolant", "OIL": "Engine oil", "POWER": "Power", "TORQUE": "Torque",
+           "G": "G-force", "LAT": "lat.", "LON": "long."},
+}
+SETTING_TEXTS = {  # text id = 200 + 10 * setting + value (gauge_view.hpp settingText); (Polish, English)
+    200: [("Kolor wskaznikow: " + p, "Gauge colour: " + e) for p, e in zip(COLOR_NAMES_PL, COLOR_NAMES_EN)],
+    210: [("Temperatura: stopnie Celsjusza", "Temperature: Celsius"),
+          ("Temperatura: stopnie Fahrenheita", "Temperature: Fahrenheit")],
+    220: [("Moc: KM", "Power: PS"), ("Moc: kW", "Power: kW"), ("Moc: hp", "Power: hp")],
+    230: [("Moment: Nm", "Torque: Nm"), ("Moment: lb-ft", "Torque: lb-ft")],
+    240: [("Paliwo: litry", "Fuel: litres"), ("Paliwo: galony (US)", "Fuel: US gallons")],
+}
+TEXT_SETTINGS_TITLE = 250
+SETTINGS_TITLE = ("Ustawienia", "Settings")
+
 # ---- layout (design pixels; scaled by SCALE on the car and placed at ORIGIN, moved with --x / --y) -----------------
 W, H = 960, 400
 SCALE = 1.15                                      # 960 x 400 -> 1104 x 460 of the ~1250 x 470 visible area
@@ -68,36 +101,47 @@ POWER_SCALE_MIN, TORQUE_SCALE_MIN = 150, 250     # KM / Nm: the scale starts her
 ARC_C, ARC_R, ARC_W = (145, 126), 78, 9          # inside a card
 ARC_STEPS = 60                                    # frames 0..60
 ARC_BOX = (ARC_C[0] - ARC_R - 8, ARC_C[1] - ARC_R - 8, 2 * ARC_R + 16, ARC_R + 18)   # x, y, w, h inside a card
+# The HMI shows at most about 60 images in a state (EntryNav2 car: images 61+ of a state stayed empty). So only the
+# big values are digit by digit (3 cells each); every other number is one picture of the whole number.
 BIG = dict(cell=30, h=52, size=46)                # big digits: cell width, image height, font size
-SMALL = dict(cell=11, h=22, size=16)
+UNIT_BOX = (60, 20)                               # unit label image (w, h)
 BIG_Y = 80                                        # top of the big number inside a card
-MAX_POS = (52, 160)                               # first small digit of "max ..." inside a card
-SCALE_POS = (ARC_C[0] + ARC_R - 22, ARC_C[1] + 12)  # first of 3 small digits (right aligned) under the arc's end
+MAX_BOX = (52, 160, 50, 22)                       # x, y, w, h inside a card: the max number (amber, left aligned)
+SCALE_BOX = (44, 18)                              # w, h: a scale-end number, centred under the arc's end
+SCALE_Y = ARC_C[1] + 8                            # top of the scale-end numbers
+MAX_SIZE, SCALE_SIZE, FUEL_SIZE, G_SIZE, LAT_SIZE = 16, 13, 24, 46, 16   # font sizes
 
 G_CARD = (305, 0, 350, 300)
 G_C, G_R = (175, 120), 86                         # g-meter centre / 2 g radius inside the card
 G_STEPS = 10                                      # dot grid: -10..10 per axis, 0.2 g per step
 G_BOX = 196
-# "0,62" is always digit, comma, digit, digit: the comma cell is narrower (COMMA_PULL px taken off on each side).
-BIG_COMMA_PULL, SMALL_COMMA_PULL = 9, 3
-G_BIG_W = 3 * BIG["cell"] + BIG["cell"] - 2 * BIG_COMMA_PULL
-G_BIG_POS = (175 - G_BIG_W // 2, 214)
-G_LAT_POS, G_LON_POS = (92, 274), (244, 274)
+G_BIG_BOX = (175 - 60, 214, 120, 52)              # x, y, w, h: "0,62" centred
+G_LAT_BOX, G_LON_BOX = (92, 274, 50, 22), (244, 274, 50, 22)   # amber, left aligned
 
-
-def comma_cells(x0, cell, pull):
-    """x of the four cells of "d,dd" with a narrow comma."""
-    return [x0, x0 + cell - pull, x0 + 2 * cell - 2 * pull, x0 + 3 * cell - 2 * pull]
-
-GEAR_CARD = (305, 316, 350, 84)
-GEAR_CELLS = [("P", 30, 50), ("R", 92, 50), ("N", 154, 50), ("D", 216, 104)]   # letter, x, width inside the card
+GEAR_CARD = (305, 316, 230, 84)                   # gears ...
+GEAR_CELLS = [("P", 10, 38), ("R", 52, 38), ("N", 94, 38), ("D", 136, 84)]   # letter, x, width inside the card
 GEAR_Y, GEAR_H = 14, 56
+FUEL_CARD = (543, 316, 112, 84)                   # ... and fuel, side by side under the g-meter
+FUEL_ICON = (22, 42)                              # centre of the pump icon inside the fuel card
+FUEL_BOX = (36, 26, 44, 32)                       # x, y, w, h: the fuel number, right aligned
+FUEL_UNIT_BOX = (36 + 44 + 4, 33, 28, 22)         # x, y, w, h: the unit, left aligned, right after the number
 
 # ---- image ids ------------------------------------------------------------------------------------------------------
 IMG_ICON, IMG_BG, IMG_BLANK, IMG_TEST = 56001, 56010, 56011, 56012   # IMG_TEST: 549x484 card (--diag)
+IMG_BG_EN = 56013                                 # the background with English texts (IMG_BG: Polish)
 IMG_ARC, IMG_MARK = 56100, 56200
-IMG_BIG, IMG_SMALL = 56300, 56400                 # + 16 * variant + glyph
-GLYPHS = "0123456789-,"                           # glyph 12 = blank
+IMG_BIG = 56300                                   # + 16 * variant + glyph
+IMG_UNIT = 56485                                  # + index in UNITS
+IMG_FUEL_UNIT = 56496                             # "l", "gal" left aligned (after the fuel number)
+GLYPHS = "0123456789-, ."                         # glyph 12 = blank, 13 = decimal point (English)
+# Whole numbers, one picture each (+ value):
+IMG_MAXNUM, MAXNUM_MAX = 57100, 999               # "max" numbers 0..999 (amber, left aligned)
+IMG_SCALENUM, SCALENUM_MAX = 58100, 1000          # scale ends 0..1000 (faint, centred)
+IMG_FUELNUM, FUELNUM_MAX = 59200, 199             # fuel 0..199 (white, right aligned); IMG_FUELNUM_NONE = "--"
+IMG_FUELNUM_NONE = 59400
+IMG_GNUM, IMG_LATNUM, GNUM_MAX = 59500, 60400, 300   # g x 100: 0..300 (+ 400 for a decimal point instead of comma)
+IMG_GNUM_NONE = 60300                             # "-,--"
+SEP_STRIDE = 400
 IMG_GEAR = 56500                                  # P 0/1, R 2/3, N 4/5, D 6/7, D1..D8 11..18 (odd / >10 = lit)
 IMG_DOT = 56600                                   # + iy * 21 + ix
 
@@ -182,43 +226,38 @@ def slots():
         for k in range(3):
             out.append(("%s_BIG%d" % (name, k), x0 + k * BIG["cell"], cy + BIG_Y, BIG["cell"] * 3 // 2, BIG["h"],
                         IMG_BLANK))
-        for k in range(3):
-            out.append(("%s_MAX%d" % (name, k), cx + MAX_POS[0] + k * SMALL["cell"], cy + MAX_POS[1],
-                        SMALL["cell"] * 3 // 2, SMALL["h"], IMG_BLANK))
-    for name in ("POWER", "TORQUE"):
-        cx, cy = [g[1] for g in GAUGES if g[0] == name][0]
-        for k in range(3):
-            out.append(("%s_SCALE%d" % (name, k), cx + SCALE_POS[0] + k * SMALL["cell"], cy + SCALE_POS[1],
-                        SMALL["cell"] * 3 // 2, SMALL["h"], IMG_BLANK))
+        mx, my, mw, mh = MAX_BOX
+        out.append((name + "_MAX", cx + mx, cy + my, mw, mh, IMG_BLANK))
+        ax = cx + ARC_C[0]
+        out.append((name + "_UNIT", ax - UNIT_BOX[0] // 2, cy + BIG_Y + BIG["h"] + 2, UNIT_BOX[0], UNIT_BOX[1],
+                    IMG_BLANK))
+        for end, ex in (("LO", ax - ARC_R), ("HI", ax + ARC_R)):
+            out.append(("%s_%s" % (name, end), ex - SCALE_BOX[0] // 2, cy + SCALE_Y, SCALE_BOX[0], SCALE_BOX[1],
+                        IMG_BLANK))
     gx, gy = G_CARD[0], G_CARD[1]
-    for k, x in enumerate(comma_cells(gx + G_BIG_POS[0], BIG["cell"], BIG_COMMA_PULL)):
-        out.append(("G_BIG%d" % k, x, gy + G_BIG_POS[1], BIG["cell"] * 3 // 2, BIG["h"], IMG_BLANK))
-    for name, pos in (("G_LAT", G_LAT_POS), ("G_LON", G_LON_POS)):
-        for k, x in enumerate(comma_cells(gx + pos[0], SMALL["cell"], SMALL_COMMA_PULL)):
-            out.append(("%s%d" % (name, k), x, gy + pos[1], SMALL["cell"] * 3 // 2, SMALL["h"], IMG_BLANK))
+    for name, (bx, by, bw, bh) in (("G_BIG", G_BIG_BOX), ("G_LAT", G_LAT_BOX), ("G_LON", G_LON_BOX)):
+        out.append((name, gx + bx, gy + by, bw, bh, IMG_BLANK))
     out.append(("G_DOT", gx + G_C[0] - G_BOX // 2, gy + G_C[1] - G_BOX // 2, G_BOX, G_BOX, IMG_BLANK))
     for i, (letter, x, w) in enumerate(GEAR_CELLS):
         out.append(("GEAR_" + letter, GEAR_CARD[0] + x, GEAR_CARD[1] + GEAR_Y, w, GEAR_H, IMG_GEAR + 2 * i))
+    for name, (bx, by, bw, bh) in (("FUEL", FUEL_BOX), ("FUEL_UNIT", FUEL_UNIT_BOX)):
+        out.append((name, FUEL_CARD[0] + bx, FUEL_CARD[1] + by, bw, bh, IMG_BLANK))
     return out
 
 
 # ---- images ---------------------------------------------------------------------------------------------------------
-def background(fp):
+def background(fp, lang="pl"):
+    tx = BG_TEXTS[lang]
     c = Canvas(W, H)
     f_title, f_unit, f_small = font(fp, 17), font(fp, 15), font(fp, 13)
-    for name, (cx, cy), title, unit, scale, red in GAUGES:
+    for name, (cx, cy), _title, unit, scale, red in GAUGES:
         c.rrect(cx, cy, CARD_W, CARD_H, 12, CARD)
-        c.text((cx + 16, cy + 12), title, f_title, TEXT2)
+        c.text((cx + 16, cy + 12), tx[name], f_title, TEXT2)
         ac = (cx + ARC_C[0], cy + ARC_C[1])
         c.arc(ac, ARC_R, ARC_W, 0, 1, TRACK)
         if red is not None:
             c.arc(ac, ARC_R + 9, 2.5, (red - scale[0]) / float(scale[1] - scale[0]), 1, RED, caps=False)
-        c.text((ac[0], cy + BIG_Y + BIG["h"] + 4), unit, f_unit, MUTED, "ma")
-        c.text((cx + 16, cy + MAX_POS[1] + 2), "max", f_small, AMBER)
-        lo = str(scale[0]) if scale else "0"
-        c.text((ac[0] - ARC_R, ac[1] + 12), lo, f_small, FAINT, "ma")
-        if scale:
-            c.text((ac[0] + ARC_R, ac[1] + 12), str(scale[1]), f_small, FAINT, "ma")
+        c.text((cx + 16, cy + MAX_BOX[1] + 2), "max", f_small, AMBER)   # unit and scale ends are slots (units)
     gx, gy, gw, gh = G_CARD
     c.rrect(gx, gy, gw, gh, 12, CARD)
     gc = (gx + G_C[0], gy + G_C[1])
@@ -228,11 +267,59 @@ def background(fp):
     c.line((gc[0], gc[1] - G_R), (gc[0], gc[1] + G_R), TRACK, 1)
     c.text((gc[0] + G_R / 2.0 + 3, gc[1] - 3), "1 g", f_small, FAINT, "ld")
     c.text((gc[0] + G_R + 3, gc[1] - 3), "2 g", f_small, FAINT, "ld")
-    c.text((gx + G_BIG_POS[0] + G_BIG_W + 8, gy + G_BIG_POS[1] + BIG["h"] - 12), "g", f_unit, MUTED, "ls")
-    c.text((gx + G_LAT_POS[0] - 6, gy + G_LAT_POS[1] + SMALL["h"] - 5), "bok", f_small, MUTED, "rs")
-    c.text((gx + G_LON_POS[0] - 6, gy + G_LON_POS[1] + SMALL["h"] - 5), "wzd\u0142.", f_small, MUTED, "rs")
-    c.text((gx + 16, gy + 12), "Przeci\u0105\u017cenie", f_title, TEXT2)
+    bx, by, bw, bh = G_BIG_BOX
+    c.text((gx + bx + bw + 4, gy + by + bh - 12), "g", f_unit, MUTED, "ls")
+    for key, (lx, ly, _lw, lh) in (("LAT", G_LAT_BOX), ("LON", G_LON_BOX)):
+        c.text((gx + lx - 6, gy + ly + lh - 5), tx[key], f_small, MUTED, "rs")
+    c.text((gx + 16, gy + 12), tx["G"], f_title, TEXT2)
     c.rrect(*GEAR_CARD, 12, CARD)
+    c.rrect(*FUEL_CARD, 12, CARD)
+    # fuel pump icon
+    px, py = FUEL_CARD[0] + FUEL_ICON[0], FUEL_CARD[1] + FUEL_ICON[1]
+    c.rrect(px - 8, py - 11, 12, 22, 2, MUTED)
+    c.rrect(px - 6, py - 8, 8, 6, 1, CARD)
+    c.line((px + 4, py - 6), (px + 8, py - 3), MUTED, 2)
+    c.line((px + 8, py - 3), (px + 8, py + 7), MUTED, 2)
+    c.line((px + 8, py + 7), (px + 5, py + 7), MUTED, 2)
+    return c.image()
+
+
+def unit_label(fp, text):
+    c = Canvas(*UNIT_BOX)
+    c.text((UNIT_BOX[0] / 2.0, UNIT_BOX[1] / 2.0), text, font(fp, 15), MUTED, "mm")
+    return c.image()
+
+
+def number_image(fp, text, w, h, size, color, align):
+    """A whole number as one picture: align "l" (left), "m" (centre) or "r" (right) in a w x h box."""
+    c = Canvas(w, h)
+    if text:
+        x = {"l": 0, "m": w / 2.0, "r": w}[align]
+        c.text((x, h / 2.0), text, font(fp, size), color, align + "m")
+    return c.image()
+
+
+def scale_values():
+    """Every number a scale end can show (gauge_view.hpp): 0 and multiples of 50 (power / torque, scaleEnd) and the
+    fixed coolant / oil ends in deg C and deg F (rounded like roundInt)."""
+    vals = set(range(0, SCALENUM_MAX + 1, 50))
+    for g in GAUGES:
+        if g[4]:
+            for c in g[4]:
+                vals.add(c)
+                vals.add(int(c * 1.8 + 32 + 0.5))
+    return sorted(vals)
+
+
+def g_text(v, sep):
+    return ("%.2f" % (v / 100.0)).replace(".", sep)
+
+
+def fuel_unit_label(fp, text):
+    """The fuel unit, left aligned, so it sits right after the (right aligned) digits."""
+    w, h = FUEL_UNIT_BOX[2], FUEL_UNIT_BOX[3]
+    c = Canvas(w, h)
+    c.text((0, h / 2.0 + 1), text, font(fp, 17), TEXT2, "lm")
     return c.image()
 
 
@@ -257,22 +344,22 @@ def glyph(fp, spec, ch, variant, color):
     return c.image()
 
 
-def dot_frame(ix, iy):
+def dot_frame(ix, iy, color=ACCENT, light=ACCENT_LIGHT):
     c = Canvas(G_BOX, G_BOX)
     o = G_BOX / 2.0
     p = (o + (ix - G_STEPS) * G_R / float(G_STEPS), o + (iy - G_STEPS) * G_R / float(G_STEPS))
     if (ix, iy) != (G_STEPS, G_STEPS):
-        c.line((o, o), p, ACCENT_LIGHT, 2)
-    c.circle(p, 8, ACCENT)
+        c.line((o, o), p, light, 2)
+    c.circle(p, 8, color)
     c.circle(p, 3, TEXT)
     return c.image()
 
 
-def gear_cell(fp, text, w, lit):
+def gear_cell(fp, text, w, lit, pill=PILL):
     c = Canvas(w, GEAR_H)
     if lit:
-        c.rrect(0, 0, w, GEAR_H, 10, PILL)
-    c.text((w / 2.0, GEAR_H / 2.0), text, font(fp, 30), TEXT if lit else FAINT, "mm")
+        c.rrect(0, 0, w, GEAR_H, 10, pill)
+    c.text((w / 2.0, GEAR_H / 2.0), text, font(fp, 30 if len(text) < 2 else 28), TEXT if lit else FAINT, "mm")
     return c.image()
 
 
@@ -305,25 +392,54 @@ def make_icon():
     return c.image()
 
 
-def all_images(fp):
-    imgs = {IMG_BG: background(fp), IMG_BLANK: Canvas(1, 1, scaled=False).image()}
+def common_images(fp):
+    """Frames that look the same in every colour: GaugeApp_frames.bin."""
+    imgs = {IMG_BG: background(fp, "pl"), IMG_BG_EN: background(fp, "en"), IMG_BLANK: Canvas(1, 1, scaled=False).image()}
     for k in range(ARC_STEPS + 1):
-        imgs[IMG_ARC + k] = arc_frame(k / float(ARC_STEPS), ACCENT)
         imgs[IMG_MARK + k] = arc_frame(k / float(ARC_STEPS), ACCENT, marker=True)
     for variant in (0, 1):
-        for gi, ch in enumerate(GLYPHS + " "):
+        for gi, ch in enumerate(GLYPHS):               # 14 glyphs: ids stay below the next set (+ 16 * variant)
             ch = ch.strip()
             imgs[IMG_BIG + 16 * variant + gi] = glyph(fp, BIG, ch, variant, TEXT)
-            imgs[IMG_SMALL + 16 * variant + gi] = glyph(fp, SMALL, ch, variant, AMBER)
+    mw, mh = MAX_BOX[2], MAX_BOX[3]
+    for v in range(MAXNUM_MAX + 1):
+        imgs[IMG_MAXNUM + v] = number_image(fp, str(v), mw, mh, MAX_SIZE, AMBER, "l")
+    for v in scale_values():
+        imgs[IMG_SCALENUM + v] = number_image(fp, str(v), SCALE_BOX[0], SCALE_BOX[1], SCALE_SIZE, FAINT, "m")
+    fw, fh = FUEL_BOX[2], FUEL_BOX[3]
+    for v in range(FUELNUM_MAX + 1):
+        imgs[IMG_FUELNUM + v] = number_image(fp, str(v), fw, fh, FUEL_SIZE, TEXT, "r")
+    imgs[IMG_FUELNUM_NONE] = number_image(fp, "--", fw, fh, FUEL_SIZE, TEXT, "r")
+    for s, sep in enumerate((",", ".")):
+        for v in range(GNUM_MAX + 1):
+            imgs[IMG_GNUM + SEP_STRIDE * s + v] = number_image(fp, g_text(v, sep), G_BIG_BOX[2], G_BIG_BOX[3],
+                                                               G_SIZE, TEXT, "m")
+            imgs[IMG_LATNUM + SEP_STRIDE * s + v] = number_image(fp, g_text(v, sep), G_LAT_BOX[2], G_LAT_BOX[3],
+                                                                 LAT_SIZE, AMBER, "l")
+    imgs[IMG_GNUM_NONE] = number_image(fp, "-,--", G_BIG_BOX[2], G_BIG_BOX[3], G_SIZE, TEXT, "m")
+    for i, u in enumerate(UNITS):
+        imgs[IMG_UNIT + i] = unit_label(fp, u)
+    for i, u in enumerate(("l", "gal")):
+        imgs[IMG_FUEL_UNIT + i] = fuel_unit_label(fp, u)
     for i, (letter, _x, w) in enumerate(GEAR_CELLS):
         imgs[IMG_GEAR + 2 * i] = gear_cell(fp, letter, w, False)
-        imgs[IMG_GEAR + 2 * i + 1] = gear_cell(fp, letter, w, True)
+    return imgs
+
+
+def color_images(fp, color):
+    """Frames drawn in a gauge colour: GaugeApp_frames_c<k>.bin (same ids in every colour)."""
+    _name, main, light, pill = color
+    imgs = {}
+    for k in range(ARC_STEPS + 1):
+        imgs[IMG_ARC + k] = arc_frame(k / float(ARC_STEPS), main)
+    for i, (letter, _x, w) in enumerate(GEAR_CELLS):
+        imgs[IMG_GEAR + 2 * i + 1] = gear_cell(fp, letter, w, True, pill)
     dw = GEAR_CELLS[3][2]
     for n in range(1, 9):
-        imgs[IMG_GEAR + 10 + n] = gear_cell(fp, "D%d" % n, dw, True)
+        imgs[IMG_GEAR + 10 + n] = gear_cell(fp, "D%d" % n, dw, True, pill)
     for iy in range(2 * G_STEPS + 1):
         for ix in range(2 * G_STEPS + 1):
-            imgs[IMG_DOT + iy * (2 * G_STEPS + 1) + ix] = dot_frame(ix, iy)
+            imgs[IMG_DOT + iy * (2 * G_STEPS + 1) + ix] = dot_frame(ix, iy, main, light)
     return imgs
 
 
@@ -359,10 +475,31 @@ def gauge_parts(slot_list, ox, oy):
     return models, comps
 
 
-def state(sid, title, text_model_id, comps, parent=None):
-    return ("      <hmiState id=\"%d\"%s text=\"%s\" textModel=\"%d\">\n        <components>\n%s        </components>\n"
-            "      </hmiState>\n" % (sid, " parentId=\"%d\"" % parent if parent else "", title, text_model_id,
+def state(sid, title, text_model_id, comps, parent=None, options=None):
+    opt = ("        <optionComponents>\n%s        </optionComponents>\n" % "".join(options)) if options else ""
+    return ("      <hmiState id=\"%d\"%s text=\"%s\" textModel=\"%d\">\n%s        <components>\n%s        </components>\n"
+            "      </hmiState>\n" % (sid, " parentId=\"%d\"" % parent if parent else "", title, text_model_id, opt,
                                     "".join(comps)))
+
+
+# The settings page (hmiState 12), opened from the OPTION menu of the gauge screen (optionComponents). One button per
+# setting: action 31 + s (raAction, handled by the app: next value), text model 41 + s (the app writes the text id of
+# the current value), component 50 + s. The OPTION entry: hmiAction 7 -> state 12, text model 46, component 60.
+SETTINGS_STATE, SETTINGS_ACTION0, SETTINGS_TEXTMODEL0, SETTINGS_COMP0 = 12, 31, 41, 50
+OPTION_ACTION, OPTION_TEXTMODEL, OPTION_COMP = 7, 46, 60
+
+
+def settings_parts():
+    models = [text_model(SETTINGS_TEXTMODEL0 + s, base) for s, base in enumerate(sorted(SETTING_TEXTS))]
+    models.append(text_model(OPTION_TEXTMODEL, TEXT_SETTINGS_TITLE))
+    actions = ["      <raAction id=\"%d\"/>\n" % (SETTINGS_ACTION0 + s) for s in range(len(SETTING_TEXTS))]
+    actions.append("      <hmiAction id=\"%d\" target=\"%d\"/>\n" % (OPTION_ACTION, SETTINGS_STATE))
+    buttons = ["          <button action=\"%d\" id=\"%d\" model=\"%d\" text=\"%s\"/>\n"
+               % (SETTINGS_ACTION0 + s, SETTINGS_COMP0 + s, SETTINGS_TEXTMODEL0 + s, SETTING_TEXTS[base][0][1])
+               for s, base in enumerate(sorted(SETTING_TEXTS))]
+    option = ["          <button action=\"%d\" id=\"%d\" model=\"%d\" text=\"%s\"/>\n"
+              % (OPTION_ACTION, OPTION_COMP, OPTION_TEXTMODEL, SETTINGS_TITLE[1])]
+    return models, actions, buttons, option
 
 
 # Diagnostic build (make_db.py --diag-out DIR): the row opens a menu of test pages, to find out on the car what the HMI
@@ -391,8 +528,13 @@ def xml(slot_list, ox, oy, diag=False):
     models += gm
     actions = ["      <hmiAction id=\"5\" target=\"10\"/>\n"]
     if not diag:
-        states = [state(10, TITLE, 3, gc)]
-        what = "hmiState 10 is one background image and %d image components on top of it" % len(slot_list)
+        sm, sa, sb, so = settings_parts()
+        models += sm
+        actions += sa
+        states = [state(10, TITLE, 3, gc, options=so),
+                  state(SETTINGS_STATE, SETTINGS_TITLE[1], OPTION_TEXTMODEL, sb, 10)]
+        what = ("hmiState 10 is one background image and %d image components on top of it; its OPTION menu opens the"
+                " settings page (hmiState 12)" % len(slot_list))
     else:
         what = ("DIAGNOSTIC build 3: hmiState 10 is a menu of test pages E1..E4 (states 11..14). The gauge models stay"
                 " (the app writes them) but have no components")
@@ -448,11 +590,24 @@ namespace ids {
 enum {
     kImgIcon = %d, kImgBackground = %d, kImgBlank = %d,
     kImgArc = %d, kImgMark = %d, kArcSteps = %d,
-    kImgBig = %d, kImgSmall = %d,          // + 16 * variant (0 = in its cell, 1 = half a cell right) + glyph
-    kGlyphMinus = 10, kGlyphComma = 11, kGlyphBlank = 12,
+    kImgBig = %d,                          // + 16 * variant (0 = in its cell, 1 = half a cell right) + glyph
+    kGlyphMinus = 10, kGlyphComma = 11, kGlyphBlank = 12, kGlyphDot = 13,
     kImgGear = %d,                         // + 2 * cell (P R N D) + lit; D1..D8 lit = + 10 + n
     kImgDot = %d, kGSteps = %d,            // + iy * (2 * kGSteps + 1) + ix, centre = (kGSteps, kGSteps)
     kFirstModel = 100, kBackgroundModel = 99,
+    kImgUnit = %d,                         // + kUnit*
+    // whole numbers, one picture each (+ value, clamped to 0..max):
+    kImgMaxNum = %d, kMaxNumMax = %d,      // "max" numbers
+    kImgScaleNum = %d, kScaleNumMax = %d,  // scale ends
+    kImgFuelNum = %d, kFuelNumMax = %d, kImgFuelNumNone = %d,   // fuel; "--"
+    kImgGNum = %d, kImgLatNum = %d, kGNumMax = %d, kSepStride = %d,   // g x 100; + kSepStride: decimal point
+    kImgGNumNone = %d,                     // "-,--"
+    kUnitC = 0, kUnitF, kUnitKm, kUnitKw, kUnitHp, kUnitNm, kUnitLbFt, kUnitL, kUnitGal, kUnitPs,
+    kImgBackgroundEn = %d,                 // the background with English texts (kImgBackground: Polish)
+    kImgFuelUnit = %d,                     // + 0 "l", + 1 "gal": left aligned, right after the fuel digits
+    kColorCount = %d,                      // frame packs GaugeApp_frames_c0.bin .. (blue, red, BMW orange, green)
+    kTextSettings = 200,                   // + 10 * setting + value
+    kSettingsAction = %d, kSettingsTextModel = %d,   // + setting (raAction / textIdModel of its button)
     kScaleCoolantLo = %d, kScaleCoolantHi = %d, kScaleOilLo = %d, kScaleOilHi = %d,   // printed on the background
     kScalePowerMin = %d, kScaleTorqueMin = %d    // smallest end of the power / torque scale (it grows with the maxima)
 };
@@ -466,7 +621,10 @@ enum Slot {
 }  // namespace eng
 
 #endif
-""" % (IMG_ICON, IMG_BG, IMG_BLANK, IMG_ARC, IMG_MARK, ARC_STEPS, IMG_BIG, IMG_SMALL, IMG_GEAR, IMG_DOT, G_STEPS,
+""" % (IMG_ICON, IMG_BG, IMG_BLANK, IMG_ARC, IMG_MARK, ARC_STEPS, IMG_BIG, IMG_GEAR, IMG_DOT, G_STEPS,
+       IMG_UNIT, IMG_MAXNUM, MAXNUM_MAX, IMG_SCALENUM, SCALENUM_MAX, IMG_FUELNUM, FUELNUM_MAX, IMG_FUELNUM_NONE,
+       IMG_GNUM, IMG_LATNUM, GNUM_MAX, SEP_STRIDE, IMG_GNUM_NONE,
+       IMG_BG_EN, IMG_FUEL_UNIT, len(COLORS), SETTINGS_ACTION0, SETTINGS_TEXTMODEL0,
        GAUGES[0][4][0], GAUGES[0][4][1], GAUGES[1][4][0], GAUGES[1][4][1], POWER_SCALE_MIN, TORQUE_SCALE_MIN, names)
 
 
@@ -483,36 +641,44 @@ def png_bytes(im):
     return b.getvalue()
 
 
-def preview(imgs, slot_list):
+def preview(imgs, slot_list, lang="pl"):
     """The screen with sample values, composed like the HMI would (background, then every slot in XML order)."""
-    sample = {"COOLANT": (92, 98, 0.525, 0.6), "OIL": (104, 112, 0.54, 0.62), "POWER": (193, 231, 0.772, 0.924),
-              "TORQUE": (380, 412, 0.844, 0.916)}
-    big = lambda ch, v=0: IMG_BIG + 16 * v + (GLYPHS.index(ch) if ch.strip() else 12)
-    small = lambda ch, v=0: IMG_SMALL + 16 * v + (GLYPHS.index(ch) if ch.strip() else 12)
+    sample = {  # value, max, arc fraction, max fraction, unit, scale lo, scale hi
+        "COOLANT": (92, 98, 0.525, 0.6, 0, "50", "130"), "OIL": (104, 112, 0.54, 0.62, 0, "50", "150"),
+        "POWER": (193, 231, 0.772, 0.924, 2 if lang == "pl" else UNITS.index("PS"), "0", "250"),
+        "TORQUE": (380, 412, 0.844, 0.916, 5, "0", "450")}
+
+    def gl(base, ch, v=0):
+        return base + 16 * v + (GLYPHS.index(ch) if ch.strip() else 12)
+
+    def centred(base, s):  # like gauge_view.hpp centred3(): 3 cells, 2 chars half a cell right, 1 in the middle
+        if len(s) == 3:
+            return [gl(base, c) for c in s]
+        if len(s) == 2:
+            return [gl(base, s[0], 1), gl(base, s[1], 1), IMG_BLANK]
+        return [IMG_BLANK, gl(base, s), IMG_BLANK]
+
+    big = lambda ch, v=0: gl(IMG_BIG, ch, v)
     pick = {}
-    for name, (val, mx, f, fm) in sample.items():
+    for name, (val, mx, f, fm, unit, lo, hi) in sample.items():
         pick[name + "_ARC"] = IMG_ARC + round(f * ARC_STEPS)
         pick[name + "_MARK"] = IMG_MARK + round(fm * ARC_STEPS)
-        s = str(val)  # centred like gauge_view.hpp centred3(): 3 cells, 2 chars half a cell right, 1 in the middle
-        cells = [big(c) for c in s] if len(s) == 3 else [big(s[0], 1), big(s[1], 1), IMG_BLANK] if len(s) == 2 \
-            else [IMG_BLANK, big(s), IMG_BLANK]
-        for k in range(3):
-            pick["%s_BIG%d" % (name, k)] = cells[k]
-        for k, ch in enumerate(str(mx).ljust(3)):
-            pick["%s_MAX%d" % (name, k)] = small(ch)
-    for name, s in (("POWER", "250"), ("TORQUE", "450")):
-        for k in range(3):
-            pick["%s_SCALE%d" % (name, k)] = small(s[k])
-    for k, ch in enumerate("0,62"):
-        pick["G_BIG%d" % k] = big(ch)
-    for k, ch in enumerate("0,58"):
-        pick["G_LAT%d" % k] = small(ch)
-    for k, ch in enumerate("0,21"):
-        pick["G_LON%d" % k] = small(ch)
+        for k, cell in enumerate(centred(IMG_BIG, str(val))):
+            pick["%s_BIG%d" % (name, k)] = cell
+        pick[name + "_MAX"] = IMG_MAXNUM + mx
+        pick[name + "_UNIT"] = IMG_UNIT + unit
+        pick[name + "_LO"] = IMG_SCALENUM + int(lo)
+        pick[name + "_HI"] = IMG_SCALENUM + int(hi)
+    pick["FUEL"] = IMG_FUELNUM + 39
+    pick["FUEL_UNIT"] = IMG_FUEL_UNIT
+    s = 0 if lang == "pl" else SEP_STRIDE             # decimal separator of the language
+    pick["G_BIG"] = IMG_GNUM + s + 62
+    pick["G_LAT"] = IMG_LATNUM + s + 58
+    pick["G_LON"] = IMG_LATNUM + s + 21
     pick["G_DOT"] = IMG_DOT + 9 * 21 + 13
     pick["GEAR_D"] = IMG_GEAR + 13
     out = Image.new("RGBA", (sc(W), sc(H)), (11, 13, 16, 255))
-    out.alpha_composite(imgs[IMG_BG])
+    out.alpha_composite(imgs[IMG_BG if lang == "pl" else IMG_BG_EN])
     for name, x, y, _w, _h, img in slot_list:
         im = imgs[pick.get(name, img)]
         if im.size != (1, 1):
@@ -545,8 +711,16 @@ def write_images(path, imgs):
 def write_texts(path):
     with zipfile.ZipFile(path, "w") as z:
         for lang, langname in LANGS.items():
+            pl = 0 if lang == "pl" else 1                # settings texts: Polish for pl, English otherwise (ASCII)
+            texts = dict(DIAG_TEXTS)
+            for base, values in SETTING_TEXTS.items():
+                for v, pair in enumerate(values):
+                    texts[base + v] = pair[pl]
+            texts[TEXT_SETTINGS_TITLE] = SETTINGS_TITLE[pl]
             body = "100000=%s\n1=%s\n" % (langname, TITLE)
-            body += "".join("%d=%s\n" % (k, v) for k, v in sorted(DIAG_TEXTS.items()))
+            body += "".join("%d=%s\n" % (k, v) for k, v in sorted(texts.items()))
+            if not body.isascii():
+                raise SystemExit("texts must stay ASCII (%s)" % lang)
             add(z, lang + ".txt", body.encode("utf-8"))
 
 
@@ -620,16 +794,25 @@ def main():
     if Image is None:
         raise SystemExit("Pillow is missing (apt install python3-pil, or pip install pillow); --layout-only skips images")
     fp = find_font(a.font)
-    imgs = all_images(fp)
-    size = write_frames(os.path.join(HERE, "GaugeApp_frames.bin"), imgs)
+    common = common_images(fp)
+    size = write_frames(os.path.join(HERE, "GaugeApp_frames.bin"), common)
+    os.makedirs(os.path.join(HERE, "res"), exist_ok=True)
+    for k, color in enumerate(COLORS):
+        colored = color_images(fp, color)
+        size += write_frames(os.path.join(HERE, "GaugeApp_frames_c%d.bin" % k), colored)
+        both = dict(common)
+        both.update(colored)
+        preview(both, slot_list).save(os.path.join(HERE, "res", "preview.png" if k == 0 else
+                                                   "preview_%s.png" % color[0]))
+        if k == 0:
+            preview(both, slot_list, "en").save(os.path.join(HERE, "res", "preview_en.png"))
     icon = make_icon()
     write_images(os.path.join(HERE, "GaugeApp_ALL_Images.zip"), {IMG_ICON: icon})
     write_texts(os.path.join(HERE, "GaugeApp_ALL_Texts.zip"))
-    os.makedirs(os.path.join(HERE, "res"), exist_ok=True)
     icon.save(os.path.join(HERE, "res", "row_icon_63x54.png"))
-    preview(imgs, slot_list).save(os.path.join(HERE, "res", "preview.png"))
-    print("wrote GaugeApp.xml, src/gauge_ids.hpp, GaugeApp_frames.bin (%d frames, %d bytes), GaugeApp_ALL_Images.zip "
-          "(row icon), GaugeApp_ALL_Texts.zip, res/preview.png - font %s" % (len(imgs), size, fp))
+    print("wrote GaugeApp.xml, src/gauge_ids.hpp, GaugeApp_frames.bin + %d colour packs (%d bytes), "
+          "GaugeApp_ALL_Images.zip (row icon), GaugeApp_ALL_Texts.zip, res/preview*.png - font %s"
+          % (len(COLORS), size, fp))
 
 
 if __name__ == "__main__":

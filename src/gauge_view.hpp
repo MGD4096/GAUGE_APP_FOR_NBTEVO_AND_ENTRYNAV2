@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
-// What every image slot of the gauge screen shows, from the values and the maxima - pure logic, host-tested.
-// The slots, image ids and fixed scales come from make_db.py (src/gauge_ids.hpp); this file only picks ids.
+// What every image slot of the gauge screen shows, from the values, the maxima and the settings (colour, units) -
+// pure logic, host-tested. The slots, frame ids and fixed scales come from make_db.py (src/gauge_ids.hpp); this file
+// only picks ids. Values and maxima stay in base units (deg C, KM / PS, Nm, litres); only what is shown is converted.
 #ifndef GAUGE_VIEW_HPP
 #define GAUGE_VIEW_HPP
 
@@ -9,44 +10,162 @@
 
 namespace eng {
 
-const double kPowerScaleStep = 50, kTorqueScaleStep = 50;   // the power / torque scale ends on a multiple of this
+// ---- settings (the OPTION menu; <data dir>/settings.txt) ------------------------------------------------------------
+enum TempUnit { kCelsius = 0, kFahrenheit, kTempUnits };
+enum PowerUnit { kPs = 0, kKw, kHp, kPowerUnits };          // PS is shown as "KM"
+enum TorqueUnit { kNm = 0, kLbFt, kTorqueUnits };
+enum FuelUnit { kLitre = 0, kGallon, kFuelUnits };          // US gallons
 
-// End of the power / torque scale: the recorded maximum + 5 %, rounded up to the step, never below the minimum.
-inline int scaleEnd(const Maxima& mx, int g, int minimum, double step) {
-    if (!mx.has[g]) return minimum;
-    int e = (int)(ceil(mx.v[g] * 1.05 / step) * step);
+struct Settings {
+    int color, temp, power, torque, fuel;
+    Settings() : color(0), temp(kCelsius), power(kPs), torque(kNm), fuel(kLitre) {}
+};
+
+enum Setting { kSetColor = 0, kSetTemp, kSetPower, kSetTorque, kSetFuel, kSettingCount };
+
+inline const char* settingKey(int s) {
+    switch (s) {
+    case kSetColor:  return "color";
+    case kSetTemp:   return "temp";
+    case kSetPower:  return "power";
+    case kSetTorque: return "torque";
+    case kSetFuel:   return "fuel";
+    }
+    return "";
+}
+inline int settingCount(int s) {
+    switch (s) {
+    case kSetColor:  return ids::kColorCount;
+    case kSetTemp:   return kTempUnits;
+    case kSetPower:  return kPowerUnits;
+    case kSetTorque: return kTorqueUnits;
+    case kSetFuel:   return kFuelUnits;
+    }
+    return 1;
+}
+inline int& settingRef(Settings& st, int s) {
+    switch (s) {
+    case kSetTemp:   return st.temp;
+    case kSetPower:  return st.power;
+    case kSetTorque: return st.torque;
+    case kSetFuel:   return st.fuel;
+    }
+    return st.color;
+}
+inline int settingValue(const Settings& st, int s) { return settingRef(const_cast<Settings&>(st), s); }
+
+// The next value of setting s (wraps around).
+inline void cycleSetting(Settings& st, int s) {
+    int& v = settingRef(st, s);
+    v = (v + 1) % settingCount(s);
+}
+
+// Text id of the button that shows setting s with its current value (texts written by make_db.py).
+inline unsigned settingText(const Settings& st, int s) { return ids::kTextSettings + 10u * (unsigned)s + (unsigned)settingValue(st, s); }
+
+// "color=0\ntemp=1\n..."
+inline void formatSettings(const Settings& st, char* out, size_t n) {
+    size_t o = 0;
+    out[0] = 0;
+    for (int s = 0; s < kSettingCount && o < n; ++s) {
+        int w = snprintf(out + o, n - o, "%s=%d\n", settingKey(s), settingValue(st, s));
+        if (w < 0) break;
+        o += (size_t)w;
+    }
+}
+
+// Reads what formatSettings wrote; missing, broken or out-of-range values keep their default.
+inline void parseSettings(Settings& st, const char* text) {
+    for (int s = 0; s < kSettingCount; ++s) {
+        char key[24];
+        snprintf(key, sizeof(key), "%s=", settingKey(s));
+        const char* p = text;
+        while ((p = strstr(p, key)) != NULL) {
+            if (p == text || p[-1] == '\n') break;
+            p += 1;
+        }
+        if (!p) continue;
+        char* end = NULL;
+        long v = strtol(p + strlen(key), &end, 10);
+        if (end == p + strlen(key) || v < 0 || v >= settingCount(s)) continue;
+        settingRef(st, s) = (int)v;
+    }
+}
+
+// ---- units ------------------------------------------------------------------------------------------------------------
+inline double showTemp(const Settings& st, double c) { return st.temp == kFahrenheit ? c * 1.8 + 32 : c; }
+inline double showPower(const Settings& st, double ps) {
+    return st.power == kKw ? ps * 0.73549875 : st.power == kHp ? ps * 0.98632 : ps;
+}
+inline double showTorque(const Settings& st, double nm) { return st.torque == kLbFt ? nm * 0.737562 : nm; }
+inline double showFuel(const Settings& st, double l) { return st.fuel == kGallon ? l / 3.785411784 : l; }
+
+inline unsigned tempUnitImage(const Settings& st) { return ids::kImgUnit + (st.temp == kFahrenheit ? ids::kUnitF : ids::kUnitC); }
+// PS is "KM" in Polish.
+inline unsigned powerUnitImage(const Settings& st, bool polish) {
+    return ids::kImgUnit + (st.power == kKw ? ids::kUnitKw : st.power == kHp ? ids::kUnitHp
+                            : polish ? ids::kUnitKm : ids::kUnitPs);
+}
+
+// The background (card titles and labels drawn in it) in the HMI's language: Polish or English.
+inline unsigned backgroundFrame(const Metrics& m) { return m.polish() ? ids::kImgBackground : ids::kImgBackgroundEn; }
+inline unsigned torqueUnitImage(const Settings& st) { return ids::kImgUnit + (st.torque == kLbFt ? ids::kUnitLbFt : ids::kUnitNm); }
+// The fuel unit is its own left-aligned picture: it sits right after the (right-aligned) digits.
+inline unsigned fuelUnitImage(const Settings& st) { return ids::kImgFuelUnit + (st.fuel == kGallon ? 1u : 0u); }
+
+// Smallest end of the power / torque scale in the shown unit (it grows with the recorded maximum).
+inline int powerScaleMin(const Settings& st) { return st.power == kKw ? 100 : 150; }
+inline int torqueScaleMin(const Settings& st) { return st.torque == kLbFt ? 200 : 250; }
+const double kScaleStep = 50;                    // the power / torque scale ends on a multiple of this
+
+// End of a scale: the maximum (shown unit) + 5 %, rounded up to the step, never below the minimum.
+inline int scaleEnd(bool hasMax, double shownMax, int minimum, double step) {
+    if (!hasMax) return minimum;
+    int e = (int)(ceil(shownMax * 1.05 / step) * step);
     return e > minimum ? e : minimum;
 }
 
+// ---- glyphs -----------------------------------------------------------------------------------------------------------
 inline unsigned glyphIndex(char c) {
     if (c >= '0' && c <= '9') return (unsigned)(c - '0');
     if (c == '-') return (unsigned)ids::kGlyphMinus;
     if (c == ',') return (unsigned)ids::kGlyphComma;
+    if (c == '.') return (unsigned)ids::kGlyphDot;
     return (unsigned)ids::kGlyphBlank;
 }
-inline unsigned bigGlyph(char c, int variant) { return ids::kImgBig + 16u * (unsigned)variant + glyphIndex(c); }
-inline unsigned smallGlyph(char c, int variant) { return ids::kImgSmall + 16u * (unsigned)variant + glyphIndex(c); }
+inline unsigned glyph(unsigned base, char c, int variant) { return base + 16u * (unsigned)variant + glyphIndex(c); }
+inline unsigned bigGlyph(char c, int variant) { return glyph(ids::kImgBig, c, variant); }
 
-// "92", "104", "-5", "--" centred over three cells: three characters fill them, two sit half a cell right (variant 1),
+// ---- whole numbers, one picture each (the HMI shows at most about 60 images in a state) -------------------------------
+inline int clampInt(double v, int lo, int hi) {
+    int i = roundInt(v);
+    return i < lo ? lo : i > hi ? hi : i;
+}
+inline unsigned maxImage(bool has, double v) {
+    return has ? ids::kImgMaxNum + (unsigned)clampInt(v, 0, ids::kMaxNumMax) : (unsigned)ids::kImgBlank;
+}
+inline unsigned scaleImage(double v) { return ids::kImgScaleNum + (unsigned)clampInt(v, 0, ids::kScaleNumMax); }
+inline unsigned fuelImage(bool has, double v) {
+    return has ? ids::kImgFuelNum + (unsigned)clampInt(v, 0, ids::kFuelNumMax) : (unsigned)ids::kImgFuelNumNone;
+}
+// g as "0,62" / "0.62" (decimal comma in Polish): base = kImgGNum (big) or kImgLatNum (small).
+inline unsigned gImage(unsigned base, double g, bool comma) {
+    if (g < 0) g = -g;
+    return base + (comma ? 0u : (unsigned)ids::kSepStride) + (unsigned)clampInt(g * 100, 0, ids::kGNumMax);
+}
+
+// Text centred over three cells of glyph set base: three characters fill them, two sit half a cell right (variant 1),
 // one goes in the middle cell.
-inline void centred3(const char* s, unsigned* out) {
+inline void centred3(unsigned base, const char* s, unsigned* out) {
     size_t n = strlen(s);
-    if (n >= 3) { for (int k = 0; k < 3; ++k) out[k] = bigGlyph(s[k], 0); return; }
-    if (n == 2) { out[0] = bigGlyph(s[0], 1); out[1] = bigGlyph(s[1], 1); out[2] = ids::kImgBlank; return; }
+    if (n >= 3) { for (int k = 0; k < 3; ++k) out[k] = glyph(base, s[k], 0); return; }
+    if (n == 2) { out[0] = glyph(base, s[0], 1); out[1] = glyph(base, s[1], 1); out[2] = ids::kImgBlank; return; }
     out[0] = ids::kImgBlank; out[2] = ids::kImgBlank;
-    out[1] = n == 1 ? bigGlyph(s[0], 0) : (unsigned)ids::kImgBlank;
+    out[1] = n == 1 ? glyph(base, s[0], 0) : (unsigned)ids::kImgBlank;
 }
+inline void centred3(const char* s, unsigned* out) { centred3(ids::kImgBig, s, out); }
 
-// Small digits from the left (align 0) or from the right (align 1) in `cells` cells.
-inline void smallText(const char* s, int cells, int align, unsigned* out) {
-    int n = (int)strlen(s);
-    if (n > cells) n = cells;
-    int start = align ? cells - n : 0;
-    for (int k = 0; k < cells; ++k)
-        out[k] = (k >= start && k < start + n) ? smallGlyph(s[k - start], 0) : (unsigned)ids::kImgBlank;
-}
-
-// Integer text for a big number: -99..999, "--" when there is no value.
+// Integer text: -99..999, "--" when there is no value.
 inline void intText(bool has, double v, char* out, size_t n) {
     if (!has) { snprintf(out, n, "--"); return; }
     int i = roundInt(v);
@@ -55,12 +174,12 @@ inline void intText(bool has, double v, char* out, size_t n) {
     snprintf(out, n, "%d", i);
 }
 
-// "0,62" (always four characters, 0..9,99).
-inline void gText(double g, char* out, size_t n) {
+// "0,62" (Polish) / "0.62" (English): always four characters, 0..9.99.
+inline void gText(double g, char* out, size_t n, bool comma = true) {
     if (g < 0) g = -g;
     if (g > 9.99) g = 9.99;
     snprintf(out, n, "%.2f", g);
-    for (char* p = out; *p; ++p) if (*p == '.') *p = ',';
+    if (comma) for (char* p = out; *p; ++p) if (*p == '.') *p = ',';
 }
 
 inline unsigned arcFrame(bool has, double v, double lo, double hi) {
@@ -102,48 +221,51 @@ inline void gearCells(const Metrics& m, unsigned* out) {
     else out[3] = ids::kImgGear + 6;
 }
 
-// One gauge card: arc, max marker, big value, small max value.
-inline void gaugeCard(unsigned* out, bool has, double v, bool hasMax, double mx, double lo, double hi) {
-    out[0] = arcFrame(has, v, lo, hi);
-    out[1] = markFrame(hasMax, mx, lo, hi);
+// One gauge card (9 consecutive slots: arc, marker, 3 big digits, max, unit, scale start, scale end). Value, maximum
+// and scale ends in the shown unit; the arc is drawn over lo..hi.
+inline void gaugeCard(unsigned* c, bool has, double v, bool hasMax, double mx, double lo, double hi, unsigned unitImg) {
+    c[0] = arcFrame(has, v, lo, hi);
+    c[1] = markFrame(hasMax, mx, lo, hi);
     char t[16];
     intText(has, v, t, sizeof(t));
-    centred3(t, out + 2);
-    if (hasMax) intText(true, mx, t, sizeof(t)); else t[0] = 0;
-    smallText(t, 3, 0, out + 5);
+    centred3(t, c + 2);
+    c[5] = maxImage(hasMax, mx);
+    c[6] = unitImg;
+    c[7] = scaleImage(lo);
+    c[8] = scaleImage(hi);
 }
 
-// The image id of every slot.
-inline void computeView(const Metrics& m, const Maxima& mx, unsigned out[ids::kSlotCount]) {
+// The frame id of every slot.
+inline void computeView(const Metrics& m, const Maxima& mx, const Settings& st, unsigned out[ids::kSlotCount]) {
     using namespace ids;
-    const int pEnd = scaleEnd(mx, kGPower, kScalePowerMin, kPowerScaleStep);
-    const int tEnd = scaleEnd(mx, kGTorque, kScaleTorqueMin, kTorqueScaleStep);
-    gaugeCard(out + kSlotCoolantArc, m.hasCoolant, m.coolant, mx.has[kGCoolant], mx.v[kGCoolant], kScaleCoolantLo,
-              kScaleCoolantHi);
-    gaugeCard(out + kSlotOilArc, m.hasOil, m.oil, mx.has[kGOil], mx.v[kGOil], kScaleOilLo, kScaleOilHi);
-    gaugeCard(out + kSlotPowerArc, m.hasPower(), m.power(), mx.has[kGPower], mx.v[kGPower], 0, pEnd);
-    gaugeCard(out + kSlotTorqueArc, m.hasTorque, m.torque, mx.has[kGTorque], mx.v[kGTorque], 0, tEnd);
-    char t[16];
-    snprintf(t, sizeof(t), "%d", pEnd);
-    smallText(t, 3, 1, out + kSlotPowerScale0);
-    snprintf(t, sizeof(t), "%d", tEnd);
-    smallText(t, 3, 1, out + kSlotTorqueScale0);
-
-    const bool hasG = m.hasLatG() || m.hasLonG();
-    const double lat = m.hasLatG() ? m.latG() : 0, lon = m.hasLonG() ? m.lonG() : 0;
-    if (hasG) {
-        gText(sqrt(lat * lat + lon * lon), t, sizeof(t));
-        for (int k = 0; k < 4; ++k) out[kSlotGBig0 + k] = bigGlyph(t[k], 0);
-    } else {
-        out[kSlotGBig0] = out[kSlotGBig3] = kImgBlank;
-        out[kSlotGBig1] = out[kSlotGBig2] = bigGlyph('-', 0);
+    gaugeCard(out + kSlotCoolantArc, m.hasCoolant, showTemp(st, m.coolant), mx.has[kGCoolant],
+              showTemp(st, mx.v[kGCoolant]), showTemp(st, kScaleCoolantLo), showTemp(st, kScaleCoolantHi),
+              tempUnitImage(st));
+    gaugeCard(out + kSlotOilArc, m.hasOil, showTemp(st, m.oil), mx.has[kGOil], showTemp(st, mx.v[kGOil]),
+              showTemp(st, kScaleOilLo), showTemp(st, kScaleOilHi), tempUnitImage(st));
+    {
+        const double pmax = showPower(st, mx.v[kGPower]);
+        const int end = scaleEnd(mx.has[kGPower], pmax, powerScaleMin(st), kScaleStep);
+        gaugeCard(out + kSlotPowerArc, m.hasPower(), showPower(st, m.power()), mx.has[kGPower], pmax, 0, end,
+                  powerUnitImage(st, m.polish()));
     }
-    if (m.hasLatG()) gText(lat, t, sizeof(t)); else t[0] = 0;
-    smallText(t, 4, 0, out + kSlotGLat0);
-    if (m.hasLonG()) gText(lon, t, sizeof(t)); else t[0] = 0;
-    smallText(t, 4, 0, out + kSlotGLon0);
+    {
+        const double tmax = showTorque(st, mx.v[kGTorque]);
+        const int end = scaleEnd(mx.has[kGTorque], tmax, torqueScaleMin(st), kScaleStep);
+        gaugeCard(out + kSlotTorqueArc, m.hasTorque, showTorque(st, m.torque), mx.has[kGTorque], tmax, 0, end,
+                  torqueUnitImage(st));
+    }
+
+    const double lat = m.hasLatG() ? m.latG() : 0, lon = m.hasLonG() ? m.lonG() : 0;
+    const bool comma = m.polish();                       // decimal separator of the HMI language
+    out[kSlotGBig] = (m.hasLatG() || m.hasLonG()) ? gImage(kImgGNum, sqrt(lat * lat + lon * lon), comma)
+                                                  : (unsigned)kImgGNumNone;
+    out[kSlotGLat] = m.hasLatG() ? gImage(kImgLatNum, lat, comma) : (unsigned)kImgBlank;
+    out[kSlotGLon] = m.hasLonG() ? gImage(kImgLatNum, lon, comma) : (unsigned)kImgBlank;
     out[kSlotGDot] = dotFrame(m);
     gearCells(m, out + kSlotGearP);
+    out[kSlotFuel] = fuelImage(m.hasFuel, showFuel(st, m.fuel));
+    out[kSlotFuelUnit] = fuelUnitImage(st);
 }
 
 }  // namespace eng

@@ -10,11 +10,24 @@ namespace ids {
 enum {
     kImgIcon = 56001, kImgBackground = 56010, kImgBlank = 56011,
     kImgArc = 56100, kImgMark = 56200, kArcSteps = 60,
-    kImgBig = 56300, kImgSmall = 56400,          // + 16 * variant (0 = in its cell, 1 = half a cell right) + glyph
-    kGlyphMinus = 10, kGlyphComma = 11, kGlyphBlank = 12,
+    kImgBig = 56300,                          // + 16 * variant (0 = in its cell, 1 = half a cell right) + glyph
+    kGlyphMinus = 10, kGlyphComma = 11, kGlyphBlank = 12, kGlyphDot = 13,
     kImgGear = 56500,                         // + 2 * cell (P R N D) + lit; D1..D8 lit = + 10 + n
     kImgDot = 56600, kGSteps = 10,            // + iy * (2 * kGSteps + 1) + ix, centre = (kGSteps, kGSteps)
     kFirstModel = 100, kBackgroundModel = 99,
+    kImgUnit = 56485,                         // + kUnit*
+    // whole numbers, one picture each (+ value, clamped to 0..max):
+    kImgMaxNum = 57100, kMaxNumMax = 999,      // "max" numbers
+    kImgScaleNum = 58100, kScaleNumMax = 1000,  // scale ends
+    kImgFuelNum = 59200, kFuelNumMax = 199, kImgFuelNumNone = 59400,   // fuel; "--"
+    kImgGNum = 59500, kImgLatNum = 60400, kGNumMax = 300, kSepStride = 400,   // g x 100; + kSepStride: decimal point
+    kImgGNumNone = 60300,                     // "-,--"
+    kUnitC = 0, kUnitF, kUnitKm, kUnitKw, kUnitHp, kUnitNm, kUnitLbFt, kUnitL, kUnitGal, kUnitPs,
+    kImgBackgroundEn = 56013,                 // the background with English texts (kImgBackground: Polish)
+    kImgFuelUnit = 56496,                     // + 0 "l", + 1 "gal": left aligned, right after the fuel digits
+    kColorCount = 4,                      // frame packs GaugeApp_frames_c0.bin .. (blue, red, BMW orange, green)
+    kTextSettings = 200,                   // + 10 * setting + value
+    kSettingsAction = 31, kSettingsTextModel = 41,   // + setting (raAction / textIdModel of its button)
     kScaleCoolantLo = 50, kScaleCoolantHi = 130, kScaleOilLo = 50, kScaleOilHi = 150,   // printed on the background
     kScalePowerMin = 150, kScaleTorqueMin = 250    // smallest end of the power / torque scale (it grows with the maxima)
 };
@@ -25,56 +38,47 @@ enum Slot {
     kSlotCoolantBig0,
     kSlotCoolantBig1,
     kSlotCoolantBig2,
-    kSlotCoolantMax0,
-    kSlotCoolantMax1,
-    kSlotCoolantMax2,
+    kSlotCoolantMax,
+    kSlotCoolantUnit,
+    kSlotCoolantLo,
+    kSlotCoolantHi,
     kSlotOilArc,
     kSlotOilMark,
     kSlotOilBig0,
     kSlotOilBig1,
     kSlotOilBig2,
-    kSlotOilMax0,
-    kSlotOilMax1,
-    kSlotOilMax2,
+    kSlotOilMax,
+    kSlotOilUnit,
+    kSlotOilLo,
+    kSlotOilHi,
     kSlotPowerArc,
     kSlotPowerMark,
     kSlotPowerBig0,
     kSlotPowerBig1,
     kSlotPowerBig2,
-    kSlotPowerMax0,
-    kSlotPowerMax1,
-    kSlotPowerMax2,
+    kSlotPowerMax,
+    kSlotPowerUnit,
+    kSlotPowerLo,
+    kSlotPowerHi,
     kSlotTorqueArc,
     kSlotTorqueMark,
     kSlotTorqueBig0,
     kSlotTorqueBig1,
     kSlotTorqueBig2,
-    kSlotTorqueMax0,
-    kSlotTorqueMax1,
-    kSlotTorqueMax2,
-    kSlotPowerScale0,
-    kSlotPowerScale1,
-    kSlotPowerScale2,
-    kSlotTorqueScale0,
-    kSlotTorqueScale1,
-    kSlotTorqueScale2,
-    kSlotGBig0,
-    kSlotGBig1,
-    kSlotGBig2,
-    kSlotGBig3,
-    kSlotGLat0,
-    kSlotGLat1,
-    kSlotGLat2,
-    kSlotGLat3,
-    kSlotGLon0,
-    kSlotGLon1,
-    kSlotGLon2,
-    kSlotGLon3,
+    kSlotTorqueMax,
+    kSlotTorqueUnit,
+    kSlotTorqueLo,
+    kSlotTorqueHi,
+    kSlotGBig,
+    kSlotGLat,
+    kSlotGLon,
     kSlotGDot,
     kSlotGearP,
     kSlotGearR,
     kSlotGearN,
     kSlotGearD,
+    kSlotFuel,
+    kSlotFuelUnit,
     kSlotCount
 };
 

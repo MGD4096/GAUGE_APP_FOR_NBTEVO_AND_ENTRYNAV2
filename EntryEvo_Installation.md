@@ -53,7 +53,8 @@ df -k /
 ```
 
 - Każdy plik musi odpowiedzieć `OK`.
-- W kolumnie `Available` musi być co najmniej ok. 3000 (KB) wolnego miejsca.
+- W kolumnie `Available` musi być co najmniej ok. 16000 (KB) wolnego miejsca (paczka ma ok. 12,5 MB: klatki
+  ekranu w czterech kolorach i gotowe obrazki liczb).
 
 Teraz loader systemu sprawdzi, czy jednostka ma każdą bibliotekę i funkcję, której potrzebuje aplikacja, niczego
 przy tym nie uruchamiając:
@@ -135,9 +136,42 @@ GAUGE APP otwiera ekran: płyn i olej po lewej, przeciążenie i bieg w środku,
 Zanim przyjdą pierwsze dane z auta (ok. 1,5 s), w miejscu wartości jest `--`.
 
 W logu przy starcie powinny być linie:
-- `GaugeApp_frames.bin: 633 frames, … bytes` – aplikacja wczytała klatki ekranu,
+- `settings: color=… temp=…` – wczytane ustawienia,
+- `GaugeApp_frames.bin: … frames, … bytes` i `GaugeApp_frames_c0.bin: … frames` – aplikacja wczytała klatki ekranu
+  (wspólne i w wybranym kolorze),
 - `onInit: base onInit -> 1, 55 images written` – ekran został wysłany do iDrive,
 - **brak** `onError 9` (ten błąd był skutkiem zbyt dużej bazy obrazków w starszych wersjach).
+
+### Ustawienia (klawisz OPTION)
+
+Na ekranie GAUGE APP naciśnij **OPTION** na kontrolerze iDrive i wybierz **Ustawienia**. Każde naciśnięcie
+przycisku przełącza na następną wartość; zmiana jest od razu widoczna na ekranie i zapisuje się w
+`/var/local/data/GaugeApp/settings.txt`:
+
+| Przycisk | Wartości |
+|---|---|
+| Kolor wskaznikow | niebieski, czerwony, pomarańczowy BMW, zielony |
+| Temperatura | stopnie Celsjusza, stopnie Fahrenheita |
+| Moc | KM, kW, hp |
+| Moment | Nm, lb-ft |
+| Paliwo | litry, galony (US) |
+
+Maksima są liczone w jednostkach bazowych (°C, KM, Nm), więc zmiana jednostek ich nie psuje – są tylko inaczej
+pokazane. Paliwo (ilość w zbiorniku) jest w polu biegów, po prawej.
+
+**Język** przełącza się sam razem z językiem iDrive: po polsku przy polskim, po angielsku przy każdym innym (tytuły,
+„PS” zamiast „KM”, kropka dziesiętna). W logu widać to jako `CDS vehicle.language = '{"language":18}'` (18 = polski).
+
+**Jeśli po instalacji zniknie wiersz GAUGE APP** (iDrive nie przyjął menu OPTION – ta część XML nie była jeszcze
+sprawdzona w aucie): usuń menu OPTION z XML i zrestartuj. Reszta (ekran, paliwo, zapisane ustawienia) działa dalej:
+
+```sh
+mount -o remount,rw /
+sed -i '/<optionComponents>/,/<\/optionComponents>/d' /opt/hmi/data/ro/Plugins/GaugeApp/GaugeApp.xml
+sync
+mount -o remount,ro /
+reboot
+```
 
 Prześlij zdjęcie ekranu na postoju i w czasie jazdy oraz log – posłużą do dopracowania układu, jednostek i
 kierunków przeciążenia.
@@ -164,7 +198,8 @@ maksima (`max.txt`) nie giną.
 
 ## Maksima
 
-Maksima wszech czasów płynu, oleju, mocy i momentu są w `/var/local/data/GaugeApp/max.txt`, np.:
+Maksima płynu, oleju, mocy i momentu liczą się od zera przy każdym uruchomieniu aplikacji (czyli przy każdym
+starcie iDrive). Maksima z ostatniego przejazdu zostają do wglądu w `/var/local/data/GaugeApp/max.txt`, np.:
 
 ```
 coolant=98.0
@@ -173,12 +208,7 @@ power=277.6
 torque=419.0
 ```
 
-Aplikacja nigdy ich nie zeruje. Żeby wyzerować wszystkie – usuń plik; jedno – usuń jego linię. Potem zrestartuj
-jednostkę.
-
-```sh
-rm -f /var/local/data/GaugeApp/max.txt
-```
+Przy starcie są też zapisane w logu: `maxima reset (last run: coolant=98.0 oil=93.0 …)`.
 
 ## Wyłączenie i odinstalowanie
 

@@ -13,8 +13,26 @@ Natywna aplikacja iDrive dla **NBT Evo** (ID5/ID6, QNX) i **EntryNav2** (EntryEV
   D aktualny bieg skrzyni: D1, D2…),
 - po prawej **moc** (KM) i **moment obrotowy** (Nm).
 
-Przy płynie, oleju, mocy i momencie jest **maksimum wszech czasów** (żółty znacznik na łuku i liczba „max”).
-Maksima zapisują się w pliku i nigdy nie są zerowane przez aplikację. Skala mocy i momentu rośnie razem z maksimum.
+Przy płynie, oleju, mocy i momencie jest **maksimum bieżącego przejazdu** (żółty znacznik na łuku i liczba „max”).
+Maksima liczą się od zera przy każdym starcie aplikacji; te z ostatniego przejazdu zostają w `max.txt`. Skala mocy
+i momentu rośnie razem z maksimum.
+
+**Limit ok. 60 obrazków w jednym stanie** (sprawdzone w aucie: obrazki od ok. 60. w górę zostają puste). Dlatego tylko
+duże wartości są składane z cyfr (3 elementy), a pozostałe liczby (maksima, końce skal, paliwo, przeciążenie) są
+gotowymi obrazkami całych liczb – jeden element na liczbę. Ekran ma 47 obrazków.
+Obok biegów jest **ilość paliwa** w zbiorniku (`sensors.fuel`, `tanklevel`).
+
+**Język** dopasowuje się do języka iDrive. Teksty menu i ustawień są w bazie tekstów (`pl.txt` po polsku, pozostałe
+języki po angielsku), którą iDrive wybiera sam. Napisy na samym ekranie (tytuły kart, „bok/wzdł.”, „KM”, przecinek
+dziesiętny) są w obrazkach, więc aplikacja wybiera je według `vehicle.language` z CDS: 18 = polski, każdy inny język
+= angielski („Coolant”, „lat./long.”, „PS”, kropka dziesiętna). Dopóki język nie przyjdzie, ekran jest po polsku.
+Podgląd angielski: [`res/preview_en.png`](res/preview_en.png).
+
+**Ustawienia** (klawisz OPTION na ekranie GAUGE APP → Ustawienia; zapis w `<folder danych>/settings.txt`):
+kolor wskaźników (niebieski, czerwony, pomarańczowy BMW, zielony), temperatura (°C / °F), moc (KM / kW / hp),
+moment (Nm / lb-ft), paliwo (litry / galony US). Wartości i maksima są trzymane w jednostkach bazowych, przeliczane
+jest tylko to, co widać. Klatki w kolorze wskaźników (łuki, kropka przeciążenia, podświetlony bieg) są w osobnej
+paczce dla każdego koloru (`GaugeApp_frames_c0..3.bin`); aplikacja wczytuje tylko wybraną.
 
 Wygląd z przykładowymi wartościami (wygenerowany przez `make_db.py`): [`res/preview.png`](res/preview.png).
 
@@ -60,11 +78,10 @@ Dlaczego tak, a nie przez bazę obrazków iDrive – diagnostyka na EntryNav2 (F
 Nazwy i formaty: <https://bimmergestalt.github.io/BMWConnectedAnalysis/cds/> (lista społeczności; część jednostek
 jest tam oznaczona jako „prawdopodobnie”). W CDS nie ma mocy silnika, dlatego jest liczona z momentu i obrotów.
 
-**Maksima** są w `<folder danych>/max.txt` (NBT Evo: `/var/opt/gaugeapp`, EntryNav2: `/var/local/data/GaugeApp`),
-np. `coolant=98.0`. Zapis następuje najwyżej co 30 s i przy zamknięciu aplikacji, przez plik tymczasowy i zmianę
-nazwy, więc odcięcie zasilania nie zostawi połowy pliku. Nowe maksimum musi przyjść w **dwóch odczytach z rzędu**
-(liczy się mniejszy z nich), więc pojedynczy błędny odczyt nie zostaje rekordem na zawsze. **Zerowanie:** usuń plik
-(albo jedną linię) i zrestartuj iDrive.
+**Maksima** zerują się przy każdym starcie aplikacji. Maksima ostatniego przejazdu są w `<folder danych>/max.txt`
+(NBT Evo: `/var/opt/gaugeapp`, EntryNav2: `/var/local/data/GaugeApp`), np. `coolant=98.0`, zapisywane najwyżej co 30 s
+i przy zamknięciu aplikacji, przez plik tymczasowy i zmianę nazwy. Nowe maksimum musi przyjść w **dwóch odczytach
+z rzędu** (liczy się mniejszy z nich), więc pojedynczy błędny odczyt nie zostaje rekordem.
 
 **Skala mocy i momentu:** od 0 do maksimum + 5 %, zaokrąglonego w górę do 50. Najmniejszy koniec skali to 150 KM i
 250 Nm. Skala tylko rośnie.

@@ -12,6 +12,8 @@
 //   driving.gear          {"gear":0}                                                     1 N, 2 R, 3 P, 4+ D1+
 //   driving.acceleration  {"acceleration":{"lateral":-0.19,"longitudinal":65535.00}}     probably m/s^2
 //   driving.speedActual   {"speedActual":0}                                              km/h
+//   sensors.fuel          {"fuel":{"range":522,"reserve":0,"tanklevel":39}}              litres (tanklevel)
+//   vehicle.language      {"language":3}                     1 DE, 2 EN_UK, 3 EN_US, ... 18 PL (HMI language)
 // There is no engine power in CDS: it is torque * rpm. When the car sends no usable longitudinal acceleration (the list
 // shows 65535, a "not available" value), it is taken from the change of speedActual instead.
 // A value that is missing, not a number or outside a plausible range counts as "no data" (e.g. {"error":400}).
@@ -27,7 +29,9 @@
 namespace eng {
 
 // CDS properties the app subscribes to (index = Prop).
-enum Prop { kEngineTemp = 0, kRpm, kTorque, kGear, kAccel, kSpeed, kPropCount };
+enum Prop { kEngineTemp = 0, kRpm, kTorque, kGear, kAccel, kSpeed, kFuel, kLanguage, kPropCount };
+
+const int kLangPolish = 18;          // vehicle.language: the texts drawn into the pictures are Polish for it, else English
 
 inline const char* propName(int p) {
     switch (p) {
@@ -37,6 +41,8 @@ inline const char* propName(int p) {
     case kGear:       return "driving.gear";
     case kAccel:      return "driving.acceleration";
     case kSpeed:      return "driving.speedActual";
+    case kFuel:       return "sensors.fuel";
+    case kLanguage:   return "vehicle.language";
     }
     return "";
 }
@@ -87,14 +93,20 @@ inline bool inRange(double v, double lo, double hi) { return v >= lo && v <= hi;
 
 // Latest known values. A has* flag is false until a valid value arrived and again after an invalid one.
 struct Metrics {
-    bool   hasCoolant, hasOil, hasRpm, hasTorque, hasGear, hasLat, hasLon, hasSpeed, hasLonFromSpeed;
+    bool   hasCoolant, hasOil, hasRpm, hasTorque, hasGear, hasLat, hasLon, hasSpeed, hasLonFromSpeed, hasFuel;
     double coolant, oil, rpm, torque, lat, lon, speed, lonFromSpeed;   // lat / lon / lonFromSpeed in m/s^2
+    double fuel;                                     // litres in the tank
     int    gear;
+    int    language;                                 // vehicle.language, 0 = not known yet
     long   speedAtMs;                                // when speed was received
     Metrics()
         : hasCoolant(false), hasOil(false), hasRpm(false), hasTorque(false), hasGear(false), hasLat(false),
-          hasLon(false), hasSpeed(false), hasLonFromSpeed(false), coolant(0), oil(0), rpm(0), torque(0), lat(0),
-          lon(0), speed(0), lonFromSpeed(0), gear(0), speedAtMs(0) {}
+          hasLon(false), hasSpeed(false), hasLonFromSpeed(false), hasFuel(false), coolant(0), oil(0), rpm(0),
+          torque(0), lat(0), lon(0), speed(0), lonFromSpeed(0), fuel(0), gear(0), language(0), speedAtMs(0) {}
+
+    // Texts in the pictures: Polish until the language is known (the car this was made for), then Polish only for
+    // a Polish HMI.
+    bool polish() const { return language == 0 || language == kLangPolish; }
 
     bool hasPower() const { return hasTorque && hasRpm; }
     double power() const { return (torque > 0 ? torque : 0) * rpm * kPsPerNmRpm; }   // KM, 0 on overrun
@@ -176,6 +188,18 @@ inline bool apply(Metrics& m, int prop, const char* text, long nowMs) {
         if (ok) m.speedAtMs = nowMs;
         break;
     }
+    case kFuel: {
+        bool ok = numField(text, "tanklevel", &v) && inRange(v, 0, 200);
+        ch = setValue(m.hasFuel, m.fuel, ok, v);
+        break;
+    }
+    case kLanguage: {
+        bool ok = numField(text, "language", &v) && inRange(v, 1, 99);
+        int lang = ok ? (int)v : m.language;         // an invalid value keeps the last known language
+        ch = lang != m.language;
+        m.language = lang;
+        break;
+    }
     }
     return ch;
 }
@@ -189,11 +213,13 @@ inline bool propValid(const Metrics& m, int prop) {
     case kGear:       return m.hasGear;
     case kAccel:      return m.hasLat || m.hasLon;
     case kSpeed:      return m.hasSpeed;
+    case kFuel:       return m.hasFuel;
+    case kLanguage:   return m.language != 0;
     }
     return false;
 }
 
-// ---- all-time maxima (kept in a file, never reset by the app) ---------------------------------------------------------
+// ---- maxima of the current run (reset when the app starts; the last run's are kept in max.txt) ----------------------
 enum Gauge { kGCoolant = 0, kGOil, kGPower, kGTorque, kGaugeCount };
 
 inline const char* gaugeKey(int g) {
@@ -207,7 +233,7 @@ inline const char* gaugeKey(int g) {
 }
 
 // A new maximum needs two samples in a row: max = max(max, min(previous, current)). One glitch (a single bogus value)
-// can then not become a record that is never reset.
+// can then not become the record of the run.
 struct Maxima {
     bool   has[kGaugeCount], hasPrev[kGaugeCount];
     double v[kGaugeCount], prev[kGaugeCount];

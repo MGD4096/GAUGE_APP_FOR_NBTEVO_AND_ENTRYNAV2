@@ -47,11 +47,22 @@ public:
     virtual void run() = 0;
 };
 
+class Parcel {
+public:
+    int dummy;
+};
+class TextID {
+public:
+    explicit TextID(unsigned id);
+    unsigned m_id, m_type;
+};
+
 template <typename R, typename A1, typename A2, typename A3, typename A4> struct Delegate {
     void* object;
     R (*stub)(void*, A1);
 };
 typedef Delegate<bool, const BasicString<unsigned short>&, void, void, void> CdsDelegate;
+typedef Delegate<bool, const Parcel&, void, void, void> ActionDelegate;
 
 #define FAKE_SLOT(n) virtual void s##n();
 class PluginApp {
@@ -70,6 +81,8 @@ public:
     void post(Runnable* r, unsigned ms);
     void updateModel(unsigned modelId, const ImageID& image);
     void updateModel(unsigned modelId, const Image& image);
+    void updateModel(unsigned modelId, const TextID& text);
+    void addHandler(unsigned actionId, const ActionDelegate& handler);
     void cdsAddPropertyChangedEventHandler(BasicString<char>& name, unsigned id, const CdsDelegate& d);
     char name[64];
 };
@@ -83,6 +96,8 @@ struct FakeState {
     int bufferStreamsDestroyed;
     std::vector<std::pair<bmw::Runnable*, unsigned> > posted;   // not yet run
     std::map<std::string, bmw::CdsDelegate> cds;   // property name -> handler
+    std::map<unsigned, bmw::ActionDelegate> actions;   // raAction id -> handler
+    std::map<unsigned, unsigned> modelText;        // textIdModel -> latest text id
     int baseOnInit, baseOnFinalize;
     FakeState() : bufferStreamsDestroyed(0), baseOnInit(0), baseOnFinalize(0) {}
 };

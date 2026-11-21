@@ -72,7 +72,7 @@ entrynav2-dist: $(EN2_OUT)/libGaugeApp.so GaugeApp_ALL_Texts.zip GaugeApp_ALL_Im
 	rm -rf $(EN2_STAGE)
 	mkdir -p $(EN2_STAGE)/$(EN2_PLUGIN)
 	cp $(EN2_OUT)/libGaugeApp.so GaugeApp.manifest GaugeApp.xml GaugeApp_ALL_Texts.zip GaugeApp_ALL_Images.zip \
-	    GaugeApp_frames.bin $(EN2_STAGE)/$(EN2_PLUGIN)/
+	    GaugeApp_frames.bin GaugeApp_frames_c*.bin $(EN2_STAGE)/$(EN2_PLUGIN)/
 	chmod 755 $(EN2_STAGE)/$(EN2_PLUGIN)/libGaugeApp.so
 	cd $(EN2_STAGE) && md5sum $(EN2_PLUGIN)/* > MD5SUMS
 	tar -cf $(CURDIR)/dist/gauge-app-entrynav2.tar -C $(EN2_STAGE) MD5SUMS opt

@@ -102,24 +102,22 @@ static void testView() {
     CHECK(s[0] == kImgBlank && s[1] == bigGlyph('5', 0) && s[2] == kImgBlank);
     centred3("--", s);
     CHECK(s[0] == kImgBig + 16 + kGlyphMinus && s[1] == kImgBig + 16 + kGlyphMinus);
-    smallText("250", 3, 1, s);
-    CHECK(s[0] == smallGlyph('2', 0) && s[2] == smallGlyph('0', 0));
-    smallText("98", 3, 1, s);
-    CHECK(s[0] == kImgBlank && s[1] == smallGlyph('9', 0));
-    smallText("98", 3, 0, s);
-    CHECK(s[0] == smallGlyph('9', 0) && s[2] == kImgBlank);
+    // whole numbers, one picture each, clamped
+    CHECK(maxImage(true, 98.4) == kImgMaxNum + 98 && maxImage(true, 1500) == kImgMaxNum + kMaxNumMax);
+    CHECK(maxImage(true, -5) == kImgMaxNum && maxImage(false, 98) == kImgBlank);
+    CHECK(scaleImage(266) == kImgScaleNum + 266 && scaleImage(2000) == kImgScaleNum + kScaleNumMax);
+    CHECK(fuelImage(true, 39.4) == kImgFuelNum + 39 && fuelImage(false, 39) == kImgFuelNumNone);
+    CHECK(gImage(kImgGNum, 0.624, true) == kImgGNum + 62 && gImage(kImgGNum, -0.624, false) == kImgGNum + kSepStride + 62);
+    CHECK(gImage(kImgLatNum, 5, true) == kImgLatNum + kGNumMax);
     char t[8];
     gText(0.6249, t, sizeof(t));
     CHECK(std::string(t) == "0,62");
     gText(-1.5, t, sizeof(t));
     CHECK(std::string(t) == "1,50");
 
-    Maxima mx;
-    CHECK(scaleEnd(mx, kGPower, 150, 50) == 150);
-    mx.has[kGPower] = true; mx.v[kGPower] = 231;
-    CHECK(scaleEnd(mx, kGPower, 150, 50) == 250);
-    mx.v[kGPower] = 100;
-    CHECK(scaleEnd(mx, kGPower, 150, 50) == 150);
+    CHECK(scaleEnd(false, 0, 150, 50) == 150);
+    CHECK(scaleEnd(true, 231, 150, 50) == 250);
+    CHECK(scaleEnd(true, 100, 150, 50) == 150);
 
     CHECK(arcFrame(true, 90, 50, 130) == kImgArc + 30);
     CHECK(arcFrame(true, 20, 50, 130) == kImgArc);
@@ -157,13 +155,106 @@ static void testView() {
 
     Metrics none;
     Maxima nomx;
+    Settings st;
     unsigned view[kSlotCount];
-    computeView(none, nomx, view);
+    computeView(none, nomx, st, view);
     CHECK(view[kSlotCoolantArc] == kImgBlank && view[kSlotCoolantMark] == kImgBlank);
-    CHECK(view[kSlotCoolantBig0] == kImgBig + 16 + kGlyphMinus && view[kSlotCoolantMax0] == kImgBlank);
-    CHECK(view[kSlotPowerScale0] == smallGlyph('1', 0) && view[kSlotTorqueScale0] == smallGlyph('2', 0));
-    CHECK(view[kSlotGBig1] == bigGlyph('-', 0) && view[kSlotGDot] == kImgBlank);
+    CHECK(view[kSlotCoolantBig0] == kImgBig + 16 + kGlyphMinus && view[kSlotCoolantMax] == kImgBlank);
+    CHECK(view[kSlotPowerHi] == kImgScaleNum + 150 && view[kSlotTorqueHi] == kImgScaleNum + 250);
+    CHECK(view[kSlotPowerLo] == kImgScaleNum && view[kSlotCoolantLo] == kImgScaleNum + 50);
+    CHECK(view[kSlotCoolantHi] == kImgScaleNum + 130 && view[kSlotOilHi] == kImgScaleNum + 150);
+    CHECK(view[kSlotCoolantUnit] == kImgUnit + kUnitC && view[kSlotPowerUnit] == kImgUnit + kUnitKm);
+    CHECK(view[kSlotTorqueUnit] == kImgUnit + kUnitNm && view[kSlotFuelUnit] == kImgFuelUnit);
+    CHECK(view[kSlotFuel] == kImgFuelNumNone);
+    CHECK(view[kSlotGBig] == kImgGNumNone && view[kSlotGLat] == kImgBlank && view[kSlotGDot] == kImgBlank);
     for (int i = 0; i < kSlotCount; ++i) CHECK(view[i] != 0);
+}
+
+static void testUnitsAndSettings() {
+    Settings st;
+    CHECK(st.color == 0 && st.temp == kCelsius && st.power == kPs && st.torque == kNm && st.fuel == kLitre);
+    CHECK(settingText(st, kSetColor) == 200 && settingText(st, kSetFuel) == 240);
+    cycleSetting(st, kSetTemp);
+    CHECK(st.temp == kFahrenheit && settingText(st, kSetTemp) == 211);
+    cycleSetting(st, kSetTemp);
+    CHECK(st.temp == kCelsius);                                  // wraps around
+    for (int k = 0; k < 3; ++k) cycleSetting(st, kSetColor);
+    CHECK(st.color == 3);
+    cycleSetting(st, kSetColor);
+    CHECK(st.color == 0 && kColorCount == 4);
+
+    st.temp = kFahrenheit; st.power = kKw; st.torque = kLbFt; st.fuel = kGallon; st.color = 2;
+    char buf[128];
+    formatSettings(st, buf, sizeof(buf));
+    CHECK(std::string(buf) == "color=2\ntemp=1\npower=1\ntorque=1\nfuel=1\n");
+    Settings back;
+    parseSettings(back, buf);
+    CHECK(back.color == 2 && back.temp == 1 && back.power == 1 && back.torque == 1 && back.fuel == 1);
+    Settings junk;
+    parseSettings(junk, "color=9\ntemp=x\npower=2\n");
+    CHECK(junk.color == 0 && junk.temp == 0 && junk.power == kHp);
+
+    CHECK(NEAR(showTemp(st, 100), 212) && NEAR(showTemp(Settings(), 100), 100));
+    CHECK(fabs(showPower(st, 100) - 73.549875) < 1e-6);
+    st.power = kHp;
+    CHECK(fabs(showPower(st, 100) - 98.632) < 1e-6);
+    CHECK(fabs(showTorque(st, 400) - 295.0248) < 1e-3);
+    CHECK(fabs(showFuel(st, 37.854) - 10.0) < 1e-3);
+
+    // Fahrenheit / kW / lb-ft / gallons on the screen; values and maxima stay in base units
+    Metrics m;
+    apply(m, kEngineTemp, "{\"temperature\":{\"engine\":90,\"oil\":100}}", 0);
+    apply(m, kTorque, "{\"torque\":400}", 0);
+    apply(m, kRpm, "{\"RPMSpeed\":5000}", 0);
+    apply(m, kFuel, "{\"fuel\":{\"range\":522,\"reserve\":0,\"tanklevel\":39}}", 0);
+    CHECK(m.hasFuel && m.fuel == 39);
+    Maxima mx;
+    Settings f;
+    f.temp = kFahrenheit; f.power = kKw; f.torque = kLbFt; f.fuel = kGallon;
+    unsigned view[kSlotCount];
+    computeView(m, mx, f, view);
+    CHECK(view[kSlotCoolantBig0] == bigGlyph('1', 0) && view[kSlotCoolantBig1] == bigGlyph('9', 0) &&
+          view[kSlotCoolantBig2] == bigGlyph('4', 0));            // 90 C = 194 F
+    CHECK(view[kSlotCoolantArc] == kImgArc + 30);                 // same place on the arc as 90 C
+    CHECK(view[kSlotCoolantLo] == kImgScaleNum + 122 && view[kSlotCoolantHi] == kImgScaleNum + 266);
+    CHECK(view[kSlotCoolantUnit] == kImgUnit + kUnitF && view[kSlotPowerUnit] == kImgUnit + kUnitKw);
+    CHECK(view[kSlotTorqueUnit] == kImgUnit + kUnitLbFt && view[kSlotFuelUnit] == kImgFuelUnit + 1);
+    CHECK(view[kSlotTorqueBig0] == bigGlyph('2', 0) && view[kSlotTorqueBig1] == bigGlyph('9', 0) &&
+          view[kSlotTorqueBig2] == bigGlyph('5', 0));             // 400 Nm = 295 lb-ft
+    CHECK(view[kSlotFuel] == kImgFuelNum + 10);                 // 39 l = 10 gal
+    CHECK(view[kSlotPowerHi] == kImgScaleNum + 100);            // kW scale
+    Settings litres;
+    computeView(m, mx, litres, view);
+    CHECK(view[kSlotFuel] == kImgFuelNum + 39);
+}
+
+static void testLanguage() {
+    Metrics m;
+    Maxima mx;
+    Settings st;
+    unsigned view[kSlotCount];
+    CHECK(m.language == 0 && m.polish() && backgroundFrame(m) == kImgBackground);   // until it is known: Polish
+    CHECK(apply(m, kLanguage, "{\"language\":3}", 0));            // EN_US
+    CHECK(m.language == 3 && !m.polish() && propValid(m, kLanguage));
+    CHECK(backgroundFrame(m) == kImgBackgroundEn);
+    apply(m, kAccel, "{\"acceleration\":{\"lateral\":6.0822,\"longitudinal\":0}}", 0);   // 0.62 g
+    computeView(m, mx, st, view);
+    CHECK(view[kSlotPowerUnit] == kImgUnit + kUnitPs);           // "PS" in English, "KM" in Polish
+    CHECK(view[kSlotGBig] == kImgGNum + kSepStride + 62 && view[kSlotGLat] == kImgLatNum + kSepStride + 62);   // "0.62"
+    char t[8];
+    gText(0.62, t, sizeof(t), false);
+    CHECK(std::string(t) == "0.62");
+    CHECK(!apply(m, kLanguage, "{\"error\":400}", 0) && m.language == 3);   // bad value: language kept
+    apply(m, kLanguage, "{\"language\":18}", 0);                  // PL
+    CHECK(m.polish() && backgroundFrame(m) == kImgBackground);
+    computeView(m, mx, st, view);
+    CHECK(view[kSlotPowerUnit] == kImgUnit + kUnitKm);
+    CHECK(view[kSlotGBig] == kImgGNum + 62);                    // "0,62"
+    apply(m, kLanguage, "{\"language\":1}", 0);                   // DE: English pictures
+    CHECK(!m.polish());
+    st.power = kKw;
+    computeView(m, mx, st, view);
+    CHECK(view[kSlotPowerUnit] == kImgUnit + kUnitKw);           // kW / hp are the same in every language
 }
 
 int main() {
@@ -171,6 +262,8 @@ int main() {
     testSpeedDerivative();
     testMaxima();
     testView();
+    testUnitsAndSettings();
+    testLanguage();
     if (g_fail) { printf("%d check(s) failed\n", g_fail); return 1; }
     printf("test_cds_values OK\n");
     return 0;

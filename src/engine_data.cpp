@@ -8,8 +8,8 @@
 // call NBT-AAD / entry-aad use for driving.gear), keeps the latest values and, five times a second, sends the PNG data
 // of every image whose picture changed with PluginApp::updateModel(model, bmw::Image) - arc / marker frames, digits,
 // the g-meter dot, the gear cells (src/gauge_view.hpp decides which). The frames are not in the HMI's image DB: with
-// all of them there, an EntryNav2 showed no image at all (see make_db.py). The maxima are kept in <data dir>/max.txt
-// and never reset by the app.
+// all of them there, an EntryNav2 showed no image at all (see make_db.py). The maxima start from nothing every time
+// the app starts; those of the last run are kept in <data dir>/max.txt.
 //
 // The framework glue (PluginApp constructor, own vtable, Runnable stand-in, pluginAppInfo) is the pattern car-verified
 // by NBT-AAD's rhmiapp/nbt_aad_app.cpp (https://github.com/Sq00ky/Supra-iDrive6-Android-Auto) and entry-aad's
@@ -85,11 +85,20 @@ private:
     unsigned char m_storage[64];
 };
 
+class Parcel;                                // the value of an action (only passed through)
+class TextID {
+public:
+    explicit TextID(unsigned id);            // _ZN3bmw6TextIDC1Ej (entry-aad's menu texts, car-verified)
+private:
+    unsigned m_id, m_type;
+};
+
 template <typename R, typename A1, typename A2, typename A3, typename A4> struct Delegate {
     void* object;
     R (*stub)(void* object, A1 a1);
 };
 typedef Delegate<bool, const BasicString<unsigned short>&, void, void, void> CdsDelegate;
+typedef Delegate<bool, const Parcel&, void, void, void> ActionDelegate;
 
 const size_t kPluginAppStorage = 0x200;      // SecurityMenu's own members start at 0x160, EntryEVO writes up to +0x174
 
@@ -99,6 +108,8 @@ public:
               RHMIInterfaceVersion rhmi, const Bundle& params, const Bundle& config);
     void post(Runnable* runnable, unsigned delayMs);                // runs runnable->run() on the app thread
     void updateModel(unsigned modelId, const Image& image);        // raImageModel: picture data (car-verified)
+    void updateModel(unsigned modelId, const TextID& text);        // textIdModel (entry-aad, car-verified)
+    void addHandler(unsigned actionId, const ActionDelegate& handler);   // raAction (entry-aad, car-verified)
     void cdsAddPropertyChangedEventHandler(BasicString<char>& property, unsigned id, const CdsDelegate& handler);
     bool onInit();                           // base implementations, called from our overrides
     void onFinalize();
@@ -146,6 +157,8 @@ const char* const kDataDir = GAUGE_DATA_DIR;  // host tests point it into their 
 const char* const kDisableA = GAUGE_DATA_DIR "/app.disable";
 const char* const kMaxFile = GAUGE_DATA_DIR "/max.txt";
 const char* const kMaxFileTmp = GAUGE_DATA_DIR "/max.txt.new";
+const char* const kSettingsFile = GAUGE_DATA_DIR "/settings.txt";
+const char* const kSettingsFileTmp = GAUGE_DATA_DIR "/settings.txt.new";
 #ifdef GAUGE_ENTRYNAV2
 const char* const kDisableB = "/opt/hmi/data/ro/Plugins/GaugeApp/app.disable";
 const char* const kAppLog = GAUGE_DATA_DIR "/gauge-app.log";
@@ -256,10 +269,12 @@ bmw::PluginApp* g_app = NULL;                // set in create, cleared in finali
 pthread_mutex_t g_dataMutex = PTHREAD_MUTEX_INITIALIZER;
 eng::Metrics    g_metrics;
 eng::Maxima     g_maxima;
+eng::Settings   g_settings;                  // colour and units (OPTION menu), from settings.txt
 bool            g_dirty = true;
 bool            g_maxDirty = false;          // a maximum changed since max.txt was written
 unsigned        g_shown[eng::ids::kSlotCount];   // the image each slot currently shows (to skip unchanged ones)
 bool            g_shownValid = false;
+unsigned        g_shownBg = 0;               // the background frame shown (its language)
 int             g_seen[eng::kPropCount];     // how many values arrived per property
 bool            g_lastOk[eng::kPropCount];   // whether the last value of a property was usable
 long            g_subscribedAt = -1;         // monotonic s of the subscription, -1 before
@@ -279,8 +294,10 @@ long monoMs() {
     return (long)ts.tv_sec * 1000L + (long)(ts.tv_nsec / 1000000);
 }
 
-// ---- the maxima file ----------------------------------------------------------------------------------------------
-void loadMaxima() {
+// ---- the maxima ---------------------------------------------------------------------------------------------------
+// They start from nothing every time the app starts (onInit); max.txt only keeps the maxima of the last run, to read
+// over SSH. The previous run's values are logged before they are dropped.
+void resetMaxima() {
     char buf[256];
     size_t n = 0;
     FILE* f = fopen(kMaxFile, "r");
@@ -289,12 +306,12 @@ void loadMaxima() {
         fclose(f);
     }
     buf[n] = 0;
+    for (char* p = buf; *p; ++p) if (*p == '\n') *p = ' ';
     pthread_mutex_lock(&g_dataMutex);
     g_maxima = eng::Maxima();
-    eng::parseMaxima(g_maxima, buf);
     g_maxDirty = false;
     pthread_mutex_unlock(&g_dataMutex);
-    elog("maxima from %s: %s", kMaxFile, n ? buf : "(none yet)");
+    elog("maxima reset (last run: %s)", n ? buf : "none");
 }
 
 // Written to a new file, then renamed over the old one: a power cut never leaves half a file.
@@ -313,6 +330,42 @@ void saveMaxima() {
     fclose(f);
     if (rename(kMaxFileTmp, kMaxFile) != 0) elog("cannot rename %s", kMaxFileTmp);
     g_savedAt = monoSec();
+}
+
+// ---- the settings file (colour and units, the OPTION menu) --------------------------------------------------------
+void loadSettings() {
+    char buf[256];
+    size_t n = 0;
+    FILE* f = fopen(kSettingsFile, "r");
+    if (f) {
+        n = fread(buf, 1, sizeof(buf) - 1, f);
+        fclose(f);
+    }
+    buf[n] = 0;
+    eng::Settings st;
+    eng::parseSettings(st, buf);
+    pthread_mutex_lock(&g_dataMutex);
+    g_settings = st;
+    pthread_mutex_unlock(&g_dataMutex);
+    char text[128];
+    eng::formatSettings(st, text, sizeof(text));
+    for (char* p = text; *p; ++p) if (*p == '\n') *p = ' ';
+    elog("settings: %s", text);
+}
+
+void saveSettings() {
+    char buf[128];
+    pthread_mutex_lock(&g_dataMutex);
+    eng::formatSettings(g_settings, buf, sizeof(buf));
+    pthread_mutex_unlock(&g_dataMutex);
+    mkdir(kDataDir, 0755);
+    FILE* f = fopen(kSettingsFileTmp, "w");
+    if (!f) { elog("cannot write %s", kSettingsFileTmp); return; }
+    fputs(buf, f);
+    fflush(f);
+    fsync(fileno(f));
+    fclose(f);
+    if (rename(kSettingsFileTmp, kSettingsFile) != 0) elog("cannot rename %s", kSettingsFileTmp);
 }
 
 // ---- crash guard (EntryNav2) ---------------------------------------------------------------------------------------
@@ -404,23 +457,25 @@ unsigned char* readPluginFile(const char* name, unsigned* size, long maxSize = k
     return buf;
 }
 
-// ---- the frames: GaugeApp_frames.bin (make_db.py write_frames), loaded once and kept -----------------------------
-// "GFR1", u32 count, count x (u32 id, u32 offset, u32 size) sorted by id, then the PNG data; little endian.
+// ---- the frames (make_db.py write_frames): GaugeApp_frames.bin, the same in every colour, loaded once and kept; and
+// GaugeApp_frames_c<k>.bin, the frames drawn in gauge colour k (arcs, g-meter dot, lit gear), loaded for the colour in
+// use. "GFR1", u32 count, count x (u32 id, u32 offset, u32 size) sorted by id, then the PNG data; little endian.
 const char* const kFramesFile = "GaugeApp_frames.bin";
 const long        kFramesMax = 16L * 1024L * 1024L;
-unsigned char*    g_pack = NULL;
-unsigned          g_packSize = 0, g_frameCount = 0;
+struct Pack { unsigned char* data; unsigned size, count; };
+Pack              g_common = { NULL, 0, 0 };
+Pack              g_color = { NULL, 0, 0 };
+int               g_colorLoaded = -1;
 bool              g_missingLogged = false;
 
 unsigned le32(const unsigned char* p) {
     return (unsigned)p[0] | ((unsigned)p[1] << 8) | ((unsigned)p[2] << 16) | ((unsigned)p[3] << 24);
 }
 
-bool loadFrames() {
-    if (g_pack) return true;
+bool loadPack(const char* name, Pack& out) {
     unsigned size = 0;
-    unsigned char* p = readPluginFile(kFramesFile, &size, kFramesMax);
-    if (!p) { elog("cannot read %s/%s: no picture can be shown", GAUGE_PLUGIN_DIR, kFramesFile); return false; }
+    unsigned char* p = readPluginFile(name, &size, kFramesMax);
+    if (!p) { elog("cannot read %s/%s: pictures are missing", GAUGE_PLUGIN_DIR, name); return false; }
     unsigned n = size >= 8 ? le32(p + 4) : 0;
     bool ok = size >= 8 && memcmp(p, "GFR1", 4) == 0 && n > 0 && n < 100000 && 8 + 12ul * n <= size;
     for (unsigned i = 0; ok && i < n; ++i) {
@@ -428,32 +483,52 @@ bool loadFrames() {
         unsigned off = le32(e + 4), len = le32(e + 8);
         ok = off >= 8 + 12 * n && len > 0 && off <= size && len <= size - off && (i == 0 || le32(e) > le32(e - 12));
     }
-    if (!ok) { elog("%s is damaged", kFramesFile); free(p); return false; }
-    g_pack = p;
-    g_packSize = size;
-    g_frameCount = n;
-    elog("%s: %u frames, %u bytes", kFramesFile, n, size);
+    if (!ok) { elog("%s is damaged", name); free(p); return false; }
+    free(out.data);
+    out.data = p;
+    out.size = size;
+    out.count = n;
+    elog("%s: %u frames, %u bytes", name, n, size);
     return true;
 }
 
-// The PNG data of frame id (binary search in the table); false when the pack has no such frame.
-bool findFrame(unsigned id, const unsigned char** data, unsigned* size) {
-    unsigned lo = 0, hi = g_frameCount;
+bool loadFrames() {
+    return g_common.data || loadPack(kFramesFile, g_common);
+}
+
+// The frame pack of gauge colour k (only when it is not the one already loaded).
+bool loadColor(int k) {
+    if (k == g_colorLoaded && g_color.data) return true;
+    char name[48];
+    snprintf(name, sizeof(name), "GaugeApp_frames_c%d.bin", k);
+    if (!loadPack(name, g_color)) return false;
+    g_colorLoaded = k;
+    return true;
+}
+
+// The PNG data of frame id in a pack (binary search in its table).
+bool findIn(const Pack& pk, unsigned id, const unsigned char** data, unsigned* size) {
+    unsigned lo = 0, hi = pk.count;
     while (lo < hi) {
         unsigned mid = (lo + hi) / 2;
-        const unsigned char* e = g_pack + 8 + 12 * mid;
+        const unsigned char* e = pk.data + 8 + 12 * mid;
         unsigned k = le32(e);
-        if (k == id) { *data = g_pack + le32(e + 4); *size = le32(e + 8); return true; }
+        if (k == id) { *data = pk.data + le32(e + 4); *size = le32(e + 8); return true; }
         if (k < id) lo = mid + 1; else hi = mid;
     }
     return false;
 }
 
+// Colour pack first, then the common one.
+bool findFrame(unsigned id, const unsigned char** data, unsigned* size) {
+    return (g_color.data && findIn(g_color, id, data, size)) || (g_common.data && findIn(g_common, id, data, size));
+}
+
 bool sendFrame(bmw::PluginApp* app, unsigned model, unsigned id) {
     const unsigned char* data;
     unsigned size;
-    if (!g_pack || !findFrame(id, &data, &size)) {
-        if (!g_missingLogged) { g_missingLogged = true; elog("frame %u not in %s (model %u)", id, kFramesFile, model); }
+    if (!findFrame(id, &data, &size)) {
+        if (!g_missingLogged) { g_missingLogged = true; elog("frame %u not in the frame packs (model %u)", id, model); }
         return false;
     }
     return sendImageData(app, model, data, size);
@@ -464,16 +539,22 @@ bool sendFrame(bmw::PluginApp* app, unsigned model, unsigned id) {
 int renderView(bmw::PluginApp* app, bool force) {
     eng::Metrics m;
     eng::Maxima mx;
+    eng::Settings st;
     pthread_mutex_lock(&g_dataMutex);
     m = g_metrics;
     mx = g_maxima;
+    st = g_settings;
     g_dirty = false;
     pthread_mutex_unlock(&g_dataMutex);
-    if (!g_pack) return 0;
+    if (!g_common.data) return 0;
     unsigned view[eng::ids::kSlotCount];
-    eng::computeView(m, mx, view);
+    eng::computeView(m, mx, st, view);
     int written = 0;
-    if (force) sendFrame(app, eng::ids::kBackgroundModel, eng::ids::kImgBackground);
+    const unsigned bg = eng::backgroundFrame(m);         // Polish or English, follows vehicle.language
+    if (force || !g_shownValid || bg != g_shownBg) {
+        if (sendFrame(app, eng::ids::kBackgroundModel, bg)) ++written;
+        g_shownBg = bg;
+    }
     for (int i = 0; i < eng::ids::kSlotCount; ++i) {
         if (!force && g_shownValid && g_shown[i] == view[i]) continue;
         if (sendFrame(app, eng::ids::kFirstModel + (unsigned)i, view[i])) ++written;
@@ -574,7 +655,8 @@ template <int P> bool onCds(void* /*app*/, const bmw::BasicString<unsigned short
     return true;
 }
 
-const CdsStub kStubs[eng::kPropCount] = { &onCds<0>, &onCds<1>, &onCds<2>, &onCds<3>, &onCds<4>, &onCds<5> };
+const CdsStub kStubs[eng::kPropCount] = { &onCds<0>, &onCds<1>, &onCds<2>, &onCds<3>, &onCds<4>, &onCds<5>,
+                                          &onCds<6>, &onCds<7> };
 
 void subscribeRun(void* /*self*/) {
     bmw::PluginApp* app = g_app;
@@ -592,10 +674,55 @@ void subscribeRun(void* /*self*/) {
     app->post(reinterpret_cast<bmw::Runnable*>(&g_renderRunnable), kRenderMs);
 }
 
+// ---- the settings page (hmiState 12, opened from the OPTION menu) ----------------------------------------------------
+// One button per setting; each press switches to the next value, writes settings.txt and redraws the screen.
+void showSettingText(bmw::PluginApp* app, int s) {
+    eng::Settings st;
+    pthread_mutex_lock(&g_dataMutex);
+    st = g_settings;
+    pthread_mutex_unlock(&g_dataMutex);
+    bmw::TextID text(eng::settingText(st, s));
+    app->updateModel(eng::ids::kSettingsTextModel + (unsigned)s, text);
+}
+
+void onSetting(bmw::PluginApp* app, int s) {
+    eng::Settings st;
+    pthread_mutex_lock(&g_dataMutex);
+    eng::cycleSetting(g_settings, s);
+    st = g_settings;
+    g_dirty = true;
+    pthread_mutex_unlock(&g_dataMutex);
+    elog("settings: %s -> %d", eng::settingKey(s), eng::settingValue(st, s));
+    saveSettings();
+    showSettingText(app, s);
+    if (s == eng::kSetColor) {
+        loadColor(st.color);
+        renderView(app, true);                           // same frame ids, other pictures: send everything again
+    } else {
+        renderView(app, false);
+    }
+}
+
+typedef bool (*ActionStub)(void*, const bmw::Parcel&);
+template <int S> bool onSettingAction(void* app, const bmw::Parcel&) {
+    onSetting(static_cast<bmw::PluginApp*>(app), S);
+    return true;
+}
+const ActionStub kSettingStubs[eng::kSettingCount] = { &onSettingAction<0>, &onSettingAction<1>,
+                                                       &onSettingAction<2>, &onSettingAction<3>,
+                                                       &onSettingAction<4> };
+
 // ---- the app object ---------------------------------------------------------------------------------------------
 void* g_vtbl[2 + kVtblSlots];   // [offset-to-top, typeinfo, slots...] copied from bmw::PluginApp's vtable
 
 bool appOnInit(bmw::PluginApp* self) {
+    // Action handlers before the base onInit, as entry-aad does.
+    for (int s = 0; s < eng::kSettingCount; ++s) {
+        bmw::ActionDelegate d;
+        d.object = self;
+        d.stub = kSettingStubs[s];
+        self->addHandler(eng::ids::kSettingsAction + (unsigned)s, d);
+    }
     bool ok = self->onInit();                            // base implementation
     for (int p = 0; p < eng::kPropCount; ++p) { g_seen[p] = 0; g_lastOk[p] = false; }
     g_totalSeen = 0;
@@ -604,8 +731,11 @@ bool appOnInit(bmw::PluginApp* self) {
     g_shownValid = false;
     g_initAt = monoSec();
     g_savedAt = monoSec();
-    loadMaxima();
+    resetMaxima();
+    loadSettings();
     loadFrames();
+    loadColor(g_settings.color);
+    for (int s = 0; s < eng::kSettingCount; ++s) showSettingText(self, s);
     int written = renderView(self, true);                // "--" everywhere until the first CDS values arrive
     sendDiagPictures(self);
     initRunnable(g_subRunnable, g_subVtbl, &subscribeRun);

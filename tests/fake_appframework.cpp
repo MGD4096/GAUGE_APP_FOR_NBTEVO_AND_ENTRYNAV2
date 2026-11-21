@@ -19,6 +19,10 @@ template <> BasicString<unsigned short>::BasicString(const unsigned short* s) {
 template <> BasicString<unsigned short>::~BasicString() { free(m_data); }
 
 ImageID::ImageID(unsigned id) : m_id(id), m_type(1) {}
+TextID::TextID(unsigned id) : m_id(id), m_type(0) {}
+
+void PluginApp::updateModel(unsigned id, const TextID& t) { g_fake.modelText[id] = t.m_id; }
+void PluginApp::addHandler(unsigned id, const ActionDelegate& d) { g_fake.actions[id] = d; }
 
 BufferStream::~BufferStream() { g_fake.bufferStreamsDestroyed++; }
 Image::Image(const unsigned char* data, unsigned size) : name(NULL) { stream.data = data; stream.size = size; }
