@@ -1,5 +1,7 @@
 # GAUGE APP – instalacja na NBT Evo
 
+[English version](NbtEvo_Installation_EN.md)
+
 Instalacja odbywa się ręcznie: pliki trafiają na jednostkę z pendrive'a albo przez SSH, a potem kilka poleceń
 w powłoce jednostki. Nic w systemie nie jest zastępowane: dochodzi jeden folder z aplikacją
 (`/opt/hmi/ID5/data/ro/Plugins/GaugeApp`) i jeden folder z danymi (`/var/opt/gaugeapp`). Partycja systemowa jest
@@ -24,7 +26,7 @@ w trybie zapisu tylko na czas kopiowania.
 - Jedno z kodowań **A4A, A4A_REMOTE_APPS, REMOTE_HMI, TOUCH_COMMAND** – bez niego HmiMain3D nie ładuje aplikacji
   PluginApp (tak samo jak dla NbtAad).
 - Zbudowana aplikacja: folder **`dist\nbt\GaugeApp`** z `build_nbt.bat` (QNX Momentics IDE 4.7 / QNX SDP 6.5.0,
-  patrz [README_PL.md](README_PL.md#budowanie)). Powinno w nim być 10 plików:
+  patrz [README_PL.md](../README_PL.md#budowanie)). Powinno w nim być 10 plików:
 
   | Plik | Co to |
   |---|---|

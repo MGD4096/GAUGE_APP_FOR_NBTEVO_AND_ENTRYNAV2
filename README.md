@@ -70,11 +70,21 @@ needs no Pillow. After changing the look: `python3 make_db.py` (Pillow + DejaVu 
 
 ## Install
 
-- **NBT Evo:** copy `libGaugeApp.so`, `GaugeApp.manifest`, `GaugeApp.xml` and both zips into
-  `/opt/hmi/ID5/data/ro/Plugins/GaugeApp` (remount read-write as for NbtAad), restart.
+Step-by-step guides (English / Polish):
+
+- **EntryNav2:** [docs/EntryEvo_Installation_EN.md](docs/EntryEvo_Installation_EN.md) /
+  [docs/EntryEvo_Installation.md](docs/EntryEvo_Installation.md)
+- **NBT Evo:** [docs/NbtEvo_Installation_EN.md](docs/NbtEvo_Installation_EN.md) /
+  [docs/NbtEvo_Installation.md](docs/NbtEvo_Installation.md)
+
+In short:
+
+- **NBT Evo:** copy `libGaugeApp.so`, `GaugeApp.manifest`, `GaugeApp.xml`, both zips and the `GaugeApp_frames*.bin`
+  packs (all in `dist\nbt\GaugeApp` after `build_nbt.bat`) into `/opt/hmi/ID5/data/ro/Plugins/GaugeApp`
+  (`/bin/mount -u -o rw /fs/sda0` first, `-o ro` after), restart.
 - **EntryNav2:** over SSH like entry-aad: unpack the tar in `/tmp`, `md5sum -c MD5SUMS`, `mount -o remount,rw /`,
   copy `opt/hmi/data/ro/Plugins/GaugeApp/*` to the same path, `chmod 755` the library, `sync`,
-  `mount -o remount,ro /`, `reboot` (full commands in [README_PL.md](README_PL.md#entrynav2)).
+  `mount -o remount,ro /`, `reboot`.
 
 Off switch: `touch <data dir>/app.disable`. EntryNav2 also has a crash-loop guard (3 HMI restarts within 2 min of
 loading → the app turns itself off; remove `<data dir>/app-guard` after checking the log). Logs: NBT Evo `slog`,
