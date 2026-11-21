@@ -1,87 +1,93 @@
-[  404.459] [GaugeApp] library loaded into pid 464, engine-data-0.2.0 EntryNav2 (Nov 20 2026 00:07:39)
-[  404.462] [GaugeApp] create(name=GaugeApp) engine-data-0.2.0 EntryNav2 (Nov 20 2026 00:07:39)
-[  404.470] [GaugeApp] create: app 0x5c1c6dd9a910 (PluginApp vtable 0x5c1c53a9eb48)
-[  404.473] [GaugeApp] create(name=GaugeApp) engine-data-0.2.0 EntryNav2 (Nov 20 2026 00:07:39)
-[  404.476] [GaugeApp] create: already created
-[  404.479] [GaugeApp] maxima from /mnt/c/Dev/BMW_Navi/NBTEVO_GAUGE_APP/tests/build/entrynav2-data/max.txt: (none yet)
-[  404.482] [GaugeApp] onInit: base onInit -> 1, 55 images written, CDS subscription in 1500 ms
-[  404.485] [GaugeApp] CDS handler for engine.temperature registered
-[  404.488] [GaugeApp] CDS handler for engine.RPMSpeed registered
-[  404.490] [GaugeApp] CDS handler for engine.torque registered
-[  404.493] [GaugeApp] CDS handler for driving.gear registered
-[  404.495] [GaugeApp] CDS handler for driving.acceleration registered
-[  404.498] [GaugeApp] CDS handler for driving.speedActual registered
-[  404.500] [GaugeApp] CDS engine.temperature = '{"temperature":{"engine":90,"oil":104}}' -> ok
-[  404.503] [GaugeApp] CDS engine.RPMSpeed = '{"RPMSpeed":3600}' -> ok
-[  404.506] [GaugeApp] CDS engine.torque = '{"torque":380}' -> ok
-[  404.508] [GaugeApp] CDS driving.gear = '{"gear":6}' -> ok
-[  404.511] [GaugeApp] CDS driving.acceleration = '{"acceleration":{"lateral":9.81,"longitudinal":65535.00}}' -> ok
-[  404.513] [GaugeApp] CDS engine.temperature = '{"temperature":{"engine":98,"oil":104}}' -> ok
-[  404.516] [GaugeApp] CDS engine.torque = '{"torque":400}' -> ok
-[  404.518] [GaugeApp] CDS engine.temperature = '{"error":400}' -> not usable
-[  404.521] [GaugeApp] onError 7: integration error
-[  404.524] [GaugeApp] onFinalize
-[  404.539] [GaugeApp] maxima from /mnt/c/Dev/BMW_Navi/NBTEVO_GAUGE_APP/tests/build/entrynav2-data/max.txt: coolant=130.0
+[   41.270] [GaugeApp] library loaded into pid 516, engine-data-0.2.0 EntryNav2 (Nov 21 2026 11:29:46)
+[   41.275] [GaugeApp] create(name=GaugeApp) engine-data-0.2.0 EntryNav2 (Nov 21 2026 11:29:46)
+[   41.285] [GaugeApp] create: app 0x5ebb7f214910 (PluginApp vtable 0x5ebb52257b30)
+[   41.290] [GaugeApp] create(name=GaugeApp) engine-data-0.2.0 EntryNav2 (Nov 21 2026 11:29:46)
+[   41.294] [GaugeApp] create: already created
+[   41.309] [GaugeApp] maxima from /mnt/c/Dev/BMW_Navi/NBTEVO_GAUGE_APP/tests/build/entrynav2-data/max.txt: (none yet)
+[   41.318] [GaugeApp] GaugeApp_frames.bin: 1200 frames, 24008 bytes
+[   41.327] [GaugeApp] diag: test.png (22 bytes) sent to raImageModel 560 and more
+[   41.332] [GaugeApp] onInit: base onInit -> 1, 55 images written, CDS subscription in 1500 ms
+[   41.336] [GaugeApp] CDS handler for engine.temperature registered
+[   41.340] [GaugeApp] CDS handler for engine.RPMSpeed registered
+[   41.344] [GaugeApp] CDS handler for engine.torque registered
+[   41.348] [GaugeApp] CDS handler for driving.gear registered
+[   41.351] [GaugeApp] CDS handler for driving.acceleration registered
+[   41.355] [GaugeApp] CDS handler for driving.speedActual registered
+[   41.358] [GaugeApp] CDS engine.temperature = '{"temperature":{"engine":90,"oil":104}}' -> ok
+[   41.362] [GaugeApp] CDS engine.RPMSpeed = '{"RPMSpeed":3600}' -> ok
+[   41.365] [GaugeApp] CDS engine.torque = '{"torque":380}' -> ok
+[   41.369] [GaugeApp] CDS driving.gear = '{"gear":6}' -> ok
+[   41.372] [GaugeApp] CDS driving.acceleration = '{"acceleration":{"lateral":9.81,"longitudinal":65535.00}}' -> ok
+[   41.376] [GaugeApp] CDS engine.temperature = '{"temperature":{"engine":98,"oil":104}}' -> ok
+[   41.379] [GaugeApp] CDS engine.torque = '{"torque":400}' -> ok
+[   41.382] [GaugeApp] CDS engine.temperature = '{"error":400}' -> not usable
+[   41.386] [GaugeApp] onError 7: integration error
+[   41.390] [GaugeApp] onFinalize
+[   41.409] [GaugeApp] maxima from /mnt/c/Dev/BMW_Navi/NBTEVO_GAUGE_APP/tests/build/entrynav2-data/max.txt: coolant=130.0
 
-[  404.542] [GaugeApp] onInit: base onInit -> 1, 55 images written, CDS subscription in 1500 ms
-[  404.544] [GaugeApp] onFinalize
-[  404.547] [GaugeApp] destroy(0x5c1c6dd9a910)
-[  404.565] [GaugeApp] library loaded into pid 470, engine-data-0.2.0 EntryNav2 (Nov 20 2026 00:07:39)
-[  404.569] [GaugeApp] create(name=GaugeApp) engine-data-0.2.0 EntryNav2 (Nov 20 2026 00:07:39)
-[  404.577] [GaugeApp] create: app 0x632504122910 (PluginApp vtable 0x6324d8423b48)
-[  404.581] [GaugeApp] create(name=GaugeApp) engine-data-0.2.0 EntryNav2 (Nov 20 2026 00:07:39)
-[  404.584] [GaugeApp] create: already created
-[  404.587] [GaugeApp] maxima from /mnt/c/Dev/BMW_Navi/NBTEVO_GAUGE_APP/tests/build/entrynav2-data/max.txt: (none yet)
-[  404.590] [GaugeApp] onInit: base onInit -> 1, 55 images written, CDS subscription in 1500 ms
-[  404.592] [GaugeApp] CDS handler for engine.temperature registered
-[  404.595] [GaugeApp] CDS handler for engine.RPMSpeed registered
-[  404.598] [GaugeApp] CDS handler for engine.torque registered
-[  404.600] [GaugeApp] CDS handler for driving.gear registered
-[  404.602] [GaugeApp] CDS handler for driving.acceleration registered
-[  404.605] [GaugeApp] CDS handler for driving.speedActual registered
-[  404.608] [GaugeApp] CDS engine.temperature = '{"temperature":{"engine":90,"oil":104}}' -> ok
-[  404.611] [GaugeApp] CDS engine.RPMSpeed = '{"RPMSpeed":3600}' -> ok
-[  404.613] [GaugeApp] CDS engine.torque = '{"torque":380}' -> ok
-[  404.616] [GaugeApp] CDS driving.gear = '{"gear":6}' -> ok
-[  404.618] [GaugeApp] CDS driving.acceleration = '{"acceleration":{"lateral":9.81,"longitudinal":65535.00}}' -> ok
-[  404.621] [GaugeApp] CDS engine.temperature = '{"temperature":{"engine":98,"oil":104}}' -> ok
-[  404.624] [GaugeApp] CDS engine.torque = '{"torque":400}' -> ok
-[  404.626] [GaugeApp] CDS engine.temperature = '{"error":400}' -> not usable
-[  404.629] [GaugeApp] onError 7: integration error
-[  404.632] [GaugeApp] onFinalize
-[  404.647] [GaugeApp] maxima from /mnt/c/Dev/BMW_Navi/NBTEVO_GAUGE_APP/tests/build/entrynav2-data/max.txt: coolant=130.0
+[   41.415] [GaugeApp] onInit: base onInit -> 1, 55 images written, CDS subscription in 1500 ms
+[   41.418] [GaugeApp] onFinalize
+[   41.422] [GaugeApp] destroy(0x5ebb7f214910)
+[   41.446] [GaugeApp] library loaded into pid 522, engine-data-0.2.0 EntryNav2 (Nov 21 2026 11:29:46)
+[   41.450] [GaugeApp] create(name=GaugeApp) engine-data-0.2.0 EntryNav2 (Nov 21 2026 11:29:46)
+[   41.461] [GaugeApp] create: app 0x5f7e1fc7a910 (PluginApp vtable 0x5f7de3d30b30)
+[   41.465] [GaugeApp] create(name=GaugeApp) engine-data-0.2.0 EntryNav2 (Nov 21 2026 11:29:46)
+[   41.469] [GaugeApp] create: already created
+[   41.481] [GaugeApp] maxima from /mnt/c/Dev/BMW_Navi/NBTEVO_GAUGE_APP/tests/build/entrynav2-data/max.txt: (none yet)
+[   41.488] [GaugeApp] GaugeApp_frames.bin: 1200 frames, 24008 bytes
+[   41.494] [GaugeApp] diag: test.png (22 bytes) sent to raImageModel 560 and more
+[   41.500] [GaugeApp] onInit: base onInit -> 1, 55 images written, CDS subscription in 1500 ms
+[   41.505] [GaugeApp] CDS handler for engine.temperature registered
+[   41.509] [GaugeApp] CDS handler for engine.RPMSpeed registered
+[   41.513] [GaugeApp] CDS handler for engine.torque registered
+[   41.516] [GaugeApp] CDS handler for driving.gear registered
+[   41.519] [GaugeApp] CDS handler for driving.acceleration registered
+[   41.522] [GaugeApp] CDS handler for driving.speedActual registered
+[   41.526] [GaugeApp] CDS engine.temperature = '{"temperature":{"engine":90,"oil":104}}' -> ok
+[   41.529] [GaugeApp] CDS engine.RPMSpeed = '{"RPMSpeed":3600}' -> ok
+[   41.532] [GaugeApp] CDS engine.torque = '{"torque":380}' -> ok
+[   41.535] [GaugeApp] CDS driving.gear = '{"gear":6}' -> ok
+[   41.539] [GaugeApp] CDS driving.acceleration = '{"acceleration":{"lateral":9.81,"longitudinal":65535.00}}' -> ok
+[   41.542] [GaugeApp] CDS engine.temperature = '{"temperature":{"engine":98,"oil":104}}' -> ok
+[   41.546] [GaugeApp] CDS engine.torque = '{"torque":400}' -> ok
+[   41.549] [GaugeApp] CDS engine.temperature = '{"error":400}' -> not usable
+[   41.552] [GaugeApp] onError 7: integration error
+[   41.556] [GaugeApp] onFinalize
+[   41.574] [GaugeApp] maxima from /mnt/c/Dev/BMW_Navi/NBTEVO_GAUGE_APP/tests/build/entrynav2-data/max.txt: coolant=130.0
 
-[  404.649] [GaugeApp] onInit: base onInit -> 1, 55 images written, CDS subscription in 1500 ms
-[  404.652] [GaugeApp] onFinalize
-[  404.655] [GaugeApp] destroy(0x632504122910)
-[  404.668] [GaugeApp] library loaded into pid 473, engine-data-0.2.0 EntryNav2 (Nov 20 2026 00:07:39)
-[  404.671] [GaugeApp] create(name=GaugeApp) engine-data-0.2.0 EntryNav2 (Nov 20 2026 00:07:39)
-[  404.679] [GaugeApp] create: app 0x5a944a98d910 (PluginApp vtable 0x5a94424eeb48)
-[  404.682] [GaugeApp] create(name=GaugeApp) engine-data-0.2.0 EntryNav2 (Nov 20 2026 00:07:39)
-[  404.686] [GaugeApp] create: already created
-[  404.689] [GaugeApp] maxima from /mnt/c/Dev/BMW_Navi/NBTEVO_GAUGE_APP/tests/build/entrynav2-data/max.txt: (none yet)
-[  404.692] [GaugeApp] onInit: base onInit -> 1, 55 images written, CDS subscription in 1500 ms
-[  404.694] [GaugeApp] CDS handler for engine.temperature registered
-[  404.696] [GaugeApp] CDS handler for engine.RPMSpeed registered
-[  404.699] [GaugeApp] CDS handler for engine.torque registered
-[  404.701] [GaugeApp] CDS handler for driving.gear registered
-[  404.704] [GaugeApp] CDS handler for driving.acceleration registered
-[  404.707] [GaugeApp] CDS handler for driving.speedActual registered
-[  404.709] [GaugeApp] CDS engine.temperature = '{"temperature":{"engine":90,"oil":104}}' -> ok
-[  404.712] [GaugeApp] CDS engine.RPMSpeed = '{"RPMSpeed":3600}' -> ok
-[  404.714] [GaugeApp] CDS engine.torque = '{"torque":380}' -> ok
-[  404.717] [GaugeApp] CDS driving.gear = '{"gear":6}' -> ok
-[  404.719] [GaugeApp] CDS driving.acceleration = '{"acceleration":{"lateral":9.81,"longitudinal":65535.00}}' -> ok
-[  404.722] [GaugeApp] CDS engine.temperature = '{"temperature":{"engine":98,"oil":104}}' -> ok
-[  404.724] [GaugeApp] CDS engine.torque = '{"torque":400}' -> ok
-[  404.727] [GaugeApp] CDS engine.temperature = '{"error":400}' -> not usable
-[  404.729] [GaugeApp] onError 7: integration error
-[  404.732] [GaugeApp] onFinalize
-[  404.747] [GaugeApp] maxima from /mnt/c/Dev/BMW_Navi/NBTEVO_GAUGE_APP/tests/build/entrynav2-data/max.txt: coolant=130.0
+[   41.580] [GaugeApp] onInit: base onInit -> 1, 55 images written, CDS subscription in 1500 ms
+[   41.583] [GaugeApp] onFinalize
+[   41.587] [GaugeApp] destroy(0x5f7e1fc7a910)
+[   41.604] [GaugeApp] library loaded into pid 525, engine-data-0.2.0 EntryNav2 (Nov 21 2026 11:29:46)
+[   41.608] [GaugeApp] create(name=GaugeApp) engine-data-0.2.0 EntryNav2 (Nov 21 2026 11:29:46)
+[   41.620] [GaugeApp] create: app 0x5be15222d910 (PluginApp vtable 0x5be13b67fb30)
+[   41.624] [GaugeApp] create(name=GaugeApp) engine-data-0.2.0 EntryNav2 (Nov 21 2026 11:29:46)
+[   41.628] [GaugeApp] create: already created
+[   41.641] [GaugeApp] maxima from /mnt/c/Dev/BMW_Navi/NBTEVO_GAUGE_APP/tests/build/entrynav2-data/max.txt: (none yet)
+[   41.651] [GaugeApp] GaugeApp_frames.bin: 1200 frames, 24008 bytes
+[   41.658] [GaugeApp] diag: test.png (22 bytes) sent to raImageModel 560 and more
+[   41.663] [GaugeApp] onInit: base onInit -> 1, 55 images written, CDS subscription in 1500 ms
+[   41.668] [GaugeApp] CDS handler for engine.temperature registered
+[   41.673] [GaugeApp] CDS handler for engine.RPMSpeed registered
+[   41.676] [GaugeApp] CDS handler for engine.torque registered
+[   41.679] [GaugeApp] CDS handler for driving.gear registered
+[   41.683] [GaugeApp] CDS handler for driving.acceleration registered
+[   41.686] [GaugeApp] CDS handler for driving.speedActual registered
+[   41.690] [GaugeApp] CDS engine.temperature = '{"temperature":{"engine":90,"oil":104}}' -> ok
+[   41.693] [GaugeApp] CDS engine.RPMSpeed = '{"RPMSpeed":3600}' -> ok
+[   41.696] [GaugeApp] CDS engine.torque = '{"torque":380}' -> ok
+[   41.700] [GaugeApp] CDS driving.gear = '{"gear":6}' -> ok
+[   41.703] [GaugeApp] CDS driving.acceleration = '{"acceleration":{"lateral":9.81,"longitudinal":65535.00}}' -> ok
+[   41.707] [GaugeApp] CDS engine.temperature = '{"temperature":{"engine":98,"oil":104}}' -> ok
+[   41.711] [GaugeApp] CDS engine.torque = '{"torque":400}' -> ok
+[   41.714] [GaugeApp] CDS engine.temperature = '{"error":400}' -> not usable
+[   41.717] [GaugeApp] onError 7: integration error
+[   41.721] [GaugeApp] onFinalize
+[   41.740] [GaugeApp] maxima from /mnt/c/Dev/BMW_Navi/NBTEVO_GAUGE_APP/tests/build/entrynav2-data/max.txt: coolant=130.0
 
-[  404.749] [GaugeApp] onInit: base onInit -> 1, 55 images written, CDS subscription in 1500 ms
-[  404.752] [GaugeApp] onFinalize
-[  404.755] [GaugeApp] destroy(0x5a944a98d910)
-[  404.768] [GaugeApp] library loaded into pid 476, engine-data-0.2.0 EntryNav2 (Nov 20 2026 00:07:39)
-[  404.771] [GaugeApp] create(name=GaugeApp) engine-data-0.2.0 EntryNav2 (Nov 20 2026 00:07:39)
-[  404.776] [GaugeApp] crash guard: the HMI restarted 3 times shortly after loading this app: app turned off. Check the log, then remove /mnt/c/Dev/BMW_Navi/NBTEVO_GAUGE_APP/tests/build/entrynav2-data/app-guard and restart the unit.
+[   41.746] [GaugeApp] onInit: base onInit -> 1, 55 images written, CDS subscription in 1500 ms
+[   41.749] [GaugeApp] onFinalize
+[   41.753] [GaugeApp] destroy(0x5be15222d910)
+[   41.770] [GaugeApp] library loaded into pid 528, engine-data-0.2.0 EntryNav2 (Nov 21 2026 11:29:46)
+[   41.775] [GaugeApp] create(name=GaugeApp) engine-data-0.2.0 EntryNav2 (Nov 21 2026 11:29:46)
+[   41.781] [GaugeApp] crash guard: the HMI restarted 3 times shortly after loading this app: app turned off. Check the log, then remove /mnt/c/Dev/BMW_Navi/NBTEVO_GAUGE_APP/tests/build/entrynav2-data/app-guard and restart the unit.

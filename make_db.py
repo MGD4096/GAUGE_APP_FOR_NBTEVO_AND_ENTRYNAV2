@@ -2,18 +2,25 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Generates everything the screen is made of, from one layout description:
 
-  GaugeApp.xml               the menu row and the gauge screen: one image component per piece, positioned in pixels
-  src/gauge_ids.hpp          image ids and the slot -> model table the C++ side writes (do not edit by hand)
-  GaugeApp_ALL_Images.zip    <imageId>.png: background, arc / marker frames, digits, g-meter dot, gear cells, icon
+  GaugeApp.xml               the menu row and the gauge screen: one image component per piece, positioned in pixels,
+                             each bound to a raImageModel (a picture the app sends as data)
+  src/gauge_ids.hpp          frame ids and the slot -> model table the C++ side writes (do not edit by hand)
+  GaugeApp_frames.bin        every frame as PNG data: background, arc / marker frames, digits, g-meter dot, gear cells
+  GaugeApp_ALL_Images.zip    the image DB of the HMI: only the menu row icon
   GaugeApp_ALL_Texts.zip     <lang>.txt ("id=text", the format of BMW's PluginsCoded apps, as used by NBT-AAD)
   res/preview.png            the whole screen composed with sample values (to check the look on a PC)
 
-The screen is drawn only with images switched by PluginApp::updateModel(model, ImageID), the call entry-aad uses on the
-car for its connecting animation. Everything dynamic sits on top of one static background image (cards, labels,
-scales). Needs Pillow and a TrueType font (DejaVu Sans by default; --font to pick another one).
+Found on an EntryNav2 car (diagnostics 1-3): with all 635 frames in the image DB the HMI showed no image at all (and
+reported onError 9); with a few images every path works. Pictures sent by the app as data (PluginApp::updateModel(model,
+bmw::Image)) show, keep their pixel position (properties 20 / 21), stack, and can be replaced 5 times a second. So the
+frames live in GaugeApp_frames.bin, which the app loads, and the image DB only holds the row icon. The visible area of
+a state there is about 1250 x 470 px: the 960 x 400 design is scaled by SCALE and centred (--x / --y move it).
 
-Usage: make_db.py [--font FILE.ttf] [--x PX] [--y PX]     (x / y: where the screen sits in the iDrive state)
+Needs Pillow and a TrueType font (DejaVu Sans by default; --font to pick another one).
+
+Usage: make_db.py [--font FILE.ttf] [--x PX] [--y PX] [--layout-only] [--diag-out DIR]
 """
+import struct
 import argparse
 import math
 import os
@@ -41,8 +48,15 @@ MUTED = (136, 135, 128, 255)
 FAINT = (95, 94, 90, 255)
 PILL = (12, 68, 124, 255)
 
-# ---- layout (pixels of the screen; the screen's own origin is moved with --x / --y) --------------------------------
+# ---- layout (design pixels; scaled by SCALE on the car and placed at ORIGIN, moved with --x / --y) -----------------
 W, H = 960, 400
+SCALE = 1.15                                      # 960 x 400 -> 1104 x 460 of the ~1250 x 470 visible area
+ORIGIN = (73, 4)                                  # where the scaled screen starts in the state (centred)
+
+
+def sc(v):
+    """Design pixels -> pixels on the car."""
+    return int(round(v * SCALE))
 CARD_W, CARD_H = 290, 192
 GAUGES = [  # name, card origin, title, unit, fixed scale (lo, hi) or None (scale set by the app), red zone from
     ("COOLANT", (0, 0), "P\u0142yn ch\u0142odniczy", "\u00b0C", (50, 130), 115),
@@ -80,7 +94,7 @@ GEAR_CELLS = [("P", 30, 50), ("R", 92, 50), ("N", 154, 50), ("D", 216, 104)]   #
 GEAR_Y, GEAR_H = 14, 56
 
 # ---- image ids ------------------------------------------------------------------------------------------------------
-IMG_ICON, IMG_BG, IMG_BLANK = 56001, 56010, 56011
+IMG_ICON, IMG_BG, IMG_BLANK, IMG_TEST = 56001, 56010, 56011, 56012   # IMG_TEST: 549x484 card (--diag)
 IMG_ARC, IMG_MARK = 56100, 56200
 IMG_BIG, IMG_SMALL = 56300, 56400                 # + 16 * variant + glyph
 GLYPHS = "0123456789-,"                           # glyph 12 = blank
@@ -108,10 +122,12 @@ def find_font(path):
 
 
 class Canvas:
-    """An RGBA image drawn at SS x size and scaled down on save."""
+    """An RGBA image drawn in design pixels at SS x size and scaled down on save - by SCALE too unless scaled=False
+    (pictures of a fixed size: the row icon, the diagnostic pictures)."""
 
-    def __init__(self, w, h, fill=(0, 0, 0, 0)):
+    def __init__(self, w, h, fill=(0, 0, 0, 0), scaled=True):
         self.w, self.h = w, h
+        self.scaled = scaled
         self.im = Image.new("RGBA", (w * SS, h * SS), fill)
         self.d = ImageDraw.Draw(self.im)
 
@@ -143,7 +159,8 @@ class Canvas:
         self.d.text((xy[0] * SS, xy[1] * SS), s, font=font, fill=color, anchor=anchor)
 
     def image(self):
-        return self.im.resize((self.w, self.h), Image.LANCZOS)
+        size = (max(1, sc(self.w)), max(1, sc(self.h))) if self.scaled else (self.w, self.h)
+        return self.im.resize(size, Image.LANCZOS)
 
 
 def arc_point(c, r, f):
@@ -259,10 +276,22 @@ def gear_cell(fp, text, w, lit):
     return c.image()
 
 
+def test_card(fp):
+    """549x484 (the size of entry-aad's page image): a card with a frame, a diagonal and its size written on it."""
+    w, h = 549, 484
+    c = Canvas(w, h, scaled=False)
+    c.rrect(0, 0, w, h, 16, CARD)
+    c.d.rounded_rectangle([2 * SS, 2 * SS, (w - 2) * SS, (h - 2) * SS], radius=14 * SS, outline=ACCENT, width=4 * SS)
+    c.line((20, 20), (w - 20, h - 20), TRACK, 3)
+    c.text((w / 2.0, h / 2.0 - 20), "549 x 484", font(fp, 48), TEXT, "mm")
+    c.text((w / 2.0, h / 2.0 + 30), "GAUGE APP test", font(fp, 22), AMBER, "mm")
+    return c.image()
+
+
 def make_icon():
     """63x54 RGBA row icon: a round gauge with a needle."""
     w, h = 63, 54
-    c = Canvas(w, h)
+    c = Canvas(w, h, scaled=False)
     ink = (250, 250, 250, 248)
     cx, cy, r = 31.5, 29, 22
     c.d.arc([(cx - r) * SS, (cy - r) * SS, (cx + r) * SS, (cy + r) * SS], 150, 390, fill=ink, width=3 * SS)
@@ -277,7 +306,7 @@ def make_icon():
 
 
 def all_images(fp):
-    imgs = {IMG_ICON: make_icon(), IMG_BG: background(fp), IMG_BLANK: Canvas(1, 1).image()}
+    imgs = {IMG_BG: background(fp), IMG_BLANK: Canvas(1, 1, scaled=False).image()}
     for k in range(ARC_STEPS + 1):
         imgs[IMG_ARC + k] = arc_frame(k / float(ARC_STEPS), ACCENT)
         imgs[IMG_MARK + k] = arc_frame(k / float(ARC_STEPS), ACCENT, marker=True)
@@ -299,46 +328,109 @@ def all_images(fp):
 
 
 # ---- outputs --------------------------------------------------------------------------------------------------------
-def xml(slot_list, ox, oy):
-    def props(x, y, w, h):
-        return ("            <properties>\n"
-                "              <property id=\"2\" value=\"false\"/>\n"
-                "              <property id=\"3\" value=\"true\"/>\n"
-                "              <property id=\"9\" value=\"%d\"/>\n"
-                "              <property id=\"10\" value=\"%d\"/>\n"
-                "              <property id=\"20\" value=\"%d\"/>\n"
-                "              <property id=\"21\" value=\"%d\"/>\n"
-                "            </properties>\n" % (w, h, x + ox, y + oy))
+def props(x, y, w, h, selectable=False):
+    """Image properties as entry-aad's EntryAad.xml writes them: 2 SELECTABLE, 3 VISIBLE, 9 WIDTH, 10 HEIGHT, 20 X, 21 Y."""
+    return ("            <properties>\n"
+            "              <property id=\"2\" value=\"%s\"/>\n"
+            "              <property id=\"3\" value=\"true\"/>\n"
+            "              <property id=\"9\" value=\"%d\"/>\n"
+            "              <property id=\"10\" value=\"%d\"/>\n"
+            "              <property id=\"20\" value=\"%d\"/>\n"
+            "              <property id=\"21\" value=\"%d\"/>\n"
+            "            </properties>\n" % ("true" if selectable else "false", w, h, x, y))
 
-    models = ["      <textIdModel id=\"3\" textId=\"1\">\n        <synonyms/>\n      </textIdModel>\n",
-              "      <imageIdModel id=\"4\" imageId=\"%d\"/>\n" % IMG_ICON,
-              "      <imageIdModel id=\"99\" imageId=\"%d\"/>\n" % IMG_BG]
-    comps = ["          <image id=\"299\" model=\"99\">\n" + props(0, 0, W, H) + "          </image>\n"]
-    for i, (_n, x, y, w, h, img) in enumerate(slot_list):
-        models.append("      <imageIdModel id=\"%d\" imageId=\"%d\"/>\n" % (100 + i, img))
-        comps.append("          <image id=\"%d\" model=\"%d\">\n" % (300 + i, 100 + i) + props(x, y, w, h) +
-                     "          </image>\n")
+
+def text_model(mid, tid):
+    return "      <textIdModel id=\"%d\" textId=\"%d\">\n        <synonyms/>\n      </textIdModel>\n" % (mid, tid)
+
+
+def image(cid, mid, p=""):
+    return "          <image id=\"%d\" model=\"%d\">\n%s          </image>\n" % (cid, mid, p)
+
+
+def gauge_parts(slot_list, ox, oy):
+    """Models and components of the gauge screen: the background (model 99) and slot i in model 100 + i, all
+    raImageModels the app fills with frames of GaugeApp_frames.bin. Positions and sizes in pixels on the car."""
+    models = ["      <raImageModel id=\"99\"/>\n"]
+    comps = [image(299, 99, props(ox, oy, sc(W), sc(H)))]
+    for i, (_n, x, y, w, h, _img) in enumerate(slot_list):
+        models.append("      <raImageModel id=\"%d\"/>\n" % (100 + i))
+        comps.append(image(300 + i, 100 + i, props(sc(x) + ox, sc(y) + oy, sc(w), sc(h))))
+    return models, comps
+
+
+def state(sid, title, text_model_id, comps, parent=None):
+    return ("      <hmiState id=\"%d\"%s text=\"%s\" textModel=\"%d\">\n        <components>\n%s        </components>\n"
+            "      </hmiState>\n" % (sid, " parentId=\"%d\"" % parent if parent else "", title, text_model_id,
+                                    "".join(comps)))
+
+
+# Diagnostic build (make_db.py --diag-out DIR): the row opens a menu of test pages, to find out on the car what the HMI
+# shows. Diagnostics 1 (car, EntryNav2): labels show; no image component showed anything, even the bare icon and a
+# 549x484 picture set up exactly like entry-aad's - with the full 635-image DB. Diagnostics 2 tests the image paths
+# one by one with a DB as small as entry-aad's.
+# Diagnostics 2 (car): every image path works with a 3-image DB (imageId image, button icon, picture sent as data =
+# raImage, labels); the 635-image DB was the problem. Diagnostics 3 checks what the layout can rely on: pixel positions
+# and stacking (E1 imageId, E2 raImage), the largest picture (E3, a ruler), and pictures replaced 5 times a second (E4).
+DIAG_PAGES = [(11, 10, "E1"), (12, 11, "E2"), (13, 12, "E3"), (14, 13, "E4")]   # state, text id, menu text
+DIAG_TEXTS = {
+    10: "E1: pozycje i nakladanie (imageId)",
+    11: "E2: pozycje i nakladanie (raImage)",
+    12: "E3: linijka 1280x560 (raImage)",
+    13: "E4: animacja 5 klatek/s (raImage)",
+}
+DIAG_LAYOUT = [(0, 0, 549, 484), (20, 20, 63, 54), (700, 150, 63, 54)]   # card, icon on the card, icon to the right
+WIDE_W, WIDE_H = 1280, 560
+# raImageModels engine_data.cpp fills (kDiagFiles / kDiagAnimModel): test.png 560/561, wide.png 562, anim*.png 563,
+# icon.png 564/565.
+
+
+def xml(slot_list, ox, oy, diag=False):
+    models = [text_model(3, 1), "      <imageIdModel id=\"4\" imageId=\"%d\"/>\n" % IMG_ICON]
+    gm, gc = gauge_parts(slot_list, ox, oy)
+    models += gm
+    actions = ["      <hmiAction id=\"5\" target=\"10\"/>\n"]
+    if not diag:
+        states = [state(10, TITLE, 3, gc)]
+        what = "hmiState 10 is one background image and %d image components on top of it" % len(slot_list)
+    else:
+        what = ("DIAGNOSTIC build 3: hmiState 10 is a menu of test pages E1..E4 (states 11..14). The gauge models stay"
+                " (the app writes them) but have no components")
+        menu, states = [], []
+        for k, (sid, tid, label) in enumerate(DIAG_PAGES):
+            models.append(text_model(510 + k, tid))
+            actions.append("      <hmiAction id=\"%d\" target=\"%d\"/>\n" % (501 + k, sid))
+            menu.append("          <button action=\"%d\" id=\"%d\" model=\"%d\" text=\"%s\"/>\n"
+                        % (501 + k, 520 + k, 510 + k, label))
+        models += ["      <imageIdModel id=\"541\" imageId=\"%d\"/>\n" % IMG_TEST,
+                   "      <imageIdModel id=\"540\" imageId=\"%d\"/>\n" % IMG_ICON,
+                   "      <imageIdModel id=\"542\" imageId=\"%d\"/>\n" % IMG_ICON]
+        models += ["      <raImageModel id=\"%d\"/>\n" % m for m in (560, 561, 562, 563, 564, 565)]
+        states.append(state(10, TITLE, 3, menu))
+        states.append(state(11, "E1", 510, [image(530 + k, m, props(*DIAG_LAYOUT[k]))
+                                            for k, m in enumerate((541, 540, 542))], 10))
+        states.append(state(12, "E2", 511, [image(533 + k, m, props(*DIAG_LAYOUT[k]))
+                                            for k, m in enumerate((560, 564, 565))], 10))
+        states.append(state(13, "E3", 512, [image(536, 562, props(0, 0, WIDE_W, WIDE_H))], 10))
+        states.append(state(14, "E4", 513, [image(537, 563, props(0, 0, 549, 484))], 10))
     return (
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
         "<!-- GENERATED by make_db.py - edit the layout there. Placement as NBT-AAD / entry-aad (car-verified): a row in\n"
         "     the Media/Radio list (native state 20) after the Bluetooth audio row (focus 2270); entryButtonFocusID /\n"
-        "     applicationWeight differ from theirs so the apps can be installed side by side. hmiState 10 is one\n"
-        "     background image and %d image components on top of it, each bound to an imageIdModel that\n"
-        "     libGaugeApp.so switches with PluginApp::updateModel(model, ImageID). Property ids: 2 SELECTABLE,\n"
-        "     3 VISIBLE, 9 WIDTH, 10 HEIGHT, 20 X, 21 Y. -->\n"
+        "     applicationWeight differ from theirs so the apps can be installed side by side. %s.\n"
+        "     Each gauge image is bound to a raImageModel that libGaugeApp.so fills with PNG data from\n"
+        "     GaugeApp_frames.bin (PluginApp::updateModel(model, bmw::Image)); the image DB only holds the row icon.\n"
+        "     All ids (models, components, actions, states) are unique. -->\n"
         "<pluginApps>\n"
         "  <pluginApp applicationType=\"Custom\" applicationWeight=\"210\" entryButtonFocusID=\"32751\" "
         "insertAfterFocusID=\"2270\" insertStateID=\"20\" text=\"%s\">\n"
         "    <comment/>\n"
         "    <entryButton action=\"5\" id=\"1\" model=\"3\" imageModel=\"4\">\n      <properties/>\n    </entryButton>\n"
-        "    <actions>\n      <hmiAction id=\"5\" target=\"10\"/>\n    </actions>\n"
+        "    <actions>\n%s    </actions>\n"
         "    <models>\n%s    </models>\n"
-        "    <hmiStates>\n"
-        "      <hmiState id=\"10\" text=\"%s\" textModel=\"3\">\n        <components>\n%s        </components>\n"
-        "      </hmiState>\n"
-        "    </hmiStates>\n"
+        "    <hmiStates>\n%s    </hmiStates>\n"
         "  </pluginApp>\n"
-        "</pluginApps>\n" % (len(slot_list), TITLE, "".join(models), TITLE, "".join(comps)))
+        "</pluginApps>\n" % (what, TITLE, "".join(actions), "".join(models), "".join(states)))
 
 
 def header(slot_list):
@@ -360,7 +452,7 @@ enum {
     kGlyphMinus = 10, kGlyphComma = 11, kGlyphBlank = 12,
     kImgGear = %d,                         // + 2 * cell (P R N D) + lit; D1..D8 lit = + 10 + n
     kImgDot = %d, kGSteps = %d,            // + iy * (2 * kGSteps + 1) + ix, centre = (kGSteps, kGSteps)
-    kFirstModel = 100,
+    kFirstModel = 100, kBackgroundModel = 99,
     kScaleCoolantLo = %d, kScaleCoolantHi = %d, kScaleOilLo = %d, kScaleOilHi = %d,   // printed on the background
     kScalePowerMin = %d, kScaleTorqueMin = %d    // smallest end of the power / torque scale (it grows with the maxima)
 };
@@ -419,23 +511,105 @@ def preview(imgs, slot_list):
         pick["G_LON%d" % k] = small(ch)
     pick["G_DOT"] = IMG_DOT + 9 * 21 + 13
     pick["GEAR_D"] = IMG_GEAR + 13
-    out = Image.new("RGBA", (W, H), (11, 13, 16, 255))
+    out = Image.new("RGBA", (sc(W), sc(H)), (11, 13, 16, 255))
     out.alpha_composite(imgs[IMG_BG])
     for name, x, y, _w, _h, img in slot_list:
         im = imgs[pick.get(name, img)]
         if im.size != (1, 1):
-            out.alpha_composite(im, (x, y))
+            out.alpha_composite(im, (sc(x), sc(y)))
     return out
+
+
+def write_frames(path, imgs):
+    """GaugeApp_frames.bin, read by engine_data.cpp (loadFrames): little endian
+         "GFR1", u32 count, count x (u32 id, u32 offset, u32 size) sorted by id, then the PNG data
+       offset counted from the start of the file."""
+    items = [(iid, png_bytes(imgs[iid])) for iid in sorted(imgs)]
+    head = 8 + 12 * len(items)
+    table, data, off = [], [], head
+    for iid, b in items:
+        table.append(struct.pack("<III", iid, off, len(b)))
+        data.append(b)
+        off += len(b)
+    with open(path, "wb") as f:
+        f.write(b"GFR1" + struct.pack("<I", len(items)) + b"".join(table) + b"".join(data))
+    return off
+
+
+def write_images(path, imgs):
+    with zipfile.ZipFile(path, "w") as z:
+        for iid in sorted(imgs):
+            add(z, "%d.png" % iid, png_bytes(imgs[iid]))
+
+
+def write_texts(path):
+    with zipfile.ZipFile(path, "w") as z:
+        for lang, langname in LANGS.items():
+            body = "100000=%s\n1=%s\n" % (langname, TITLE)
+            body += "".join("%d=%s\n" % (k, v) for k, v in sorted(DIAG_TEXTS.items()))
+            add(z, lang + ".txt", body.encode("utf-8"))
+
+
+def diag(a, slot_list):
+    """The diagnostic set: everything the plugin folder needs except the library and the manifest."""
+    if Image is None:
+        raise SystemExit("Pillow is missing (apt install python3-pil)")
+    fp = find_font(a.font)
+    os.makedirs(a.diag_out, exist_ok=True)
+    with open(os.path.join(a.diag_out, "GaugeApp.xml"), "w", encoding="utf-8", newline="\n") as f:
+        f.write(xml(slot_list, a.x, a.y, diag=True))
+    card = test_card(fp)
+    write_images(os.path.join(a.diag_out, "GaugeApp_ALL_Images.zip"),
+                 {IMG_ICON: make_icon(), IMG_TEST: card, IMG_BLANK: Canvas(1, 1, scaled=False).image()})
+    write_texts(os.path.join(a.diag_out, "GaugeApp_ALL_Texts.zip"))
+    files = {"test.png": card, "icon.png": make_icon(), "wide.png": ruler(fp)}
+    for k in range(10):
+        files["anim%d.png" % k] = anim_frame(fp, k)
+    for name, im in files.items():
+        with open(os.path.join(a.diag_out, name), "wb") as f:
+            f.write(png_bytes(im))
+    print("wrote the diagnostic set into %s" % a.diag_out)
+
+
+def ruler(fp):
+    """WIDE_W x WIDE_H: a grid every 100 px with its coordinates, to read off a photo how much of it the HMI shows."""
+    c = Canvas(WIDE_W, WIDE_H, scaled=False)
+    c.rrect(0, 0, WIDE_W, WIDE_H, 0, CARD)
+    f = font(fp, 18)
+    for x in range(0, WIDE_W + 1, 100):
+        c.line((x, 0), (x, WIDE_H), ACCENT if x % 500 == 0 else TRACK, 3 if x % 500 == 0 else 2)
+        c.text((x + 4, 6), str(x), f, AMBER)
+    for y in range(0, WIDE_H + 1, 100):
+        c.line((0, y), (WIDE_W, y), ACCENT if y % 500 == 0 else TRACK, 3 if y % 500 == 0 else 2)
+        c.text((4, y + 4), str(y), f, AMBER)
+    c.d.rectangle([0, 0, WIDE_W * SS - 1, WIDE_H * SS - 1], outline=RED, width=6 * SS)
+    c.text((WIDE_W / 2.0, WIDE_H / 2.0), "%d x %d" % (WIDE_W, WIDE_H), font(fp, 48), TEXT, "mm")
+    return c.image()
+
+
+def anim_frame(fp, k):
+    """549x484 animation frame k: a big number and a bar that moves one step per frame."""
+    w, h = 549, 484
+    c = Canvas(w, h, scaled=False)
+    c.rrect(0, 0, w, h, 16, CARD)
+    c.text((w / 2.0, h / 2.0 - 30), str(k), font(fp, 160), TEXT, "mm")
+    c.rrect(30 + k * 49, h - 90, 45, 40, 6, ACCENT)
+    c.text((w / 2.0, h - 25), "5 klatek/s", font(fp, 20), AMBER, "mm")
+    return c.image()
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--font")
-    ap.add_argument("--x", type=int, default=0)
-    ap.add_argument("--y", type=int, default=0)
+    ap.add_argument("--x", type=int, default=ORIGIN[0])
+    ap.add_argument("--y", type=int, default=ORIGIN[1])
     ap.add_argument("--layout-only", action="store_true", help="only GaugeApp.xml and src/gauge_ids.hpp (no Pillow)")
+    ap.add_argument("--diag-out", metavar="DIR",
+                    help="only a diagnostic set into DIR: XML with test pages, a 3-image DB, the texts and test.png")
     a = ap.parse_args()
     slot_list = slots()
+    if a.diag_out:
+        return diag(a, slot_list)
     with open(os.path.join(HERE, "GaugeApp.xml"), "w", encoding="utf-8", newline="\n") as f:
         f.write(xml(slot_list, a.x, a.y))
     with open(os.path.join(HERE, "src", "gauge_ids.hpp"), "w", encoding="utf-8", newline="\n") as f:
@@ -447,17 +621,15 @@ def main():
         raise SystemExit("Pillow is missing (apt install python3-pil, or pip install pillow); --layout-only skips images")
     fp = find_font(a.font)
     imgs = all_images(fp)
-    with zipfile.ZipFile(os.path.join(HERE, "GaugeApp_ALL_Images.zip"), "w") as z:
-        for iid in sorted(imgs):
-            add(z, "%d.png" % iid, png_bytes(imgs[iid]))
-    with zipfile.ZipFile(os.path.join(HERE, "GaugeApp_ALL_Texts.zip"), "w") as z:
-        for lang, langname in LANGS.items():
-            add(z, lang + ".txt", ("100000=%s\n1=%s\n" % (langname, TITLE)).encode("utf-8"))
+    size = write_frames(os.path.join(HERE, "GaugeApp_frames.bin"), imgs)
+    icon = make_icon()
+    write_images(os.path.join(HERE, "GaugeApp_ALL_Images.zip"), {IMG_ICON: icon})
+    write_texts(os.path.join(HERE, "GaugeApp_ALL_Texts.zip"))
     os.makedirs(os.path.join(HERE, "res"), exist_ok=True)
-    imgs[IMG_ICON].save(os.path.join(HERE, "res", "row_icon_63x54.png"))
+    icon.save(os.path.join(HERE, "res", "row_icon_63x54.png"))
     preview(imgs, slot_list).save(os.path.join(HERE, "res", "preview.png"))
-    print("wrote GaugeApp.xml, src/gauge_ids.hpp, GaugeApp_ALL_Images.zip (%d images), GaugeApp_ALL_Texts.zip, "
-          "res/preview.png - font %s" % (len(imgs), fp))
+    print("wrote GaugeApp.xml, src/gauge_ids.hpp, GaugeApp_frames.bin (%d frames, %d bytes), GaugeApp_ALL_Images.zip "
+          "(row icon), GaugeApp_ALL_Texts.zip, res/preview.png - font %s" % (len(imgs), size, fp))
 
 
 if __name__ == "__main__":

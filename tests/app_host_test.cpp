@@ -52,6 +52,31 @@ static void feed(const char* prop, const char* ascii) {
 static unsigned slot(int s) { return g_fake.modelImage[kFirstModel + (unsigned)s]; }
 static int writes(int s) { return g_fake.modelWrites[kFirstModel + (unsigned)s]; }
 
+// A GaugeApp_frames.bin (layout of make_db.py write_frames) whose every frame 56000..57199 is the text "ID:<id>":
+// the fake framework turns the picture data back into the frame id.
+static void writeFramePack(const std::string& path) {
+    std::vector<std::string> data;
+    for (unsigned id = 56000; id < 57200; ++id) {
+        char b[16];
+        snprintf(b, sizeof(b), "ID:%u", id);
+        data.push_back(b);
+    }
+    std::string out = "GFR1";
+    unsigned n = (unsigned)data.size(), off = 8 + 12 * n;
+    std::string table;
+    for (unsigned i = 0; i < n; ++i) {
+        unsigned v[3] = { 56000 + i, off, (unsigned)data[i].size() };
+        for (int k = 0; k < 3; ++k)
+            for (int s = 0; s < 4; ++s) table += (char)((v[k] >> (8 * s)) & 0xff);
+        off += (unsigned)data[i].size();
+    }
+    for (int s = 0; s < 4; ++s) out += (char)((n >> (8 * s)) & 0xff);
+    out += table;
+    for (unsigned i = 0; i < n; ++i) out += data[i];
+    FILE* f = fopen(path.c_str(), "wb");
+    if (f) { fwrite(out.data(), 1, out.size(), f); fclose(f); }
+}
+
 static std::string readFile(const std::string& p) {
     std::string out;
     FILE* f = fopen(p.c_str(), "r");
@@ -79,10 +104,19 @@ int main(int argc, char** argv) {
     CHECK(strcmp(app->name, "GaugeApp") == 0);
     CHECK(info->create(*(bmw::IDispatcher*)dummy, "GaugeApp", *(bmw::Bundle*)dummy, *(bmw::Bundle*)dummy) == NULL);
 
-    // ---- onInit: every slot written once, nothing known yet ----
+    // ---- onInit: the frame pack loaded, background + every slot sent once, nothing known yet; test.png (diagnostics)
+    // sent as picture data too ----
+    const std::string png = std::string(argv[2]) + "/test.png";   // the tests build the plugin folder = data folder
+    FILE* pf = fopen(png.c_str(), "wb");
+    if (pf) { fputs("\x89PNG fake picture data", pf); fclose(pf); }
+    writeFramePack(std::string(argv[2]) + "/GaugeApp_frames.bin");
     CHECK(app->onInit());
     CHECK(g_fake.baseOnInit == 1);
-    CHECK((int)g_fake.modelWrites.size() == kSlotCount);
+    CHECK((int)g_fake.modelImage.size() == kSlotCount + 1);
+    CHECK(g_fake.modelImage[kBackgroundModel] == kImgBackground);
+    CHECK(g_fake.modelImageBytes[560] == 22 && g_fake.modelImageBytes[561] == 22);
+    CHECK(g_fake.bufferStreamsDestroyed == kSlotCount + 1 + 2);  // every picture sent destroys its bmw::Image by hand
+    unlink(png.c_str());
     CHECK(slot(kSlotCoolantArc) == kImgBlank && slot(kSlotCoolantMark) == kImgBlank);
     CHECK(slot(kSlotCoolantBig0) == eng::bigGlyph('-', 1));
     CHECK(slot(kSlotGearP) == kImgGear && slot(kSlotGearD) == kImgGear + 6);

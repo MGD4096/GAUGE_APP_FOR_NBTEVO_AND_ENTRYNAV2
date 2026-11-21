@@ -28,17 +28,25 @@ HmiMain3D przy starcie ładuje `Plugins/GaugeApp/GaugeApp.manifest` (framework `
 SecurityMenu / ActiveSeating, NbtAad i entry-aad). iDrive nie pozwala aplikacji rysować, więc cały ekran składa się
 z obrazków:
 
-- `GaugeApp.xml` opisuje jeden statyczny obrazek tła (karty, podpisy, skale, tarcza) i 55 obrazków nad nim. Każdy
-  z nich ma swoją pozycję w pikselach i model `imageIdModel`.
-- `GaugeApp_ALL_Images.zip` zawiera wszystkie klatki: łuki (61 kroków), znaczniki maksimum, cyfry w dwóch rozmiarach,
-  kropkę przeciążenia (siatka 21×21, co 0,2 g) i pola biegów.
+- `GaugeApp.xml` opisuje obrazek tła (karty, podpisy, skale, tarcza) i 55 obrazków nad nim. Każdy z nich ma swoją
+  pozycję w pikselach i model `raImageModel`, czyli obrazek, który aplikacja wysyła jako dane PNG.
+- `GaugeApp_frames.bin` zawiera wszystkie klatki: łuki (61 kroków), znaczniki maksimum, cyfry w dwóch rozmiarach,
+  kropkę przeciążenia (siatka 21×21, co 0,2 g) i pola biegów. Baza obrazków iDrive (`GaugeApp_ALL_Images.zip`) ma
+  tylko ikonę wiersza menu.
 - `libGaugeApp.so`:
-  1. po ok. 1,5 s od startu subskrybuje właściwości **CDS** (Car Data Service) tym samym wywołaniem, którym NbtAad i
-     entry-aad czytają `driving.gear`;
-  2. co 200 ms wybiera klatkę dla każdego obrazka (`src/gauge_view.hpp`) i przez
-     `PluginApp::updateModel(model, ImageID)` przełącza **tylko te, które się zmieniły**. To samo wywołanie entry-aad
-     wykorzystuje w aucie do animacji ikony;
-  3. wartość niedostępna, błędna albo nierealna (np. `{"error":400}`) pokazuje `--`.
+  1. przy starcie wczytuje `GaugeApp_frames.bin`;
+  2. po ok. 1,5 s subskrybuje właściwości **CDS** (Car Data Service) tym samym wywołaniem, którym NbtAad i entry-aad
+     czytają `driving.gear`;
+  3. co 200 ms wybiera klatkę dla każdego obrazka (`src/gauge_view.hpp`) i przez
+     `PluginApp::updateModel(model, bmw::Image)` wysyła **tylko te, które się zmieniły**;
+  4. wartość niedostępna, błędna albo nierealna (np. `{"error":400}`) pokazuje `--`.
+
+Dlaczego tak, a nie przez bazę obrazków iDrive – diagnostyka na EntryNav2 (F40) pokazała, że:
+- z 635 klatkami w bazie iDrive nie pokazuje **żadnego** obrazka (i zgłasza `onError 9`), a z kilkoma – wszystkie;
+- obrazki wysyłane przez aplikację jako dane działają, zachowują pozycję x/y, nakładają się i można je wymieniać ok. 5
+  razy na sekundę;
+- widoczny obszar ekranu aplikacji to ok. 1250 × 470 px. Układ 960×400 jest skalowany ×1,15 do 1104×460 i
+  wyśrodkowany (`SCALE`, `ORIGIN` w `make_db.py`).
 
 | Właściwość CDS | Przykładowa wartość | Na ekranie |
 |---|---|---|
@@ -69,22 +77,24 @@ nazwy, więc odcięcie zasilania nie zostawi połowy pliku. Nowe maksimum musi p
 - Cały cykl życia aplikacji na atrapie frameworka, w obu wersjach: `pluginAppInfo`, `onInit`, subskrypcja 6
   właściwości, przełączanie tylko zmienionych obrazków, błędne dane, zapis maksimów w `onFinalize` i ich odczyt przy
   kolejnym `onInit` (`tests/app_host_test.cpp`). `make check`.
-- Wszystkie funkcje `bmw::…`, których biblioteka używa, są eksportowane przez biblioteki z obu aut (`nm -D` na
-  `lib/NBT_evo_libs` i `lib/Entry_Evo_libs`), w tym `ImageID(unsigned)` i `updateModel(unsigned, ImageID const&)`.
+- Wszystkie funkcje `bmw::…`, których biblioteka używa, są eksportowane przez biblioteki EntryNav2 z auta (`nm -D`
+  na `lib/Entry_Evo_libs`, identycznych z plikami zgranymi z jednostki), w tym `Image(unsigned char const*, unsigned)`
+  i `updateModel(unsigned, Image const&)`. Budowa obiektu `bmw::Image` (28 bajtów: nazwa pliku i bufor) jest odczytana
+  z kodu maszynowego `libCoreFramework`.
 - Wersja EntryNav2 kompiluje się na ARM (hard-float, NEON) i wymaga tylko `GLIBC_2.4`.
 
-**Niesprawdzone – do potwierdzenia w aucie (pierwsze uruchomienie to test):**
-- **Pozycjonowanie obrazków w pikselach i nakładanie ich na siebie.** XML ustawia każdemu obrazkowi pozycję (właściwości
-  20/21) i rozmiar (9/10) tak jak entry-aad, ale tam jest tylko jeden obrazek na stan. Jeśli iDrive nie nakłada
-  obrazków na tło albo układa je jeden pod drugim, ekran się rozsypie. To największe ryzyko. Pozycję całego ekranu
-  zmienia `python3 make_db.py --x … --y …`.
-- **Wielkość obszaru ekranu.** Układ ma 960×400 px. Jeśli obszar stanu jest mniejszy, trzeba zmniejszyć układ w
-  `make_db.py`.
-- **Kompilacja `qcc` (NBT Evo).** Nie ma tu QNX SDP 6.5; kod jest C++98 i buduje się `g++ -std=gnu++98`.
-- **Czy auto publikuje `engine.*` / `driving.acceleration` aplikacjom.** W NbtAad i entry-aad potwierdzone są
-  `driving.gear`, `driving.mode`, `vehicle.dayNightChangeOver`, `communication.callStatus*`.
-- **Jednostka i znak przyspieszenia** (`kAccelPerG`, `kLatSign`, `kLonSign` w `src/cds_values.hpp`), znaczenie
-  `engine.temperature.engine` (porównaj z zegarem) i **mapowanie biegów**. Surowe wartości trafiają do logu.
+**Sprawdzone w aucie (EntryNav2, F40):** ładowanie aplikacji, wiersz w menu, stany i przejścia, etykiety, obrazki
+wysyłane jako dane z pozycjami i nakładaniem, odświeżanie ok. 5 klatek/s, dane CDS: `engine.temperature`,
+`engine.RPMSpeed`, `engine.torque`, `driving.gear`, `driving.acceleration` (z osią wzdłużną; 65535 tylko w pierwszym
+odczycie), `driving.speedActual`; zapis maksimów.
+
+**Niesprawdzone – do potwierdzenia w aucie:**
+- **Cały docelowy ekran** (56 obrazków wysyłanych jako dane) – poszczególne elementy działają w diagnostyce, całość
+  jeszcze nie była uruchomiona.
+- **Wersja NBT Evo:** kompilacja `qcc` (nie ma tu QNX SDP 6.5) i to, czy budowa `bmw::Image` jest taka sama jak na
+  EntryNav2.
+- **Znak przyspieszenia** (`kLatSign`, `kLonSign` w `src/cds_values.hpp`) i znaczenie `engine.temperature.engine`
+  (porównaj z zegarem). Surowe wartości trafiają do logu.
 
 > Ingerencja w head unit odbywa się na Twoją odpowiedzialność. Aplikacja niczego nie patchuje i zapisuje tylko we
 > własnym folderze danych.

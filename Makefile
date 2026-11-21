@@ -46,7 +46,7 @@ EN2_STAGE     = dist/entrynav2
 
 SRC = src/engine_data.cpp src/cds_values.hpp src/gauge_view.hpp src/gauge_ids.hpp
 
-.PHONY: all lib db check clean entrynav2 entrynav2-dist
+.PHONY: all lib db check clean entrynav2 entrynav2-dist entrynav2-diag-dist
 all: lib
 
 lib: libGaugeApp.so
@@ -68,15 +68,29 @@ $(EN2_OUT)/libGaugeApp.so: $(SRC)
 	@echo [DONE] $@ - make entrynav2-dist packs it with the manifest, the XML and the two zips
 
 # The archive mirrors the car's file system: unpack it in /tmp on the car and copy opt/ over / (README, EntryNav2).
-entrynav2-dist: $(EN2_OUT)/libGaugeApp.so GaugeApp_ALL_Texts.zip GaugeApp_ALL_Images.zip
+entrynav2-dist: $(EN2_OUT)/libGaugeApp.so GaugeApp_ALL_Texts.zip GaugeApp_ALL_Images.zip GaugeApp_frames.bin
 	rm -rf $(EN2_STAGE)
 	mkdir -p $(EN2_STAGE)/$(EN2_PLUGIN)
 	cp $(EN2_OUT)/libGaugeApp.so GaugeApp.manifest GaugeApp.xml GaugeApp_ALL_Texts.zip GaugeApp_ALL_Images.zip \
-	    $(EN2_STAGE)/$(EN2_PLUGIN)/
+	    GaugeApp_frames.bin $(EN2_STAGE)/$(EN2_PLUGIN)/
 	chmod 755 $(EN2_STAGE)/$(EN2_PLUGIN)/libGaugeApp.so
 	cd $(EN2_STAGE) && md5sum $(EN2_PLUGIN)/* > MD5SUMS
 	tar -cf $(CURDIR)/dist/gauge-app-entrynav2.tar -C $(EN2_STAGE) MD5SUMS opt
 	@echo [DONE] dist/gauge-app-entrynav2.tar
+
+# Diagnostic package: the same library with the test pages of `python3 make_db.py --diag-out diag` (run that first,
+# it needs Pillow): XML, a 3-image DB, the texts and test.png.
+EN2_DIAG = diag
+entrynav2-diag-dist: $(EN2_OUT)/libGaugeApp.so
+	@test -f $(EN2_DIAG)/GaugeApp.xml || { echo "run python3 make_db.py --diag-out $(EN2_DIAG) first"; exit 1; }
+	rm -rf dist/entrynav2-diag
+	mkdir -p dist/entrynav2-diag/$(EN2_PLUGIN)
+	cp $(EN2_OUT)/libGaugeApp.so GaugeApp.manifest $(EN2_DIAG)/GaugeApp.xml $(EN2_DIAG)/GaugeApp_ALL_Texts.zip \
+	    $(EN2_DIAG)/GaugeApp_ALL_Images.zip $(EN2_DIAG)/*.png dist/entrynav2-diag/$(EN2_PLUGIN)/
+	chmod 755 dist/entrynav2-diag/$(EN2_PLUGIN)/libGaugeApp.so
+	cd dist/entrynav2-diag && md5sum $(EN2_PLUGIN)/* > MD5SUMS
+	tar -cf $(CURDIR)/dist/gauge-app-entrynav2-diag.tar -C dist/entrynav2-diag MD5SUMS opt
+	@echo [DONE] dist/gauge-app-entrynav2-diag.tar
 
 db:
 	python3 make_db.py

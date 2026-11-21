@@ -20,6 +20,9 @@ template <> BasicString<unsigned short>::~BasicString() { free(m_data); }
 
 ImageID::ImageID(unsigned id) : m_id(id), m_type(1) {}
 
+BufferStream::~BufferStream() { g_fake.bufferStreamsDestroyed++; }
+Image::Image(const unsigned char* data, unsigned size) : name(NULL) { stream.data = data; stream.size = size; }
+
 Runnable::~Runnable() {}
 
 #define FAKE_SLOT_DEF(n) void PluginApp::s##n() { printf("FAKE slot %d\n", n); }
@@ -42,6 +45,14 @@ void PluginApp::post(Runnable* r, unsigned ms) { g_fake.posted.push_back(std::ma
 void PluginApp::updateModel(unsigned id, const ImageID& img) {
     g_fake.modelImage[id] = img.m_id;
     g_fake.modelWrites[id]++;
+}
+
+// Pictures of the test frame pack are the text "ID:<frame id>": recorded as that frame id.
+void PluginApp::updateModel(unsigned id, const Image& img) {
+    g_fake.modelImageBytes[id] = img.stream.size;
+    g_fake.modelWrites[id]++;
+    std::string s(reinterpret_cast<const char*>(img.stream.data), img.stream.size);
+    if (s.compare(0, 3, "ID:") == 0) g_fake.modelImage[id] = (unsigned)strtoul(s.c_str() + 3, NULL, 10);
 }
 
 void PluginApp::cdsAddPropertyChangedEventHandler(BasicString<char>& n, unsigned, const CdsDelegate& d) {

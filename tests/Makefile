@@ -38,11 +38,12 @@ $(OUT)/test_cds_values: test_cds_values.cpp ../src/cds_values.hpp ../src/gauge_v
 	$(CXX) -std=gnu++98 $(WARN) -I../src -o $@ test_cds_values.cpp
 
 $(OUT)/libGaugeApp.so: $(SRC) | $(OUT)
-	$(CXX) -std=gnu++98 $(WARN) -fPIC -shared -I../src -DGAUGE_DATA_DIR='"$(NBT_DATA)"' \
+	$(CXX) -std=gnu++98 $(WARN) -fPIC -shared -I../src -DGAUGE_DATA_DIR='"$(NBT_DATA)"' -DGAUGE_PLUGIN_DIR='"$(NBT_DATA)"' \
 	    -o $@ ../src/engine_data.cpp -ldl -lpthread
 
 $(OUT)/libGaugeApp-entrynav2.so: $(SRC) | $(OUT)
 	$(CXX) -std=gnu++98 $(WARN) -fPIC -shared -I../src -DGAUGE_ENTRYNAV2 -DGAUGE_DATA_DIR='"$(EN2_DATA)"' \
+	    -DGAUGE_PLUGIN_DIR='"$(EN2_DATA)"' \
 	    -o $@ ../src/engine_data.cpp -ldl -lpthread
 
 # -rdynamic: the library looks up bmw::Runnable's vtable with dlsym(RTLD_DEFAULT) and needs the fake's symbols.

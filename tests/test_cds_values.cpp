@@ -137,9 +137,12 @@ static void testView() {
     apply(m, kGear, "{\"gear\":6}", 0);
     gearCells(m, g);
     CHECK(g[0] == kImgGear && g[3] == kImgGear + 13);           // D3
-    apply(m, kGear, "{\"gear\":15}", 0);
+    apply(m, kGear, "{\"gear\":11}", 0);
     gearCells(m, g);
-    CHECK(g[3] == kImgGear + 7);                                 // lit "D" without a number
+    CHECK(g[3] == kImgGear + 18);                                // D8
+    apply(m, kGear, "{\"gear\":15}", 0);                         // the gearbox waking up: nothing lit
+    gearCells(m, g);
+    CHECK(g[0] == kImgGear && g[1] == kImgGear + 2 && g[2] == kImgGear + 4 && g[3] == kImgGear + 6);
 
     const unsigned row = 2 * kGSteps + 1;
     CHECK(dotFrame(m) == kImgBlank);

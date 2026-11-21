@@ -14,7 +14,7 @@ enum {
     kGlyphMinus = 10, kGlyphComma = 11, kGlyphBlank = 12,
     kImgGear = 56500,                         // + 2 * cell (P R N D) + lit; D1..D8 lit = + 10 + n
     kImgDot = 56600, kGSteps = 10,            // + iy * (2 * kGSteps + 1) + ix, centre = (kGSteps, kGSteps)
-    kFirstModel = 100,
+    kFirstModel = 100, kBackgroundModel = 99,
     kScaleCoolantLo = 50, kScaleCoolantHi = 130, kScaleOilLo = 50, kScaleOilHi = 150,   // printed on the background
     kScalePowerMin = 150, kScaleTorqueMin = 250    // smallest end of the power / torque scale (it grows with the maxima)
 };

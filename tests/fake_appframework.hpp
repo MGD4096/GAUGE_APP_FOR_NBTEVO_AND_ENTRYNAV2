@@ -27,6 +27,20 @@ public:
     unsigned m_id, m_type;
 };
 
+// As on the car: a BasicString<char> first (destroyed by the app by hand), then a BufferStream.
+class BufferStream {
+public:
+    ~BufferStream();
+    const unsigned char* data;               // the caller's bytes (valid during updateModel)
+    unsigned size;
+};
+class Image {
+public:
+    Image(const unsigned char* data, unsigned size);
+    char* name;
+    BufferStream stream;
+};
+
 class Runnable {
 public:
     virtual ~Runnable();
@@ -55,6 +69,7 @@ public:
     FAKE_SLOT(32) FAKE_SLOT(33)
     void post(Runnable* r, unsigned ms);
     void updateModel(unsigned modelId, const ImageID& image);
+    void updateModel(unsigned modelId, const Image& image);
     void cdsAddPropertyChangedEventHandler(BasicString<char>& name, unsigned id, const CdsDelegate& d);
     char name[64];
 };
@@ -62,12 +77,14 @@ public:
 
 // Recorded by the fake.
 struct FakeState {
-    std::map<unsigned, unsigned> modelImage;       // modelId -> latest image id
+    std::map<unsigned, unsigned> modelImage;       // modelId -> latest frame id (picture data "ID:<n>", test packs)
     std::map<unsigned, int> modelWrites;           // modelId -> number of updateModel calls
+    std::map<unsigned, unsigned> modelImageBytes;  // raImageModel -> size of the picture data
+    int bufferStreamsDestroyed;
     std::vector<std::pair<bmw::Runnable*, unsigned> > posted;   // not yet run
     std::map<std::string, bmw::CdsDelegate> cds;   // property name -> handler
     int baseOnInit, baseOnFinalize;
-    FakeState() : baseOnInit(0), baseOnFinalize(0) {}
+    FakeState() : bufferStreamsDestroyed(0), baseOnInit(0), baseOnFinalize(0) {}
 };
 extern FakeState g_fake;
 #endif
