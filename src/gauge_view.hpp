@@ -210,14 +210,18 @@ inline unsigned dotFrame(const Metrics& m) {
     return ids::kImgDot + (unsigned)(iy * (2 * n + 1) + ix);
 }
 
-// Gear cells P R N D: driving.gear 1 N, 2 R, 3 P, 4.. D1.. (see cds_values.hpp). 4..11 = D1..D8; 15 (seen on an
-// EntryNav2 car for half a second while the gearbox wakes up: 15 -> 0 -> 3) and anything else = nothing lit.
+// Gear cells P R N D: driving.gear 1 N, 2 R, 3 P. In D the car sends the gearbox gear + 4 (EntryNav2 F40: the CDS
+// list's "4+ = D1+" showed one gear too many): 4 = D without a gear, 5..12 = D1..D8. 15 (seen for half a second while
+// the gearbox wakes up: 15 -> 0 -> 3) and anything else = nothing lit.
+const int kGearDBase = 4;
 inline void gearCells(const Metrics& m, unsigned* out) {
     int g = m.hasGear ? m.gear : 0;
     out[0] = ids::kImgGear + 0 + (g == 3 ? 1u : 0u);
     out[1] = ids::kImgGear + 2 + (g == 2 ? 1u : 0u);
     out[2] = ids::kImgGear + 4 + (g == 1 ? 1u : 0u);
-    if (g >= 4 && g <= 11) out[3] = ids::kImgGear + 10 + (unsigned)(g - 3);
+    const int d = g - kGearDBase;                        // gearbox gear in D
+    if (g == kGearDBase) out[3] = ids::kImgGear + 7;     // lit "D"
+    else if (d >= 1 && d <= 8) out[3] = ids::kImgGear + 10 + (unsigned)d;
     else out[3] = ids::kImgGear + 6;
 }
 

@@ -134,10 +134,19 @@ static void testView() {
     CHECK(g[0] == kImgGear + 1 && g[3] == kImgGear + 6);
     apply(m, kGear, "{\"gear\":6}", 0);
     gearCells(m, g);
-    CHECK(g[0] == kImgGear && g[3] == kImgGear + 13);           // D3
-    apply(m, kGear, "{\"gear\":11}", 0);
+    CHECK(g[0] == kImgGear && g[3] == kImgGear + 12);           // 6 = D2 (the car sends gearbox gear + 4)
+    apply(m, kGear, "{\"gear\":5}", 0);
+    gearCells(m, g);
+    CHECK(g[3] == kImgGear + 11);                                // D1
+    apply(m, kGear, "{\"gear\":4}", 0);
+    gearCells(m, g);
+    CHECK(g[3] == kImgGear + 7);                                 // D, no gear
+    apply(m, kGear, "{\"gear\":12}", 0);
     gearCells(m, g);
     CHECK(g[3] == kImgGear + 18);                                // D8
+    apply(m, kGear, "{\"gear\":13}", 0);
+    gearCells(m, g);
+    CHECK(g[3] == kImgGear + 6);                                 // beyond D8: nothing lit
     apply(m, kGear, "{\"gear\":15}", 0);                         // the gearbox waking up: nothing lit
     gearCells(m, g);
     CHECK(g[0] == kImgGear && g[1] == kImgGear + 2 && g[2] == kImgGear + 4 && g[3] == kImgGear + 6);

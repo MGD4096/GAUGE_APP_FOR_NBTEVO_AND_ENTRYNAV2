@@ -1,6 +1,7 @@
-# Initial project created with Claude
-It works, but sometimes it can crash the head unit, or maybe it depends on my setup. In the next few days, I will test this solution more thoroughly.
-![NBTEvo with running app](/images/20261105_220049.jpg)
+NBTEVO
+![NBTEvo with running app](/images/20261121_185721.jpg)
+EntryNav2
+![EntryNav2 with running app](/images/20261121_181430.jpg)
 
 
 [Polish version of readme](README_PL.md) – the Polish README is the complete one (installation commands included).

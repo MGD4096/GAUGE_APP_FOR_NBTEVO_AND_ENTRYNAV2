@@ -96,8 +96,19 @@ reboot
 
 ## 4. Pierwsze uruchomienie
 
-Po restarcie w menu **Media** (po wierszu Bluetooth audio) powinien być wiersz **GAUGE APP**. iDrive czyta aplikacje
-tylko przy starcie, więc bez restartu wiersza nie będzie.
+Po restarcie w menu **ConnectedDrive** powinien być wiersz **GAUGE APP** (`applicationType="OnlineServices"` w
+`GaugeApp.xml`). iDrive czyta aplikacje tylko przy starcie, więc bez restartu wiersza nie będzie.
+
+Wiersz z powrotem w menu **Media** (po Bluetooth audio, jak w starszych wersjach) – na komputerze
+`python3 make_db.py --menu media --layout-only` i nowa paczka, albo od razu w aucie:
+
+```sh
+mount -o remount,rw /
+sed -i 's/applicationType="OnlineServices"/applicationType="Custom"/' /opt/hmi/data/ro/Plugins/GaugeApp/GaugeApp.xml
+sync
+mount -o remount,ro /
+reboot
+```
 
 ### Wersja diagnostyczna
 
@@ -238,7 +249,7 @@ Bez ostatniego `rm -rf /var/local/data/GaugeApp` zostaną maksima na wypadek pon
 
 | Objaw | Co zrobić |
 |---|---|
-| Brak wiersza GAUGE APP w Media | Sprawdź krok 3 (`md5sum -c`) i zrestartuj jednostkę. Potem zajrzyj do logu: jeśli jest pusty, iDrive nie załadował biblioteki. |
+| Brak wiersza GAUGE APP w ConnectedDrive | Sprawdź krok 3 (`md5sum -c`) i zrestartuj jednostkę. Potem zajrzyj do logu: jeśli jest pusty, iDrive nie załadował biblioteki. |
 | iDrive restartuje się kilka razy zaraz po starcie | Ochrona przed pętlą restartów wyłącza aplikację po 3 restartach iDrive w ciągu 2 minut od jej załadowania, a iDrive startuje dalej bez niej. Po sprawdzeniu logu: `rm -f /var/local/data/GaugeApp/app-guard`, restart. |
 | Ekran GAUGE APP jest pusty | Sprawdź w logu linię `GaugeApp_frames.bin: … frames` – jeśli jest `cannot read …GaugeApp_frames.bin`, plik nie został skopiowany (krok 3). Potem prześlij log i zdjęcie. |
 | Wszędzie `--` | Auto nie wysyła danych do aplikacji: po 25 s w logu będzie `no CDS value arrived…`. Prześlij log. |

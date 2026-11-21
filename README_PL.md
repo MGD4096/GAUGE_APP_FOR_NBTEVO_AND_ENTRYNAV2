@@ -1,6 +1,8 @@
-# Startowy projekt, napisany za pomocą Claude
-Działa, ale czasami może zawiesić główną jednostkę (head unit) albo to zależy od mojej konfiguracji. W ciągu najbliższych kilku dni przetestuję to rozwiązanie bardziej szczegółowo.
-![NBTEvo with running app](/images/20261105_220049.jpg)
+NBTEVO
+![NBTEvo with running app](/images/20261121_185721.jpg)
+EntryNav2
+![EntryNav2 with running app](/images/20261121_181430.jpg)
+
 
 
 # IDRIVE GAUGE APP – ekran silnika w stylu iDrive 7
@@ -36,9 +38,12 @@ paczce dla każdego koloru (`GaugeApp_frames_c0..3.bin`); aplikacja wczytuje tyl
 
 Wygląd z przykładowymi wartościami (wygenerowany przez `make_db.py`): [`res/preview.png`](res/preview.png).
 
-Aplikacja pojawia się jako wiersz **GAUGE APP** w menu Media/Radio (po wierszu Bluetooth audio, w tym samym miejscu,
-w którym NbtAad i entry-aad umieszczają „Android Auto” – tam jest to sprawdzone w aucie). Identyfikatory różnią się od
+Aplikacja pojawia się jako wiersz **GAUGE APP** w menu **ConnectedDrive** (`applicationType="OnlineServices"`,
+sprawdzone na EntryNav2; samo `"Online"` nie działa). `python3 make_db.py --menu media` przenosi ją do menu Media/Radio (`applicationType="Custom"`, po
+wierszu Bluetooth audio, tam gdzie NbtAad i entry-aad umieszczają „Android Auto”). Identyfikatory różnią się od
 nich, więc obie aplikacje mogą być zainstalowane razem.
+
+**Biegi:** w D auto wysyła w `driving.gear` bieg skrzyni + 4 (sprawdzone na EntryNav2 F40: 5 = D1). 4 to samo „D”.
 
 ## Jak to działa
 
@@ -132,8 +137,20 @@ python3 make_db.py              # Pillow + font DejaVu Sans (--font plik.ttf, --
 make check                      # testy hostowe obu wersji (zwykły g++)
 ```
 
-**NBT Evo:** QNX SDP 6.5 (`qcc`) i kopie bibliotek BMW z `/opt/hmi/ID5/lib` w `lib/NBT_evo_libs`, potem `make`
-(`libGaugeApp.so`).
+**NBT Evo:** QNX SDP 6.5.0 (`qcc`; instaluje się razem z QNX Momentics IDE 4.7) i kopie bibliotek BMW z
+`/opt/hmi/ID5/lib` w `lib/NBT_evo_libs`.
+
+- **Windows:** `build_nbt.bat` (albo `build_nbt.bat D:\QNX650`, jeśli QNX nie jest w `C:\QNX650`). Skrypt sam wywoła
+  `qnx650-env.bat`, skompiluje bibliotekę i złoży w `dist\nbt\GaugeApp` wszystko, co trzeba skopiować na jednostkę.
+- **Linux / obraz qnx650-docker:** `make` (`libGaugeApp.so`).
+- **Momentics IDE** (jeśli wolisz projekt): *File → New → QNX C/C++ Project*, typ *Shared Library*, wariant
+  **armle-v7** (so), biblioteka C++ **GNU libstdc++** (nie Dinkum – tak jak HmiMain3D); źródło `src/engine_data.cpp`,
+  ścieżka nagłówków `src`, definicja `_QNX_SOURCE`, do linkowania `libAppFramework.A.so` i `libCoreFramework.A.so`
+  z `lib/NBT_evo_libs` oraz opcja linkera `--allow-shlib-undefined`; nazwa wyniku `libGaugeApp.so`.
+
+Kod jest w C++98 (GCC 4.4.2 z SDP 6.5); na komputerze kompiluje się `g++ -std=gnu++98` bez ostrzeżeń, ale `qcc`
+nie był tu uruchomiony. Wszystkie funkcje BMW, których używa, są w bibliotekach z `lib/NBT_evo_libs` (`nm -D`),
+a obiekt `bmw::Image` ma na NBT tę samą budowę co na EntryNav2 (sprawdzone w kodzie maszynowym).
 
 **EntryNav2:** kopie `libAppFramework.A.so` i `libCoreFramework.A.so` z `/opt/hmi/lib` w `lib/Entry_Evo_libs` i
 obraz Dockera z `toolchain/Dockerfile` (Ubuntu 12.04: armhf GCC 4.6 i eglibc 2.15, ta sama wersja co w aucie).
@@ -150,7 +167,8 @@ Wynik: `dist/gauge-app-entrynav2.tar` (biblioteka, manifest, XML, dwa zipy, `MD5
 
 ### NBT Evo
 
-Na head unit, pliki z pendrive'a (`/mnt/umass…` – sprawdź `ls /mnt`):
+Pełna instrukcja krok po kroku: [NbtEvo_Installation.md](NbtEvo_Installation.md). W skrócie – na head unit, pliki
+z pendrive'a (`/fs/usb0` albo `/mnt/umass…`):
 
 ```
 mkdir -p /opt/hmi/ID5/data/ro/Plugins/GaugeApp
@@ -186,7 +204,7 @@ reboot
 - `/var/local/data` jest zamontowany z `noexec`, dlatego biblioteka musi leżeć na partycji systemowej.
 - `rm -f` przed kopiowaniem: iDrive trzyma starą bibliotekę w pamięci do restartu.
 
-W **Media** powinien pojawić się wiersz **GAUGE APP**.
+W **ConnectedDrive** powinien pojawić się wiersz **GAUGE APP**.
 
 ### Obie wersje
 

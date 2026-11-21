@@ -9,7 +9,7 @@
 //   engine.temperature    {"temperature":{"engine":19,"oil":18}}                         deg C
 //   engine.RPMSpeed       {"RPMSpeed":0}                                                 1/min
 //   engine.torque         {"torque":0}                                                   Nm
-//   driving.gear          {"gear":0}                                                     1 N, 2 R, 3 P, 4+ D1+
+//   driving.gear          {"gear":0}                    1 N, 2 R, 3 P, D: 4 + gear (car: 5 = D1; list said 4 = D1)
 //   driving.acceleration  {"acceleration":{"lateral":-0.19,"longitudinal":65535.00}}     probably m/s^2
 //   driving.speedActual   {"speedActual":0}                                              km/h
 //   sensors.fuel          {"fuel":{"range":522,"reserve":0,"tanklevel":39}}              litres (tanklevel)

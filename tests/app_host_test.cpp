@@ -154,7 +154,7 @@ int main(int argc, char** argv) {
     CHECK(slot(kSlotTorqueBig0) == eng::bigGlyph('3', 0) && slot(kSlotTorqueBig1) == eng::bigGlyph('8', 0));
     CHECK(slot(kSlotPowerBig0) == eng::bigGlyph('1', 0) && slot(kSlotPowerBig1) == eng::bigGlyph('9', 0) &&
           slot(kSlotPowerBig2) == eng::bigGlyph('5', 0));      // 380 Nm * 3600 / 7023.5 = 194.8 KM
-    CHECK(slot(kSlotGearD) == kImgGear + 13 && slot(kSlotGearP) == kImgGear);
+    CHECK(slot(kSlotGearD) == kImgGear + 12 && slot(kSlotGearP) == kImgGear);   // 6 = D2
     CHECK(slot(kSlotGBig) == kImgGNum + 100 && slot(kSlotGLat) == kImgLatNum + 100);   // "1,00"
     CHECK(slot(kSlotGLon) == kImgBlank);                        // 65535 = not available, no speed yet
     CHECK(slot(kSlotCoolantMark) == kImgBlank);                 // one sample: no maximum yet

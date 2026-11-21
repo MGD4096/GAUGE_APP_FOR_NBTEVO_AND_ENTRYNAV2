@@ -184,13 +184,14 @@ bool fileExists(const char* p) {
     return stat(p, &st) == 0;
 }
 
-// Folders a USB stick is mounted under, and the prefix of its mount point ("" = any). NBT Evo (QNX): /mnt/umass*.
-// EntryNav2 (Linux): the mount point is not known for sure, so every folder directly under /media and /mnt is tried.
+// Folders a USB stick is mounted under, and the prefix of its mount point ("" = any). NBT Evo (QNX): /fs/usb0 (as
+// NBTApp's install guide finds it) or /mnt/umass*. EntryNav2 (Linux): the mount point is not known for sure, so every
+// folder directly under /media and /mnt is tried.
 struct UsbRoot { const char* dir; const char* prefix; };
 #ifdef GAUGE_ENTRYNAV2
 const UsbRoot kUsbRoots[] = { { "/media", "" }, { "/mnt", "" }, { "/run/media", "" } };
 #else
-const UsbRoot kUsbRoots[] = { { "/mnt", "umass" } };
+const UsbRoot kUsbRoots[] = { { "/fs", "usb" }, { "/mnt", "umass" } };
 #endif
 
 // <stick>/gauge-app.log of the first stick that already holds that file (an empty file made on a PC switches the
