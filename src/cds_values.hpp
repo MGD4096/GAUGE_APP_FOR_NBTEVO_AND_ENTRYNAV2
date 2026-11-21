@@ -1,20 +1,26 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
-// Engine data for BMW NBT Evo (ID5/ID6) - pure logic, no iDrive framework: parsing of CDS property texts and
-// formatting of the display rows. Host-tested in tests/test_cds_values.cpp. C++98 (the QNX SDP 6.5 compiler is GCC 4.4).
+// Engine data for BMW NBT Evo / EntryNav2 - pure logic, no iDrive framework: parsing of CDS property texts, derived
+// values (power, longitudinal g from the speed) and the all-time maxima. Host-tested in tests/test_cds_values.cpp.
+// C++98 (the QNX SDP 6.5 compiler is GCC 4.4).
 //
 // The parsing style (key lookup in the JSON-like text the car sends as UTF-16) follows NBT-AAD's rhmiapp/cds_parse.hpp
 // (https://github.com/Sq00ky/Supra-iDrive6-Android-Auto). CDS property names and value layouts come from
-// https://bimmergestalt.github.io/BMWConnectedAnalysis/cds/ :
-//   engine.temperature          {"temperature":{"engine":19,"oil":18}}                  deg C
-//   engine.RPMSpeed             {"RPMSpeed":0}
-//   driving.speedActual         {"speedActual":0}                                       km/h
-//   driving.gear                {"gear":0}                                              1 N, 2 R, 3 P, 4+ D1+
-//   sensors.fuel                {"fuel":{"range":522,"reserve":0,"tanklevel":39}}       km / litres
-//   sensors.temperatureExterior {"temperatureExterior":14.0}                            deg C
-// A value that is missing, not a number or outside a plausible range is shown as "--" (e.g. {"error":400}).
+// https://bimmergestalt.github.io/BMWConnectedAnalysis/cds/ (a community list: units partly "probably"):
+//   engine.temperature    {"temperature":{"engine":19,"oil":18}}                         deg C
+//   engine.RPMSpeed       {"RPMSpeed":0}                                                 1/min
+//   engine.torque         {"torque":0}                                                   Nm
+//   driving.gear          {"gear":0}                    1 N, 2 R, 3 P, D: 4 + gear (car: 5 = D1; list said 4 = D1)
+//   driving.acceleration  {"acceleration":{"lateral":-0.19,"longitudinal":65535.00}}     probably m/s^2
+//   driving.speedActual   {"speedActual":0}                                              km/h
+//   sensors.fuel          {"fuel":{"range":522,"reserve":0,"tanklevel":39}}              litres (tanklevel)
+//   vehicle.language      {"language":3}                     1 DE, 2 EN_UK, 3 EN_US, ... 18 PL (HMI language)
+// There is no engine power in CDS: it is torque * rpm. When the car sends no usable longitudinal acceleration (the list
+// shows 65535, a "not available" value), it is taken from the change of speedActual instead.
+// A value that is missing, not a number or outside a plausible range counts as "no data" (e.g. {"error":400}).
 #ifndef NBT_ENGINE_CDS_VALUES_HPP
 #define NBT_ENGINE_CDS_VALUES_HPP
 
+#include <math.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -23,19 +29,29 @@
 namespace eng {
 
 // CDS properties the app subscribes to (index = Prop).
-enum Prop { kEngineTemp = 0, kRpm, kSpeed, kGear, kFuel, kOutside, kPropCount };
+enum Prop { kEngineTemp = 0, kRpm, kTorque, kGear, kAccel, kSpeed, kFuel, kLanguage, kPropCount };
+
+const int kLangPolish = 18;          // vehicle.language: the texts drawn into the pictures are Polish for it, else English
 
 inline const char* propName(int p) {
     switch (p) {
     case kEngineTemp: return "engine.temperature";
     case kRpm:        return "engine.RPMSpeed";
-    case kSpeed:      return "driving.speedActual";
+    case kTorque:     return "engine.torque";
     case kGear:       return "driving.gear";
+    case kAccel:      return "driving.acceleration";
+    case kSpeed:      return "driving.speedActual";
     case kFuel:       return "sensors.fuel";
-    case kOutside:    return "sensors.temperatureExterior";
+    case kLanguage:   return "vehicle.language";
     }
     return "";
 }
+
+// ---- tuning ---------------------------------------------------------------------------------------------------------
+const double kAccelPerG = 9.81;      // driving.acceleration in m/s^2 (the CDS list says "probably m/s"); 1.0 if in g
+const double kLatSign = 1.0;         // flip to -1 if the g-meter dot moves the wrong way in a bend
+const double kLonSign = 1.0;         // + : the dot moves down when accelerating, up when braking
+const double kPsPerNmRpm = 1.0 / 7023.5;   // PS (KM) = Nm * 1/min / 7023.5
 
 // UTF-16 (as the car delivers CDS values) -> ASCII; anything above 0x7f becomes '?'. Returns the length.
 inline size_t narrow(const unsigned short* in, char* out, size_t n) {
@@ -49,28 +65,8 @@ inline size_t narrow(const unsigned short* in, char* out, size_t n) {
     return i;
 }
 
-// UTF-8 -> UTF-16 (BMP only; an invalid sequence becomes '?'). n = capacity of out in units, terminator included.
-inline size_t utf8to16(const char* in, unsigned short* out, size_t n) {
-    size_t o = 0;
-    if (!out || n == 0) return 0;
-    const unsigned char* p = (const unsigned char*)in;
-    while (p && *p && o + 1 < n) {
-        unsigned c = *p;
-        if (c < 0x80) { out[o++] = (unsigned short)c; ++p; }
-        else if ((c & 0xe0) == 0xc0 && (p[1] & 0xc0) == 0x80) {
-            out[o++] = (unsigned short)(((c & 0x1f) << 6) | (p[1] & 0x3f));
-            p += 2;
-        } else if ((c & 0xf0) == 0xe0 && (p[1] & 0xc0) == 0x80 && (p[2] & 0xc0) == 0x80) {
-            out[o++] = (unsigned short)(((c & 0x0f) << 12) | ((p[1] & 0x3f) << 6) | (p[2] & 0x3f));
-            p += 3;
-        } else { out[o++] = '?'; ++p; }
-    }
-    out[o] = 0;
-    return o;
-}
-
 // Number after "<key>": in text. false when the key is missing, the value is not a number (null, string, ...) or
-// not finite. Accepts integers and decimals ("tanklevel":39, "temperatureExterior":14.0).
+// not finite. Accepts integers and decimals.
 inline bool numField(const char* text, const char* key, double* out) {
     if (!text || !key || !out) return false;
     char pat[48];
@@ -93,20 +89,34 @@ inline bool numField(const char* text, const char* key, double* out) {
     return true;
 }
 
-// Latest known values. A has* flag is false until a valid value arrived and again after an invalid one.
-struct Metrics {
-    bool   hasCoolant, hasOil, hasRpm, hasSpeed, hasGear, hasFuel, hasRange, hasOutside;
-    double coolant, oil, rpm, speed, fuel, range, outside;
-    int    gear;
-    Metrics()
-        : hasCoolant(false), hasOil(false), hasRpm(false), hasSpeed(false), hasGear(false), hasFuel(false),
-          hasRange(false), hasOutside(false), coolant(0), oil(0), rpm(0), speed(0), fuel(0), range(0), outside(0),
-          gear(0) {}
-};
-
 inline bool inRange(double v, double lo, double hi) { return v >= lo && v <= hi; }
 
-// Stores one value; returns true when what is shown for it would change.
+// Latest known values. A has* flag is false until a valid value arrived and again after an invalid one.
+struct Metrics {
+    bool   hasCoolant, hasOil, hasRpm, hasTorque, hasGear, hasLat, hasLon, hasSpeed, hasLonFromSpeed, hasFuel;
+    double coolant, oil, rpm, torque, lat, lon, speed, lonFromSpeed;   // lat / lon / lonFromSpeed in m/s^2
+    double fuel;                                     // litres in the tank
+    int    gear;
+    int    language;                                 // vehicle.language, 0 = not known yet
+    long   speedAtMs;                                // when speed was received
+    Metrics()
+        : hasCoolant(false), hasOil(false), hasRpm(false), hasTorque(false), hasGear(false), hasLat(false),
+          hasLon(false), hasSpeed(false), hasLonFromSpeed(false), hasFuel(false), coolant(0), oil(0), rpm(0),
+          torque(0), lat(0), lon(0), speed(0), lonFromSpeed(0), fuel(0), gear(0), language(0), speedAtMs(0) {}
+
+    // Texts in the pictures: Polish until the language is known (the car this was made for), then Polish only for
+    // a Polish HMI.
+    bool polish() const { return language == 0 || language == kLangPolish; }
+
+    bool hasPower() const { return hasTorque && hasRpm; }
+    double power() const { return (torque > 0 ? torque : 0) * rpm * kPsPerNmRpm; }   // KM, 0 on overrun
+    bool hasLatG() const { return hasLat; }
+    double latG() const { return kLatSign * lat / kAccelPerG; }
+    bool hasLonG() const { return hasLon || hasLonFromSpeed; }
+    double lonG() const { return kLonSign * (hasLon ? lon : lonFromSpeed) / kAccelPerG; }
+};
+
+// Stores one value; returns true when it changed.
 inline bool setValue(bool& has, double& cur, bool ok, double v) {
     if (!ok) { bool ch = has; has = false; return ch; }
     bool ch = !has || cur != v;
@@ -115,8 +125,10 @@ inline bool setValue(bool& has, double& cur, bool ok, double v) {
     return ch;
 }
 
-// Applies the text of one CDS property to m. Returns true when a displayed value changed.
-inline bool apply(Metrics& m, int prop, const char* text) {
+// Applies the text of one CDS property to m (nowMs: a monotonic clock, for the speed derivative). Returns true when a
+// value changed. Note: ok is computed in its own statement; passing numField(.., &v) and v in one call would read v
+// before it is set (the order in which function arguments are evaluated is unspecified).
+inline bool apply(Metrics& m, int prop, const char* text, long nowMs) {
     double v = 0;
     bool ch = false;
     switch (prop) {
@@ -128,16 +140,14 @@ inline bool apply(Metrics& m, int prop, const char* text) {
         ch = setValue(m.hasOil, m.oil, b, v) || ch;
         break;
     }
-    // Note: ok is computed in its own statement; passing numField(.., &v) and v in one call would read v before it is set
-    // (the order in which function arguments are evaluated is unspecified).
     case kRpm: {
         bool ok = numField(text, "RPMSpeed", &v) && inRange(v, 0, 12000);
         ch = setValue(m.hasRpm, m.rpm, ok, v);
         break;
     }
-    case kSpeed: {
-        bool ok = numField(text, "speedActual", &v) && inRange(v, 0, 500);
-        ch = setValue(m.hasSpeed, m.speed, ok, v);
+    case kTorque: {
+        bool ok = numField(text, "torque", &v) && inRange(v, -1000, 2000);
+        ch = setValue(m.hasTorque, m.torque, ok, v);
         break;
     }
     case kGear: {
@@ -148,89 +158,154 @@ inline bool apply(Metrics& m, int prop, const char* text) {
         if (ok) m.gear = g;
         break;
     }
-    case kFuel: {
-        bool a = numField(text, "tanklevel", &v) && inRange(v, 0, 500);
-        ch = setValue(m.hasFuel, m.fuel, a, v) || ch;
+    case kAccel: {
+        bool a = numField(text, "lateral", &v) && inRange(v, -30, 30);
+        ch = setValue(m.hasLat, m.lat, a, v) || ch;
         v = 0;
-        bool b = numField(text, "range", &v) && inRange(v, 0, 5000);
-        ch = setValue(m.hasRange, m.range, b, v) || ch;
+        bool b = numField(text, "longitudinal", &v) && inRange(v, -30, 30);
+        ch = setValue(m.hasLon, m.lon, b, v) || ch;
         break;
     }
-    case kOutside: {
-        bool ok = numField(text, "temperatureExterior", &v) && inRange(v, -60, 80);
-        ch = setValue(m.hasOutside, m.outside, ok, v);
+    case kSpeed: {
+        bool ok = numField(text, "speedActual", &v) && inRange(v, 0, 500);
+        if (ok && m.hasSpeed) {
+            long dt = nowMs - m.speedAtMs;
+            if (dt >= 50 && dt <= 2000) {
+                double a = (v - m.speed) / 3.6 / (dt / 1000.0);
+                if (a < -30) a = -30;
+                if (a > 30) a = 30;
+                double s = m.hasLonFromSpeed ? 0.5 * m.lonFromSpeed + 0.5 * a : a;   // smooths the 1 km/h steps
+                ch = setValue(m.hasLonFromSpeed, m.lonFromSpeed, true, s) || ch;
+            } else if (dt > 2000) {
+                ch = setValue(m.hasLonFromSpeed, m.lonFromSpeed, false, 0) || ch;
+            } else {
+                return ch;                           // too close to the last one: keep it as the reference
+            }
+        } else if (!ok) {
+            ch = setValue(m.hasLonFromSpeed, m.lonFromSpeed, false, 0) || ch;
+        }
+        ch = setValue(m.hasSpeed, m.speed, ok, v) || ch;
+        if (ok) m.speedAtMs = nowMs;
+        break;
+    }
+    case kFuel: {
+        bool ok = numField(text, "tanklevel", &v) && inRange(v, 0, 200);
+        ch = setValue(m.hasFuel, m.fuel, ok, v);
+        break;
+    }
+    case kLanguage: {
+        bool ok = numField(text, "language", &v) && inRange(v, 1, 99);
+        int lang = ok ? (int)v : m.language;         // an invalid value keeps the last known language
+        ch = lang != m.language;
+        m.language = lang;
         break;
     }
     }
     return ch;
 }
 
-// Is anything shown for this property (used for diagnostics only).
+// Is anything usable for this property (diagnostics only).
 inline bool propValid(const Metrics& m, int prop) {
     switch (prop) {
     case kEngineTemp: return m.hasCoolant || m.hasOil;
     case kRpm:        return m.hasRpm;
-    case kSpeed:      return m.hasSpeed;
+    case kTorque:     return m.hasTorque;
     case kGear:       return m.hasGear;
-    case kFuel:       return m.hasFuel || m.hasRange;
-    case kOutside:    return m.hasOutside;
+    case kAccel:      return m.hasLat || m.hasLon;
+    case kSpeed:      return m.hasSpeed;
+    case kFuel:       return m.hasFuel;
+    case kLanguage:   return m.language != 0;
     }
     return false;
 }
 
-// ---- display rows ---------------------------------------------------------------------------------------------------
-// One label per row; the iDrive label is a single line cut at about 34 characters. Texts are UTF-8 here and are
-// converted to UTF-16 for the HMI. Edit the words here to change the language (the escapes are written as separate
-// literals so a following hex digit is not swallowed by an escape).
-enum { kRowCount = 7, kRowLen = 72 };
+// ---- maxima of the current run (reset when the app starts; the last run's are kept in max.txt) ----------------------
+enum Gauge { kGCoolant = 0, kGOil, kGPower, kGTorque, kGaugeCount };
 
-#define ENG_DEG "\xC2\xB0"
-#define ENG_TXT_COOLANT  "Woda"
-#define ENG_TXT_OIL      "Olej"
-#define ENG_TXT_RPM      "Obroty"
-#define ENG_TXT_SPEED    "Pr\xC4\x99" "dko" "\xC5\x9B" "\xC4\x87"
-#define ENG_TXT_GEAR     "Bieg"
-#define ENG_TXT_FUEL     "Paliwo"
-#define ENG_TXT_RANGE    "zasi\xC4\x99" "g"
-#define ENG_TXT_OUTSIDE  "Temp. zewn."
-#define ENG_UNIT_RPM     "obr/min"
-
-inline int roundInt(double v) { return (int)(v >= 0 ? v + 0.5 : v - 0.5); }
-
-// "N", "R", "P", "D1".. for the CDS driving.gear values 1, 2, 3, 4+ (see header comment); unknown 0 -> "--".
-inline void gearText(int g, char* out, size_t n) {
-    if (g == 1) snprintf(out, n, "N");
-    else if (g == 2) snprintf(out, n, "R");
-    else if (g == 3) snprintf(out, n, "P");
-    else if (g >= 4) snprintf(out, n, "D%d", g - 3);
-    else snprintf(out, n, "--");
+inline const char* gaugeKey(int g) {
+    switch (g) {
+    case kGCoolant: return "coolant";
+    case kGOil:     return "oil";
+    case kGPower:   return "power";
+    case kGTorque:  return "torque";
+    }
+    return "";
 }
 
-// Fills the rows (UTF-8). Row order = label order in GaugeApp.xml.
-inline void formatRows(const Metrics& m, char rows[kRowCount][kRowLen]) {
-    char a[24], b[24];
-    if (m.hasCoolant) snprintf(rows[0], kRowLen, ENG_TXT_COOLANT ": %d " ENG_DEG "C", roundInt(m.coolant));
-    else snprintf(rows[0], kRowLen, ENG_TXT_COOLANT ": --");
-    if (m.hasOil) snprintf(rows[1], kRowLen, ENG_TXT_OIL ": %d " ENG_DEG "C", roundInt(m.oil));
-    else snprintf(rows[1], kRowLen, ENG_TXT_OIL ": --");
-    if (m.hasRpm) snprintf(rows[2], kRowLen, ENG_TXT_RPM ": %d " ENG_UNIT_RPM, roundInt(m.rpm / 10.0) * 10);
-    else snprintf(rows[2], kRowLen, ENG_TXT_RPM ": --");
-    if (m.hasSpeed) snprintf(rows[3], kRowLen, ENG_TXT_SPEED ": %d km/h", roundInt(m.speed));
-    else snprintf(rows[3], kRowLen, ENG_TXT_SPEED ": --");
-    gearText(m.hasGear ? m.gear : 0, a, sizeof(a));
-    snprintf(rows[4], kRowLen, ENG_TXT_GEAR ": %s", a);
-    if (m.hasFuel) snprintf(a, sizeof(a), "%d l", roundInt(m.fuel)); else snprintf(a, sizeof(a), "--");
-    if (m.hasRange) snprintf(b, sizeof(b), "%d km", roundInt(m.range)); else snprintf(b, sizeof(b), "--");
-    snprintf(rows[5], kRowLen, ENG_TXT_FUEL ": %s, " ENG_TXT_RANGE ": %s", a, b);
-    if (m.hasOutside) {
-        snprintf(a, sizeof(a), "%.1f", m.outside);
-        for (char* p = a; *p; ++p) if (*p == '.') *p = ',';   // Polish decimal comma
-        snprintf(rows[6], kRowLen, ENG_TXT_OUTSIDE ": %s " ENG_DEG "C", a);
-    } else {
-        snprintf(rows[6], kRowLen, ENG_TXT_OUTSIDE ": --");
+// A new maximum needs two samples in a row: max = max(max, min(previous, current)). One glitch (a single bogus value)
+// can then not become the record of the run.
+struct Maxima {
+    bool   has[kGaugeCount], hasPrev[kGaugeCount];
+    double v[kGaugeCount], prev[kGaugeCount];
+    Maxima() {
+        for (int g = 0; g < kGaugeCount; ++g) { has[g] = hasPrev[g] = false; v[g] = prev[g] = 0; }
+    }
+    // One sample of gauge g (ok = false: no data). Returns true when the maximum changed.
+    bool sample(int g, bool ok, double x) {
+        if (!ok) { hasPrev[g] = false; return false; }
+        bool changed = false;
+        if (hasPrev[g]) {
+            double c = prev[g] < x ? prev[g] : x;
+            if (!has[g] || c > v[g]) { has[g] = true; v[g] = c; changed = true; }
+        }
+        hasPrev[g] = true;
+        prev[g] = x;
+        return changed;
+    }
+};
+
+// Feeds the maxima from the values one CDS property just changed. Returns true when a maximum changed.
+inline bool updateMaxima(Maxima& mx, const Metrics& m, int prop) {
+    bool ch = false;
+    switch (prop) {
+    case kEngineTemp:
+        ch = mx.sample(kGCoolant, m.hasCoolant, m.coolant) || ch;
+        ch = mx.sample(kGOil, m.hasOil, m.oil) || ch;
+        break;
+    case kTorque:
+        ch = mx.sample(kGTorque, m.hasTorque, m.torque) || ch;
+        ch = mx.sample(kGPower, m.hasPower(), m.power()) || ch;
+        break;
+    case kRpm:
+        ch = mx.sample(kGPower, m.hasPower(), m.power()) || ch;
+        break;
+    }
+    return ch;
+}
+
+// "coolant=98.0\noil=112.0\n..." - only the maxima that exist.
+inline void formatMaxima(const Maxima& mx, char* out, size_t n) {
+    size_t o = 0;
+    out[0] = 0;
+    for (int g = 0; g < kGaugeCount && o < n; ++g) {
+        if (!mx.has[g]) continue;
+        int w = snprintf(out + o, n - o, "%s=%.1f\n", gaugeKey(g), mx.v[g]);
+        if (w < 0) break;
+        o += (size_t)w;
     }
 }
 
-} // namespace eng
+// Reads what formatMaxima wrote; unknown or broken lines are skipped.
+inline void parseMaxima(Maxima& mx, const char* text) {
+    for (int g = 0; g < kGaugeCount; ++g) {
+        char key[24];
+        snprintf(key, sizeof(key), "%s=", gaugeKey(g));
+        const char* p = text;
+        while ((p = strstr(p, key)) != NULL) {
+            if (p == text || p[-1] == '\n') break;
+            p += 1;
+        }
+        if (!p) continue;
+        char* end = NULL;
+        double v = strtod(p + strlen(key), &end);
+        if (end == p + strlen(key) || !(v > -1000 && v < 5000)) continue;
+        mx.has[g] = true;
+        mx.v[g] = v;
+    }
+}
+
+inline int roundInt(double v) { return (int)(v >= 0 ? v + 0.5 : v - 0.5); }
+
+}  // namespace eng
 
 #endif

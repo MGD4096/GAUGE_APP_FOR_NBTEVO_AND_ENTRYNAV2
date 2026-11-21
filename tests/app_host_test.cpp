@@ -1,19 +1,22 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Host test: loads a host build of libGaugeApp.so the way ManagedPluginApp does (dlsym "pluginAppInfo"), drives
 // create / onInit / the posted Runnables / CDS callbacks / onFinalize / destroy against the fake framework and checks
-// what ends up in the label models.
+// which images end up in the models, that the maxima of a run are written to <data dir>/max.txt and start again from
+// nothing at the next onInit, and that the settings are kept.
+//   app_host_test <libGaugeApp.so> <data dir the library was built with>
 #include <dlfcn.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
+#include <unistd.h>
 #include <string>
 #include "fake_appframework.hpp"
+#include "gauge_view.hpp"
+
+using namespace eng::ids;
 
 static int g_fail = 0;
 #define CHECK(c) do { if (!(c)) { printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #c); ++g_fail; } } while (0)
-#define CHECK_STR(a, b) do { std::string _a = (a); if (_a != (b)) { printf("FAIL %s:%d: '%s' != '%s'\n", __FILE__, __LINE__, _a.c_str(), (b)); ++g_fail; } } while (0)
-
-#define DEG "\xC2\xB0"
 
 struct Info {
     uint16_t a, b;
@@ -24,8 +27,8 @@ struct Info {
     void (*destroy)(void*);
 };
 
-// Runs every Runnable that is queued right now once (what the framework does when the delay is over). Returns how
-// many ran; Runnables that post themselves again land in the queue for the next call.
+// Runs every Runnable that is queued right now once (what the framework does when the delay is over). Runnables that
+// post themselves again land in the queue for the next call.
 static int runPosted() {
     std::vector<std::pair<bmw::Runnable*, unsigned> > now;
     now.swap(g_fake.posted);
@@ -47,10 +50,49 @@ static void feed(const char* prop, const char* ascii) {
     it->second.stub(it->second.object, s);
 }
 
-static const std::string& row(unsigned i) { return g_fake.modelText[21 + i]; }
+static unsigned slot(int s) { return g_fake.modelImage[kFirstModel + (unsigned)s]; }
+static int writes(int s) { return g_fake.modelWrites[kFirstModel + (unsigned)s]; }
+
+// A frame pack (layout of make_db.py write_frames) with the frames first..last, each the text "ID:<id + mark>": the
+// fake framework turns the picture data back into that number (mark tells packs apart).
+static void writeFramePack(const std::string& path, unsigned first = 56000, unsigned last = 61199,
+                           unsigned mark = 0) {
+    std::vector<std::string> data;
+    for (unsigned id = first; id <= last; ++id) {
+        char b[24];
+        snprintf(b, sizeof(b), "ID:%u", id + mark);
+        data.push_back(b);
+    }
+    std::string out = "GFR1";
+    unsigned n = (unsigned)data.size(), off = 8 + 12 * n;
+    std::string table;
+    for (unsigned i = 0; i < n; ++i) {
+        unsigned v[3] = { first + i, off, (unsigned)data[i].size() };
+        for (int k = 0; k < 3; ++k)
+            for (int s = 0; s < 4; ++s) table += (char)((v[k] >> (8 * s)) & 0xff);
+        off += (unsigned)data[i].size();
+    }
+    for (int s = 0; s < 4; ++s) out += (char)((n >> (8 * s)) & 0xff);
+    out += table;
+    for (unsigned i = 0; i < n; ++i) out += data[i];
+    FILE* f = fopen(path.c_str(), "wb");
+    if (f) { fwrite(out.data(), 1, out.size(), f); fclose(f); }
+}
+
+static std::string readFile(const std::string& p) {
+    std::string out;
+    FILE* f = fopen(p.c_str(), "r");
+    if (!f) return out;
+    char b[256];
+    size_t n;
+    while ((n = fread(b, 1, sizeof(b), f)) > 0) out.append(b, n);
+    fclose(f);
+    return out;
+}
 
 int main(int argc, char** argv) {
-    if (argc < 2) { printf("usage: %s libGaugeApp.so\n", argv[0]); return 2; }
+    if (argc < 3) { printf("usage: %s libGaugeApp.so data-dir\n", argv[0]); return 2; }
+    const std::string maxFile = std::string(argv[2]) + "/max.txt";
     void* h = dlopen(argv[1], RTLD_NOW | RTLD_GLOBAL);
     if (!h) { printf("dlopen: %s\n", dlerror()); return 1; }
     Info* info = (Info*)dlsym(h, "pluginAppInfo");
@@ -62,86 +104,132 @@ int main(int argc, char** argv) {
     bmw::PluginApp* app = info->create(*(bmw::IDispatcher*)dummy, "GaugeApp", *(bmw::Bundle*)dummy, *(bmw::Bundle*)dummy);
     if (!app) { printf("create returned NULL\n"); return 1; }
     CHECK(strcmp(app->name, "GaugeApp") == 0);
-    CHECK(info->create(*(bmw::IDispatcher*)dummy, "GaugeApp", *(bmw::Bundle*)dummy, *(bmw::Bundle*)dummy) == NULL);   // single instance
+    CHECK(info->create(*(bmw::IDispatcher*)dummy, "GaugeApp", *(bmw::Bundle*)dummy, *(bmw::Bundle*)dummy) == NULL);
 
-    // ---- onInit (virtual call: reaches the library's override through its own vtable) ----
-    bool ok = app->onInit();
-    CHECK(ok);
-    CHECK(g_fake.baseOnInit == 1);                       // the base onInit ran
-    CHECK(g_fake.modelWrites.size() == 7);               // every row written once with its placeholder
-    CHECK_STR(row(0), "Woda: --");
-    CHECK_STR(row(4), "Bieg: --");
-    CHECK(g_fake.posted.size() == 1 && g_fake.posted[0].second == 1500);   // the CDS subscription
-    CHECK(g_fake.cds.empty());                           // not yet subscribed
+    // ---- onInit: the frame pack loaded, background + every slot sent once, nothing known yet; test.png (diagnostics)
+    // sent as picture data too ----
+    const std::string png = std::string(argv[2]) + "/test.png";   // the tests build the plugin folder = data folder
+    FILE* pf = fopen(png.c_str(), "wb");
+    if (pf) { fputs("\x89PNG fake picture data", pf); fclose(pf); }
+    writeFramePack(std::string(argv[2]) + "/GaugeApp_frames.bin");
+    // colour 1: the arc frames again, marked +100000 (no pack for colour 0: everything from the common pack)
+    writeFramePack(std::string(argv[2]) + "/GaugeApp_frames_c1.bin", kImgArc, kImgArc + kArcSteps, 100000);
+    unlink((std::string(argv[2]) + "/GaugeApp_frames_c0.bin").c_str());
+    unlink((std::string(argv[2]) + "/settings.txt").c_str());
+    CHECK(app->onInit());
+    CHECK(g_fake.actions.size() == 5 && g_fake.actions.count(kSettingsAction) && g_fake.actions.count(kSettingsAction + 4));
+    CHECK(g_fake.modelText[kSettingsTextModel] == 200 && g_fake.modelText[kSettingsTextModel + 1] == 210 &&
+          g_fake.modelText[kSettingsTextModel + 4] == 240);
+    CHECK(g_fake.baseOnInit == 1);
+    CHECK((int)g_fake.modelImage.size() == kSlotCount + 1);
+    CHECK(g_fake.modelImage[kBackgroundModel] == kImgBackground);
+    CHECK(g_fake.modelImageBytes[560] == 22 && g_fake.modelImageBytes[561] == 22);
+    CHECK(g_fake.bufferStreamsDestroyed == kSlotCount + 1 + 2);  // every picture sent destroys its bmw::Image by hand
+    unlink(png.c_str());
+    CHECK(slot(kSlotCoolantArc) == kImgBlank && slot(kSlotCoolantMark) == kImgBlank);
+    CHECK(slot(kSlotCoolantBig0) == eng::bigGlyph('-', 1));
+    CHECK(slot(kSlotGearP) == kImgGear && slot(kSlotGearD) == kImgGear + 6);
+    CHECK(g_fake.posted.size() == 1 && g_fake.posted[0].second == 1500);
 
-    // ---- the subscription runs: six handlers, then the render loop starts ----
+    // ---- the subscription: six handlers, then the render loop ----
     runPosted();
-    CHECK(g_fake.cds.size() == 6);
+    CHECK(g_fake.cds.size() == 8);
     CHECK(g_fake.cds.count("engine.temperature") && g_fake.cds.count("engine.RPMSpeed") &&
-          g_fake.cds.count("driving.speedActual") && g_fake.cds.count("driving.gear") &&
-          g_fake.cds.count("sensors.fuel") && g_fake.cds.count("sensors.temperatureExterior"));
-    CHECK(g_fake.posted.size() == 1 && g_fake.posted[0].second == 500);
+          g_fake.cds.count("engine.torque") && g_fake.cds.count("driving.gear") &&
+          g_fake.cds.count("driving.acceleration") && g_fake.cds.count("driving.speedActual") &&
+          g_fake.cds.count("sensors.fuel") && g_fake.cds.count("vehicle.language"));
+    CHECK(g_fake.posted.size() == 1 && g_fake.posted[0].second == 200);
 
-    // ---- values arrive, the render tick writes them ----
-    feed("engine.temperature", "{\"temperature\":{\"engine\":92,\"oil\":104}}");
-    feed("engine.RPMSpeed", "{\"RPMSpeed\":2453}");
-    feed("driving.speedActual", "{\"speedActual\":87}");
+    // ---- values arrive, the next tick shows them ----
+    feed("engine.temperature", "{\"temperature\":{\"engine\":90,\"oil\":104}}");
+    feed("engine.RPMSpeed", "{\"RPMSpeed\":3600}");
+    feed("engine.torque", "{\"torque\":380}");
     feed("driving.gear", "{\"gear\":6}");
-    feed("sensors.fuel", "{\"fuel\":{\"range\":522,\"reserve\":0,\"tanklevel\":39}}");
-    feed("sensors.temperatureExterior", "{\"temperatureExterior\":14.0}");
-    CHECK_STR(row(0), "Woda: --");                       // nothing is written before the tick
+    feed("driving.acceleration", "{\"acceleration\":{\"lateral\":9.81,\"longitudinal\":65535.00}}");
+    CHECK(slot(kSlotCoolantArc) == kImgBlank);                  // nothing before the tick
     runPosted();
-    CHECK_STR(row(0), "Woda: 92 " DEG "C");
-    CHECK_STR(row(1), "Olej: 104 " DEG "C");
-    CHECK_STR(row(2), "Obroty: 2450 obr/min");
-    CHECK_STR(row(3), "Pr\xC4\x99" "dko" "\xC5\x9B" "\xC4\x87" ": 87 km/h");
-    CHECK_STR(row(4), "Bieg: D3");
-    CHECK_STR(row(5), "Paliwo: 39 l, zasi\xC4\x99" "g: 522 km");
-    CHECK_STR(row(6), "Temp. zewn.: 14,0 " DEG "C");
-    CHECK(g_fake.posted.size() == 1);                    // render loop re-posted itself
+    CHECK(slot(kSlotCoolantArc) == kImgArc + 30);               // 90 of 50..130
+    CHECK(slot(kSlotCoolantBig0) == eng::bigGlyph('9', 1) && slot(kSlotCoolantBig1) == eng::bigGlyph('0', 1));
+    CHECK(slot(kSlotOilBig0) == eng::bigGlyph('1', 0) && slot(kSlotOilBig2) == eng::bigGlyph('4', 0));
+    CHECK(slot(kSlotTorqueBig0) == eng::bigGlyph('3', 0) && slot(kSlotTorqueBig1) == eng::bigGlyph('8', 0));
+    CHECK(slot(kSlotPowerBig0) == eng::bigGlyph('1', 0) && slot(kSlotPowerBig1) == eng::bigGlyph('9', 0) &&
+          slot(kSlotPowerBig2) == eng::bigGlyph('5', 0));      // 380 Nm * 3600 / 7023.5 = 194.8 KM
+    CHECK(slot(kSlotGearD) == kImgGear + 12 && slot(kSlotGearP) == kImgGear);   // 6 = D2
+    CHECK(slot(kSlotGBig) == kImgGNum + 100 && slot(kSlotGLat) == kImgLatNum + 100);   // "1,00"
+    CHECK(slot(kSlotGLon) == kImgBlank);                        // 65535 = not available, no speed yet
+    CHECK(slot(kSlotCoolantMark) == kImgBlank);                 // one sample: no maximum yet
+    CHECK(g_fake.posted.size() == 1);
 
-    // ---- only changed rows are written ----
-    std::map<unsigned, int> before = g_fake.modelWrites;
-    feed("engine.RPMSpeed", "{\"RPMSpeed\":3100}");
-    feed("engine.temperature", "{\"temperature\":{\"engine\":92,\"oil\":104}}");   // identical
+    // ---- a second sample makes the maxima; only changed slots are written ----
+    int oilW = writes(kSlotOilBig0);
+    feed("engine.temperature", "{\"temperature\":{\"engine\":98,\"oil\":104}}");
+    feed("engine.torque", "{\"torque\":400}");
     runPosted();
-    CHECK_STR(row(2), "Obroty: 3100 obr/min");
-    CHECK(g_fake.modelWrites[23] == before[23] + 1);
-    CHECK(g_fake.modelWrites[21] == before[21] && g_fake.modelWrites[22] == before[22]);
-    runPosted();                                         // nothing dirty: no writes at all
-    CHECK(g_fake.modelWrites[23] == before[23] + 1);
+    CHECK(slot(kSlotCoolantMark) == kImgMark + 30);             // max = min(90, 98)
+    CHECK(slot(kSlotCoolantMax) == kImgMaxNum + 90 && slot(kSlotOilMax) == kImgMaxNum + 104);
+    CHECK(slot(kSlotTorqueMax) == kImgMaxNum + 380 && slot(kSlotTorqueHi) == kImgScaleNum + 400);
+    CHECK(writes(kSlotOilBig0) == oilW);                        // oil unchanged: not rewritten
+    int w = writes(kSlotCoolantArc);
+    runPosted();                                                // nothing new: no writes
+    CHECK(writes(kSlotCoolantArc) == w);
 
-    // ---- rows that stay within one displayed value are not rewritten (RPM 3100 -> 3104 shows 3100 both times) ----
-    int w = g_fake.modelWrites[23];
-    feed("engine.RPMSpeed", "{\"RPMSpeed\":3104}");
-    runPosted();
-    CHECK(g_fake.modelWrites[23] == w);
-
-    // ---- error / bad values go back to "--" ----
+    // ---- bad values go back to "--", the maxima stay ----
     feed("engine.temperature", "{\"error\":400}");
-    feed("sensors.temperatureExterior", "{\"temperatureExterior\":null}");
     runPosted();
-    CHECK_STR(row(0), "Woda: --");
-    CHECK_STR(row(1), "Olej: --");
-    CHECK_STR(row(6), "Temp. zewn.: --");
-    CHECK_STR(row(2), "Obroty: 3100 obr/min");           // untouched
+    CHECK(slot(kSlotCoolantArc) == kImgBlank && slot(kSlotCoolantBig0) == eng::bigGlyph('-', 1));
+    CHECK(slot(kSlotCoolantMark) == kImgMark + 30);
 
-    // ---- negative outside temperature, neutral, empty text ----
-    feed("sensors.temperatureExterior", "{\"temperatureExterior\":-3.5}");
-    feed("driving.gear", "{\"gear\":1}");
-    feed("driving.speedActual", "");
+    // ---- HMI language: English pictures for EN_US, Polish again for PL ----
+    int bgWrites = writes(-1);                                  // slot -1 = model 99, the background
+    feed("vehicle.language", "{\"language\":3}");
     runPosted();
-    CHECK_STR(row(6), "Temp. zewn.: -3,5 " DEG "C");
-    CHECK_STR(row(4), "Bieg: N");
-    CHECK_STR(row(3), "Pr\xC4\x99" "dko" "\xC5\x9B" "\xC4\x87" ": --");
+    CHECK(g_fake.modelImage[kBackgroundModel] == kImgBackgroundEn && writes(-1) == bgWrites + 1);
+    CHECK(slot(kSlotPowerUnit) == kImgUnit + kUnitPs);
+    runPosted();
+    CHECK(writes(-1) == bgWrites + 1);                          // not sent again while it stays English
+    feed("vehicle.language", "{\"language\":18}");
+    runPosted();
+    CHECK(g_fake.modelImage[kBackgroundModel] == kImgBackground && slot(kSlotPowerUnit) == kImgUnit + kUnitKm);
 
-    // ---- onError is harmless, then finalize: the render loop stops posting ----
+    // ---- fuel next to the gears ----
+    feed("sensors.fuel", "{\"fuel\":{\"range\":522,\"reserve\":0,\"tanklevel\":39}}");
+    runPosted();
+    CHECK(slot(kSlotFuel) == kImgFuelNum + 39);
+    CHECK(slot(kSlotFuelUnit) == kImgFuelUnit);
+
+    // ---- settings buttons (OPTION menu): temperature -> Fahrenheit, colour -> 1 ----
+    feed("engine.temperature", "{\"temperature\":{\"engine\":90,\"oil\":100}}");
+    runPosted();
+    bmw::Parcel parcel;
+    bmw::ActionDelegate a = g_fake.actions[kSettingsAction + eng::kSetTemp];
+    a.stub(a.object, parcel);
+    CHECK(g_fake.modelText[kSettingsTextModel + eng::kSetTemp] == 211);
+    CHECK(slot(kSlotCoolantUnit) == kImgUnit + kUnitF);
+    CHECK(slot(kSlotCoolantBig0) == eng::bigGlyph('1', 0) && slot(kSlotCoolantBig2) == eng::bigGlyph('4', 0));   // 194 F
+    CHECK(slot(kSlotCoolantArc) == kImgArc + 30);
+    a = g_fake.actions[kSettingsAction + eng::kSetColor];
+    a.stub(a.object, parcel);
+    CHECK(g_fake.modelText[kSettingsTextModel] == 201);
+    CHECK(slot(kSlotCoolantArc) == kImgArc + 30 + 100000);     // the arc now comes from the colour-1 pack
+    CHECK(slot(kSlotCoolantBig0) == eng::bigGlyph('1', 0));     // the rest from the common one
+    CHECK(readFile(std::string(argv[2]) + "/settings.txt") == "color=1\ntemp=1\npower=0\ntorque=0\nfuel=0\n");
+
+    // ---- finalize writes max.txt (the last run's maxima); a new onInit starts from no maxima, keeps the settings ----
     bmw::BasicString<char> msg("integration error");
     app->onError(7, msg);
     app->onFinalize();
     CHECK(g_fake.baseOnFinalize == 1);
-    runPosted();                                         // the queued render tick sees the app is gone ...
-    CHECK(g_fake.posted.empty());                        // ... and does not post again
+    runPosted();
+    CHECK(g_fake.posted.empty());                               // the render loop stopped
+    std::string saved = readFile(maxFile);
+    printf("max.txt: %s", saved.c_str());
+    CHECK(saved.find("coolant=90.0\n") != std::string::npos && saved.find("torque=380.0\n") != std::string::npos);
+    CHECK(app->onInit());
+    CHECK(slot(kSlotCoolantMark) == kImgBlank && slot(kSlotCoolantMax) == kImgBlank);   // maxima reset at start
+    CHECK(slot(kSlotTorqueMax) == kImgBlank && slot(kSlotTorqueHi) == kImgScaleNum + 250);   // scale back to its minimum
+    CHECK(slot(kSlotCoolantUnit) == kImgUnit + kUnitF);         // settings kept (Fahrenheit)
+    app->onFinalize();
+    runPosted();
     info->destroy(app);
 
     if (g_fail) { printf("%d check(s) failed\n", g_fail); return 1; }
