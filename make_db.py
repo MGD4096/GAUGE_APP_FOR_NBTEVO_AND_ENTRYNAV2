@@ -18,7 +18,9 @@ a state there is about 1250 x 470 px: the 960 x 400 design is scaled by SCALE an
 
 Needs Pillow and a TrueType font (DejaVu Sans by default; --font to pick another one).
 
-Usage: make_db.py [--font FILE.ttf] [--x PX] [--y PX] [--layout-only] [--diag-out DIR]
+Usage: make_db.py [--screen 1280x480|800x480] [--scale F] [--font FILE.ttf] [--x PX] [--y PX] [--layout-only]
+                  [--diag-out DIR]
+--screen 800x480: 6.5" EntryNav2 screens - a separate 760 x 446 layout with larger fonts and thicker arcs.
 """
 import struct
 import argparse
@@ -85,6 +87,10 @@ SETTINGS_TITLE = ("Ustawienia", "Settings")
 W, H = 960, 400
 SCALE = 1.15                                      # 960 x 400 -> 1104 x 460 of the ~1250 x 470 visible area
 ORIGIN = (73, 4)                                  # where the scaled screen starts in the state (centred)
+SCREEN_PRESETS = {
+    "1280x480": (1.15, 73, 4),
+    "800x480": (1.0, 20, 10),                     # own 760 x 446 layout with bigger fonts (apply_screen_preset)
+}
 
 
 def sc(v):
@@ -110,6 +116,9 @@ MAX_BOX = (52, 160, 50, 22)                       # x, y, w, h inside a card: th
 SCALE_BOX = (44, 18)                              # w, h: a scale-end number, centred under the arc's end
 SCALE_Y = ARC_C[1] + 8                            # top of the scale-end numbers
 MAX_SIZE, SCALE_SIZE, FUEL_SIZE, G_SIZE, LAT_SIZE = 16, 13, 24, 46, 16   # font sizes
+TITLE_SIZE, UNIT_SIZE, SMALL_SIZE, FUEL_UNIT_SIZE, GEAR_SIZE = 17, 15, 13, 17, 30   # more font sizes
+TITLE_POS, MAX_LABEL = (16, 12), (16, 2, "la")   # card title; "max": x, y below MAX_BOX top, anchor
+DOT_R, PUMP_K, SCALE_COLOR = 8, 1.0, FAINT       # g-meter dot radius, fuel pump icon size factor, scale-end colour
 
 G_CARD = (305, 0, 350, 300)
 G_C, G_R = (175, 120), 86                         # g-meter centre / 2 g radius inside the card
@@ -249,15 +258,15 @@ def slots():
 def background(fp, lang="pl"):
     tx = BG_TEXTS[lang]
     c = Canvas(W, H)
-    f_title, f_unit, f_small = font(fp, 17), font(fp, 15), font(fp, 13)
+    f_title, f_unit, f_small = font(fp, TITLE_SIZE), font(fp, UNIT_SIZE), font(fp, SMALL_SIZE)
     for name, (cx, cy), _title, unit, scale, red in GAUGES:
         c.rrect(cx, cy, CARD_W, CARD_H, 12, CARD)
-        c.text((cx + 16, cy + 12), tx[name], f_title, TEXT2)
+        c.text((cx + TITLE_POS[0], cy + TITLE_POS[1]), tx[name], f_title, TEXT2)
         ac = (cx + ARC_C[0], cy + ARC_C[1])
         c.arc(ac, ARC_R, ARC_W, 0, 1, TRACK)
         if red is not None:
-            c.arc(ac, ARC_R + 9, 2.5, (red - scale[0]) / float(scale[1] - scale[0]), 1, RED, caps=False)
-        c.text((cx + 16, cy + MAX_BOX[1] + 2), "max", f_small, AMBER)   # unit and scale ends are slots (units)
+            c.arc(ac, ARC_R + 4 + ARC_W * 5 / 9.0, ARC_W / 3.6, (red - scale[0]) / float(scale[1] - scale[0]), 1, RED, caps=False)
+        c.text((cx + MAX_LABEL[0], cy + MAX_BOX[1] + MAX_LABEL[1]), "max", f_small, AMBER, MAX_LABEL[2])   # unit and scale ends are slots (units)
     gx, gy, gw, gh = G_CARD
     c.rrect(gx, gy, gw, gh, 12, CARD)
     gc = (gx + G_C[0], gy + G_C[1])
@@ -265,28 +274,33 @@ def background(fp, lang="pl"):
         c.circle(gc, G_R * k / 4.0, None, outline=TRACK, width=1.5 if k == 4 else 1)
     c.line((gc[0] - G_R, gc[1]), (gc[0] + G_R, gc[1]), TRACK, 1)
     c.line((gc[0], gc[1] - G_R), (gc[0], gc[1] + G_R), TRACK, 1)
-    c.text((gc[0] + G_R / 2.0 + 3, gc[1] - 3), "1 g", f_small, FAINT, "ld")
-    c.text((gc[0] + G_R + 3, gc[1] - 3), "2 g", f_small, FAINT, "ld")
+    if G_C[0] + G_R + 3 + 2.2 * SMALL_SIZE <= gw:   # ring labels right of the centre, or up the vertical axis
+        c.text((gc[0] + G_R / 2.0 + 3, gc[1] - 3), "1 g", f_small, FAINT, "ld")
+        c.text((gc[0] + G_R + 3, gc[1] - 3), "2 g", f_small, FAINT, "ld")
+    else:
+        c.text((gc[0] + 4, gc[1] - G_R / 2.0 + 2), "1g", f_small, FAINT, "la")
+        c.text((gc[0] + 4, gc[1] - G_R + 2), "2g", f_small, FAINT, "la")
     bx, by, bw, bh = G_BIG_BOX
     c.text((gx + bx + bw + 4, gy + by + bh - 12), "g", f_unit, MUTED, "ls")
     for key, (lx, ly, _lw, lh) in (("LAT", G_LAT_BOX), ("LON", G_LON_BOX)):
         c.text((gx + lx - 6, gy + ly + lh - 5), tx[key], f_small, MUTED, "rs")
-    c.text((gx + 16, gy + 12), tx["G"], f_title, TEXT2)
+    c.text((gx + TITLE_POS[0], gy + TITLE_POS[1]), tx["G"], f_title, TEXT2)
     c.rrect(*GEAR_CARD, 12, CARD)
     c.rrect(*FUEL_CARD, 12, CARD)
     # fuel pump icon
     px, py = FUEL_CARD[0] + FUEL_ICON[0], FUEL_CARD[1] + FUEL_ICON[1]
-    c.rrect(px - 8, py - 11, 12, 22, 2, MUTED)
-    c.rrect(px - 6, py - 8, 8, 6, 1, CARD)
-    c.line((px + 4, py - 6), (px + 8, py - 3), MUTED, 2)
-    c.line((px + 8, py - 3), (px + 8, py + 7), MUTED, 2)
-    c.line((px + 8, py + 7), (px + 5, py + 7), MUTED, 2)
+    k = PUMP_K
+    c.rrect(px - 8 * k, py - 11 * k, 12 * k, 22 * k, 2 * k, MUTED)
+    c.rrect(px - 6 * k, py - 8 * k, 8 * k, 6 * k, 1 * k, CARD)
+    c.line((px + 4 * k, py - 6 * k), (px + 8 * k, py - 3 * k), MUTED, 2 * k)
+    c.line((px + 8 * k, py - 3 * k), (px + 8 * k, py + 7 * k), MUTED, 2 * k)
+    c.line((px + 8 * k, py + 7 * k), (px + 5 * k, py + 7 * k), MUTED, 2 * k)
     return c.image()
 
 
 def unit_label(fp, text):
     c = Canvas(*UNIT_BOX)
-    c.text((UNIT_BOX[0] / 2.0, UNIT_BOX[1] / 2.0), text, font(fp, 15), MUTED, "mm")
+    c.text((UNIT_BOX[0] / 2.0, UNIT_BOX[1] / 2.0), text, font(fp, UNIT_SIZE), MUTED, "mm")
     return c.image()
 
 
@@ -319,7 +333,7 @@ def fuel_unit_label(fp, text):
     """The fuel unit, left aligned, so it sits right after the (right aligned) digits."""
     w, h = FUEL_UNIT_BOX[2], FUEL_UNIT_BOX[3]
     c = Canvas(w, h)
-    c.text((0, h / 2.0 + 1), text, font(fp, 17), TEXT2, "lm")
+    c.text((0, h / 2.0 + 1), text, font(fp, FUEL_UNIT_SIZE), TEXT2, "lm")
     return c.image()
 
 
@@ -327,9 +341,9 @@ def arc_frame(f, color, marker=False):
     c = Canvas(ARC_BOX[2], ARC_BOX[3])
     ac = (ARC_C[0] - ARC_BOX[0], ARC_C[1] - ARC_BOX[1])
     if marker:
-        a = arc_point(ac, ARC_R - 12, f)
+        a = arc_point(ac, ARC_R - ARC_W - 3, f)
         b = arc_point(ac, ARC_R + 6, f)
-        c.line(a, b, AMBER, 3)
+        c.line(a, b, AMBER, max(3, ARC_W / 3.0))
     elif f > 0:
         c.arc(ac, ARC_R, ARC_W, 0, f, color)
     return c.image()
@@ -350,8 +364,8 @@ def dot_frame(ix, iy, color=ACCENT, light=ACCENT_LIGHT):
     p = (o + (ix - G_STEPS) * G_R / float(G_STEPS), o + (iy - G_STEPS) * G_R / float(G_STEPS))
     if (ix, iy) != (G_STEPS, G_STEPS):
         c.line((o, o), p, light, 2)
-    c.circle(p, 8, color)
-    c.circle(p, 3, TEXT)
+    c.circle(p, DOT_R, color)
+    c.circle(p, DOT_R * 3 / 8.0, TEXT)
     return c.image()
 
 
@@ -359,7 +373,7 @@ def gear_cell(fp, text, w, lit, pill=PILL):
     c = Canvas(w, GEAR_H)
     if lit:
         c.rrect(0, 0, w, GEAR_H, 10, pill)
-    c.text((w / 2.0, GEAR_H / 2.0), text, font(fp, 30 if len(text) < 2 else 28), TEXT if lit else FAINT, "mm")
+    c.text((w / 2.0, GEAR_H / 2.0), text, font(fp, GEAR_SIZE if len(text) < 2 else GEAR_SIZE - 2), TEXT if lit else FAINT, "mm")
     return c.image()
 
 
@@ -405,7 +419,7 @@ def common_images(fp):
     for v in range(MAXNUM_MAX + 1):
         imgs[IMG_MAXNUM + v] = number_image(fp, str(v), mw, mh, MAX_SIZE, AMBER, "l")
     for v in scale_values():
-        imgs[IMG_SCALENUM + v] = number_image(fp, str(v), SCALE_BOX[0], SCALE_BOX[1], SCALE_SIZE, FAINT, "m")
+        imgs[IMG_SCALENUM + v] = number_image(fp, str(v), SCALE_BOX[0], SCALE_BOX[1], SCALE_SIZE, SCALE_COLOR, "m")
     fw, fh = FUEL_BOX[2], FUEL_BOX[3]
     for v in range(FUELNUM_MAX + 1):
         imgs[IMG_FUELNUM + v] = number_image(fp, str(v), fw, fh, FUEL_SIZE, TEXT, "r")
@@ -782,22 +796,78 @@ def anim_frame(fp, k):
     return c.image()
 
 
+def apply_screen_preset(screen):
+    """Adjust layout geometry for the chosen screen preset (1280x480 default or 800x480).
+
+    800x480 (6.5" screens): the same pieces, but bigger fonts and thicker arcs instead of a scaled-down 1280 design -
+    the smaller physical screen needs larger pixels per character to stay readable."""
+    global W, H, SCALE, CARD_W, CARD_H, GAUGES, ARC_C, ARC_R, ARC_W, ARC_BOX, BIG, UNIT_BOX
+    global BIG_Y, MAX_BOX, SCALE_BOX, SCALE_Y, G_CARD, G_C, G_R, G_BOX, G_BIG_BOX, G_LAT_BOX, G_LON_BOX
+    global GEAR_CARD, GEAR_CELLS, GEAR_Y, GEAR_H, FUEL_CARD, FUEL_ICON, FUEL_BOX, FUEL_UNIT_BOX
+    global MAX_SIZE, SCALE_SIZE, FUEL_SIZE, G_SIZE, LAT_SIZE
+    global TITLE_SIZE, UNIT_SIZE, SMALL_SIZE, FUEL_UNIT_SIZE, GEAR_SIZE, DOT_R, PUMP_K, SCALE_COLOR, TITLE_POS, MAX_LABEL
+    if screen != "800x480":
+        return
+    W, H, SCALE = 760, 446, 1.0
+    CARD_W, CARD_H = 262, 218                       # 262 + 8 + 220 + 8 + 262 = 760
+    GAUGES = [
+        ("COOLANT", (0, 0), "P\u0142yn ch\u0142odniczy", "\u00b0C", (50, 130), 115),
+        ("OIL", (0, 228), "Olej silnikowy", "\u00b0C", (50, 150), 135),
+        ("POWER", (498, 0), "Moc", "KM", None, None),
+        ("TORQUE", (498, 228), "Moment obrotowy", "Nm", None, None),
+    ]
+    ARC_C, ARC_R, ARC_W = (131, 150), 100, 15
+    ARC_BOX = (ARC_C[0] - ARC_R - 8, ARC_C[1] - ARC_R - 8, 2 * ARC_R + 16, ARC_R + 18)
+    BIG = dict(cell=42, h=70, size=66)
+    BIG_Y = 72
+    UNIT_BOX = (70, 26)
+    SCALE_BOX = (56, 26)
+    SCALE_Y = ARC_C[1] + 6
+    MAX_BOX = (64, 184, 70, 30)
+    MAX_SIZE, SCALE_SIZE, SMALL_SIZE, UNIT_SIZE, TITLE_SIZE = 26, 21, 21, 22, 24
+    SCALE_COLOR = MUTED
+    TITLE_POS, MAX_LABEL = (14, 10), (14, MAX_BOX[3] / 2.0, "lm")
+    G_CARD = (270, 0, 220, 300)
+    G_C, G_R = (110, 132), 80
+    G_BOX = 2 * G_R + 28
+    DOT_R = 11
+    G_SIZE, LAT_SIZE = 50, 22
+    G_BIG_BOX = (110 - 75, 214, 150, 54)
+    G_LAT_BOX, G_LON_BOX = (46, 268, 54, 28), (166, 268, 52, 28)
+    GEAR_CARD = (270, 308, 220, 66)
+    GEAR_CELLS = [("P", 8, 44), ("R", 54, 44), ("N", 100, 44), ("D", 146, 66)]
+    GEAR_Y, GEAR_H, GEAR_SIZE = 6, 54, 38
+    FUEL_CARD = (270, 382, 220, 64)
+    FUEL_ICON, PUMP_K = (40, 32), 1.4
+    FUEL_BOX, FUEL_SIZE = (62, 10, 80, 44), 38
+    FUEL_UNIT_BOX, FUEL_UNIT_SIZE = (146, 18, 50, 32), 26
+
+
 def main():
+    global SCALE
     ap = argparse.ArgumentParser()
     ap.add_argument("--font")
-    ap.add_argument("--x", type=int, default=ORIGIN[0])
-    ap.add_argument("--y", type=int, default=ORIGIN[1])
+    ap.add_argument("--screen", choices=sorted(SCREEN_PRESETS), default="1280x480",
+                    help="screen preset: 1280x480 (default) or 800x480")
+    ap.add_argument("--scale", type=float, default=None, help="override scale factor")
+    ap.add_argument("--x", type=int, default=None)
+    ap.add_argument("--y", type=int, default=None)
     ap.add_argument("--layout-only", action="store_true", help="only GaugeApp.xml and src/gauge_ids.hpp (no Pillow)")
     ap.add_argument("--menu", choices=sorted(MENUS), default=DEFAULT_MENU,
                     help="where the row is: connected (ConnectedDrive, default) or media (Media/Radio)")
     ap.add_argument("--diag-out", metavar="DIR",
                     help="only a diagnostic set into DIR: XML with test pages, a 3-image DB, the texts and test.png")
     a = ap.parse_args()
+    apply_screen_preset(a.screen)
+    preset_scale, preset_x, preset_y = SCREEN_PRESETS[a.screen]
+    SCALE = a.scale if a.scale is not None else preset_scale
+    ox = a.x if a.x is not None else preset_x
+    oy = a.y if a.y is not None else preset_y
     slot_list = slots()
     if a.diag_out:
         return diag(a, slot_list)
     with open(os.path.join(HERE, "GaugeApp.xml"), "w", encoding="utf-8", newline="\n") as f:
-        f.write(xml(slot_list, a.x, a.y, menu_name=a.menu))
+        f.write(xml(slot_list, ox, oy, menu_name=a.menu))
     with open(os.path.join(HERE, "src", "gauge_ids.hpp"), "w", encoding="utf-8", newline="\n") as f:
         f.write(header(slot_list))
     if a.layout_only:

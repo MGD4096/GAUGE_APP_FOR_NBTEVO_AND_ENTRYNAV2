@@ -134,6 +134,7 @@ kompilacji Pillow nie jest potrzebny. Po zmianie wyglądu:
 
 ```
 python3 make_db.py              # Pillow + font DejaVu Sans (--font plik.ttf, --x / --y: przesunięcie ekranu)
+python3 make_db.py --screen 800x480   # ekran 6,5" 800x480: osobny układ 760x446 z większymi napisami
 make check                      # testy hostowe obu wersji (zwykły g++)
 ```
 
