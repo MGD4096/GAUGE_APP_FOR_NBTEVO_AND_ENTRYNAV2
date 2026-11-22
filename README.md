@@ -62,6 +62,8 @@ are logged for the first 5 reads of every property.
 
 The generated files (`GaugeApp.xml`, `src/gauge_ids.hpp`, both zips, `res/preview.png`) are committed, so building
 needs no Pillow. After changing the look: `python3 make_db.py` (Pillow + DejaVu Sans), then `make check`.
+For 6.5" EntryNav2 units with an 800×480 screen: `python3 make_db.py --screen 800x480` (a separate 760×446
+layout with larger fonts; the image ids and `src/gauge_ids.hpp` stay the same, so `libGaugeApp.so` does not change).
 
 - **NBT Evo:** QNX SDP 6.5 (`qcc`) and the car's BMW libraries (`/opt/hmi/ID5/lib`) in `lib/NBT_evo_libs`, then `make`.
 - **EntryNav2:** the car's `libAppFramework.A.so` / `libCoreFramework.A.so` (`/opt/hmi/lib`) in `lib/Entry_Evo_libs`,
