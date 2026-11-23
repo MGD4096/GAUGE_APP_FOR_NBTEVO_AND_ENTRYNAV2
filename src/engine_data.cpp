@@ -44,6 +44,7 @@
 #endif
 #include "cds_values.hpp"
 #include "gauge_view.hpp"
+#include "screens_view.hpp"
 
 #ifdef GAUGE_ENTRYNAV2
 #define ENGINE_APP_TARGET "EntryNav2"
@@ -159,6 +160,8 @@ const char* const kMaxFile = GAUGE_DATA_DIR "/max.txt";
 const char* const kMaxFileTmp = GAUGE_DATA_DIR "/max.txt.new";
 const char* const kSettingsFile = GAUGE_DATA_DIR "/settings.txt";
 const char* const kSettingsFileTmp = GAUGE_DATA_DIR "/settings.txt.new";
+const char* const kEnvFile = GAUGE_DATA_DIR "/torque-env.txt";     // engine load: largest torque per rpm (kept)
+const char* const kCalFile = GAUGE_DATA_DIR "/fuel-cal.txt";       // litres per engine.consumption step (kept)
 #ifdef GAUGE_ENTRYNAV2
 const char* const kDisableB = "/opt/hmi/data/ro/Plugins/GaugeApp/app.disable";
 const char* const kAppLog = GAUGE_DATA_DIR "/gauge-app.log";
@@ -282,6 +285,18 @@ long            g_subscribedAt = -1;         // monotonic s of the subscription,
 bool            g_noDataLogged = false;
 int             g_totalSeen = 0;
 long            g_savedAt = 0;               // monotonic s of the last max.txt write
+// screens 1..3
+eng::GMax       g_gmax;                      // g per direction of this run
+eng::TorqueEnv  g_env;                       // kept in torque-env.txt
+eng::FuelCal    g_cal;                       // kept in fuel-cal.txt
+eng::Trip       g_trip;                      // since onInit
+eng::Perf       g_perf;
+eng::WarmUp     g_warm;
+double          g_brakeFull = 0;             // the largest brakeContact seen
+bool            g_titleMatched = false;      // a screen title was seen in hmi.graphicalContext: render only that one
+int             g_visible = -1;              // screen on display (-1: none of ours)
+struct ScreenCache { unsigned shown[64]; bool valid; unsigned bg; };
+ScreenCache     g_cache[eng::ids::kScreenCount];   // screens 1..3 (index 0 unused: the engine screen has g_shown)
 
 long monoSec() {
     struct timespec ts;
@@ -331,6 +346,58 @@ void saveMaxima() {
     fclose(f);
     if (rename(kMaxFileTmp, kMaxFile) != 0) elog("cannot rename %s", kMaxFileTmp);
     g_savedAt = monoSec();
+}
+
+// ---- kept between runs: torque envelope (engine load) and the fuel counter calibration ----------------------------
+bool readSmallFile(const char* path, char* buf, size_t n) {
+    FILE* f = fopen(path, "r");
+    if (!f) { buf[0] = 0; return false; }
+    size_t k = fread(buf, 1, n - 1, f);
+    fclose(f);
+    buf[k] = 0;
+    return true;
+}
+
+void writeSmallFile(const char* path, const char* text) {
+    char tmp[200];
+    snprintf(tmp, sizeof(tmp), "%s.new", path);
+    mkdir(kDataDir, 0755);
+    FILE* f = fopen(tmp, "w");
+    if (!f) { elog("cannot write %s", tmp); return; }
+    fputs(text, f);
+    fflush(f);
+    fsync(fileno(f));
+    fclose(f);
+    if (rename(tmp, path) != 0) elog("cannot rename %s", tmp);
+}
+
+void loadKept() {
+    char buf[1024];
+    eng::TorqueEnv env;
+    eng::FuelCal cal;
+    if (readSmallFile(kEnvFile, buf, sizeof(buf))) eng::parseEnv(env, buf);
+    if (readSmallFile(kCalFile, buf, sizeof(buf))) eng::parseCal(cal, buf);
+    pthread_mutex_lock(&g_dataMutex);
+    g_env = env;
+    g_cal = cal;
+    pthread_mutex_unlock(&g_dataMutex);
+    elog("fuel counter: %.3f ul per step (%d calibrations from the tank level)", cal.factor * 1e6, cal.calibrations);
+}
+
+// Only what changed since the last write.
+void saveKept() {
+    char env[512], cal[256];
+    bool we, wc;
+    pthread_mutex_lock(&g_dataMutex);
+    we = g_env.changed;
+    wc = g_cal.changed;
+    if (we) eng::formatEnv(g_env, env, sizeof(env));
+    if (wc) eng::formatCal(g_cal, cal, sizeof(cal));
+    g_env.changed = false;
+    g_cal.changed = false;
+    pthread_mutex_unlock(&g_dataMutex);
+    if (we) writeSmallFile(kEnvFile, env);
+    if (wc) writeSmallFile(kCalFile, cal);
 }
 
 // ---- the settings file (colour and units, the OPTION menu) --------------------------------------------------------
@@ -465,6 +532,7 @@ const char* const kFramesFile = "GaugeApp_frames.bin";
 const long        kFramesMax = 16L * 1024L * 1024L;
 struct Pack { unsigned char* data; unsigned size, count; };
 Pack              g_common = { NULL, 0, 0 };
+Pack              g_screens = { NULL, 0, 0 };     // GaugeApp_frames_s.bin: screens 1..3
 Pack              g_color = { NULL, 0, 0 };
 int               g_colorLoaded = -1;
 bool              g_missingLogged = false;
@@ -494,6 +562,7 @@ bool loadPack(const char* name, Pack& out) {
 }
 
 bool loadFrames() {
+    if (!g_screens.data) loadPack("GaugeApp_frames_s.bin", g_screens);
     return g_common.data || loadPack(kFramesFile, g_common);
 }
 
@@ -520,9 +589,10 @@ bool findIn(const Pack& pk, unsigned id, const unsigned char** data, unsigned* s
     return false;
 }
 
-// Colour pack first, then the common one.
+// Colour pack first, then the screens' and the common one.
 bool findFrame(unsigned id, const unsigned char** data, unsigned* size) {
-    return (g_color.data && findIn(g_color, id, data, size)) || (g_common.data && findIn(g_common, id, data, size));
+    return (g_color.data && findIn(g_color, id, data, size)) || (g_screens.data && findIn(g_screens, id, data, size)) ||
+           (g_common.data && findIn(g_common, id, data, size));
 }
 
 bool sendFrame(bmw::PluginApp* app, unsigned model, unsigned id) {
@@ -563,6 +633,74 @@ int renderView(bmw::PluginApp* app, bool force) {
     }
     g_shownValid = true;
     return written;
+}
+
+// Screen s (1..3): picks the frame of every slot and sends each one that differs from what is shown.
+int renderScreen(bmw::PluginApp* app, int s, bool force) {
+    using namespace eng;
+    Metrics m;
+    GMax gm;
+    TorqueEnv env;
+    FuelCal cal;
+    double brakeFull;
+    unsigned view[64];
+    int count = 0;
+    const long now = monoMs();
+    pthread_mutex_lock(&g_dataMutex);
+    m = g_metrics;
+    switch (s) {
+    case kScreenDriving:
+        gm = g_gmax; env = g_env; brakeFull = g_brakeFull;
+        computeDriving(m, gm, env, brakeFull, view);
+        count = ids::kDrvSlotCount;
+        break;
+    case kScreenFuel:
+        cal = g_cal;
+        computeFuel(m, g_trip, cal, now, view);
+        count = ids::kFuelSlotCount;
+        break;
+    case kScreenPerf:
+        computePerf(m, g_perf, g_gmax, now, view);
+        count = ids::kPerfSlotCount;
+        break;
+    case kScreenWarm:
+        computeWarm(m, g_warm, g_settings, now, view);
+        count = ids::kWarmSlotCount;
+        break;
+    }
+    pthread_mutex_unlock(&g_dataMutex);
+    if (!g_common.data || !count) return 0;
+    ScreenCache& c = g_cache[s];
+    int written = 0;
+    const unsigned base = 1000u * (unsigned)s;
+    const unsigned bg = screenBackground(s, m.polish());
+    if (force || !c.valid || bg != c.bg) {
+        if (sendFrame(app, base + 99, bg)) ++written;
+        c.bg = bg;
+    }
+    for (int i = 0; i < count; ++i) {
+        if (!force && c.valid && c.shown[i] == view[i]) continue;
+        if (sendFrame(app, base + 100 + (unsigned)i, view[i])) ++written;
+        c.shown[i] = view[i];
+    }
+    c.valid = true;
+    return written;
+}
+
+// Which screen hmi.graphicalContext says is on display: its menuTitle is the title of the state (the text DB's, Polish
+// or English). -1: none of ours (another app, the settings, a menu).
+int screenForTitle(const char* t) {
+    static const char* const kTitles[eng::ids::kScreenCount][2] = {
+        { "GAUGE APP", "GAUGE APP" }, { "Jazda", "Driving" }, { "Spalanie i trasa", "Fuel and trip" },
+        { "Pomiary", "Performance" }, { "Rozgrzewanie", "Warm-up" } };
+    for (int s = 0; s < eng::ids::kScreenCount; ++s)
+        if (strcmp(t, kTitles[s][0]) == 0 || strcmp(t, kTitles[s][1]) == 0) return s;
+    return -1;
+}
+
+void invalidateScreens() {
+    g_shownValid = false;
+    for (int s = 0; s < eng::ids::kScreenCount; ++s) g_cache[s].valid = false;
 }
 
 unsigned char* g_anim[kDiagAnimFrames];      // diagnostics: animation frames, loaded once
@@ -610,14 +748,25 @@ void diagAnimTick(bmw::PluginApp* app) {
 void renderRun(void* /*self*/) {
     bmw::PluginApp* app = g_app;
     if (!app) return;                                    // finalized: do not post again
-    bool dirty, maxDirty;
+    bool dirty, maxDirty, matched;
+    int visible;
     pthread_mutex_lock(&g_dataMutex);
     dirty = g_dirty;
     maxDirty = g_maxDirty;
+    matched = g_titleMatched;
+    visible = g_visible;
+    g_trip.tick(monoMs(), g_cal.factor);
     pthread_mutex_unlock(&g_dataMutex);
-    if (dirty) renderView(app, false);
+    // Until a title of ours was seen, every screen is written (the car may not report it); then only the one shown.
+    if (dirty && (!matched || visible == eng::kScreenEngine)) renderView(app, false);
+    for (int s = 1; s < eng::ids::kScreenCount; ++s)
+        if (!matched || visible == s) renderScreen(app, s, false);
     diagAnimTick(app);
-    if (maxDirty && monoSec() - g_savedAt >= kSaveEveryS) saveMaxima();
+    if (monoSec() - g_savedAt >= kSaveEveryS) {
+        if (maxDirty) saveMaxima();
+        else g_savedAt = monoSec();
+        saveKept();
+    }
     markStableWhenDue();
     if (!g_noDataLogged && g_subscribedAt >= 0 && g_totalSeen == 0 && monoSec() - g_subscribedAt >= kNoDataWarnS) {
         g_noDataLogged = true;
@@ -634,16 +783,61 @@ void handleCds(int prop, const bmw::BasicString<unsigned short>& value) {
     bool ok, wasOk, newMax;
     int seen;
     long now = monoMs();
+    int titleScreen = -2;
+    char title[sizeof(g_metrics.title)];
     pthread_mutex_lock(&g_dataMutex);
     if (eng::apply(g_metrics, prop, text, now)) g_dirty = true;
     newMax = eng::updateMaxima(g_maxima, g_metrics, prop);
     if (newMax) { g_dirty = true; g_maxDirty = true; }
+    const eng::Metrics& m = g_metrics;
+    switch (prop) {                                      // screens 1..3
+    case eng::kSpeed:
+        if (m.hasSpeed) { g_trip.speed(now, m.speed); g_perf.speed(now, m.speed); }
+        else { g_trip.noSpeed(); g_perf.noSpeed(); }
+        g_gmax.sample(m.hasLatG() && m.hasLonG(), m.hasLatG() ? m.latG() : 0, m.hasLonG() ? m.lonG() : 0);
+        break;
+    case eng::kAccel:
+        g_gmax.sample(m.hasLatG() && m.hasLonG(), m.hasLatG() ? m.latG() : 0, m.hasLonG() ? m.lonG() : 0);
+        break;
+    case eng::kTorque:
+        if (m.hasTorque && m.hasRpm) g_env.sample(m.rpm, m.torque);
+        break;
+    case eng::kRpm:
+        if (m.hasTorque && m.hasRpm) g_env.sample(m.rpm, m.torque);
+        g_warm.update(m, now);
+        break;
+    case eng::kEngineTemp:
+    case eng::kEngineStatus:
+        g_warm.update(m, now);
+        break;
+    case eng::kConsumption:
+        if (m.hasConsumption) g_cal.addSteps(g_trip.counterValue(now, m.consumption));
+        break;
+    case eng::kFuel:
+        if (m.hasFuel && g_cal.tank(m.fuel)) titleScreen = -3;      // (logged below)
+        break;
+    case eng::kBrake:
+        if (m.hasBrake && m.brake > g_brakeFull) g_brakeFull = m.brake;
+        break;
+    case eng::kGraphic:
+        if (m.hasTitle) {
+            titleScreen = screenForTitle(m.title);
+            if (titleScreen >= 0) g_titleMatched = true;
+            if (titleScreen != g_visible) memcpy(title, m.title, sizeof(title));
+            else titleScreen = -2;                       // no change
+            if (titleScreen != -2) g_visible = titleScreen;
+        }
+        break;
+    }
     ok = eng::propValid(g_metrics, prop);
     seen = ++g_seen[prop];
     wasOk = g_lastOk[prop];
     g_lastOk[prop] = ok;
     ++g_totalSeen;
+    double factor = g_cal.factor;
     pthread_mutex_unlock(&g_dataMutex);
+    if (titleScreen >= -1) elog("on screen: '%s' -> %s", title, titleScreen >= 0 ? "screen of this app" : "other");
+    if (titleScreen == -3) elog("fuel counter calibrated from the tank level: %.3f ul per step", factor * 1e6);
     // The first values of every property are logged raw (that is what is needed to check a car's layout); after that
     // only a change between usable / not usable, so a revving engine does not flood the log.
     if (seen <= 5 || ok != wasOk) elog("CDS %s = '%s' -> %s", eng::propName(prop), text, ok ? "ok" : "not usable");
@@ -657,7 +851,9 @@ template <int P> bool onCds(void* /*app*/, const bmw::BasicString<unsigned short
 }
 
 const CdsStub kStubs[eng::kPropCount] = { &onCds<0>, &onCds<1>, &onCds<2>, &onCds<3>, &onCds<4>, &onCds<5>,
-                                          &onCds<6>, &onCds<7> };
+                                          &onCds<6>, &onCds<7>, &onCds<8>, &onCds<9>, &onCds<10>, &onCds<11>,
+                                          &onCds<12>, &onCds<13>, &onCds<14>, &onCds<15>, &onCds<16>,
+                                          &onCds<17>, &onCds<18>, &onCds<19>, &onCds<20>, &onCds<21> };
 
 void subscribeRun(void* /*self*/) {
     bmw::PluginApp* app = g_app;
@@ -698,7 +894,8 @@ void onSetting(bmw::PluginApp* app, int s) {
     showSettingText(app, s);
     if (s == eng::kSetColor) {
         loadColor(st.color);
-        renderView(app, true);                           // same frame ids, other pictures: send everything again
+        invalidateScreens();                             // same frame ids, other pictures: send everything again
+        renderView(app, true);
     } else {
         renderView(app, false);
     }
@@ -734,6 +931,17 @@ bool appOnInit(bmw::PluginApp* self) {
     g_savedAt = monoSec();
     resetMaxima();
     loadSettings();
+    loadKept();
+    pthread_mutex_lock(&g_dataMutex);
+    g_gmax = eng::GMax();
+    g_trip.reset(monoMs());
+    g_perf = eng::Perf();
+    g_warm.reset();
+    g_brakeFull = 0;
+    g_titleMatched = false;
+    g_visible = -1;
+    pthread_mutex_unlock(&g_dataMutex);
+    invalidateScreens();
     loadFrames();
     loadColor(g_settings.color);
     for (int s = 0; s < eng::kSettingCount; ++s) showSettingText(self, s);
@@ -755,6 +963,7 @@ void appOnFinalize(bmw::PluginApp* self) {
     elog("onFinalize");
     g_app = NULL;                                        // posted Runnables see this and stop
     if (g_maxDirty) saveMaxima();
+    saveKept();
     self->onFinalize();
 }
 

@@ -5,6 +5,7 @@
 #include <string>
 #include "cds_values.hpp"
 #include "gauge_view.hpp"
+#include "screens_view.hpp"
 
 using namespace eng;
 using namespace eng::ids;
@@ -266,13 +267,211 @@ static void testLanguage() {
     CHECK(view[kSlotPowerUnit] == kImgUnit + kUnitKw);           // kW / hp are the same in every language
 }
 
+// ---- screens 1..3 ---------------------------------------------------------------------------------------------------
+static void testNewProps() {
+    Metrics m;
+    CHECK(apply(m, kPedal, "{\"acceleratorPedal\":{\"position\":72,\"ecoPosition\":0}}", 0) && m.hasPedal && m.pedal == 72);
+    CHECK(apply(m, kBrake, "{\"brakeContact\":16}", 0) && m.brake == 16);
+    CHECK(apply(m, kSteer, "{\"steeringWheel\":{\"angle\":-3.9,\"speed\":65535.0,\"error\":0}}", 0) && NEAR(m.steer, -3.9));
+    CHECK(apply(m, kSteer, "{\"steeringWheel\":{\"angle\":10.0,\"speed\":0,\"error\":1}}", 0) && !m.hasSteer);
+    CHECK(apply(m, kConsumption, "{\"consumption\":30119}", 0) && m.consumption == 30119u);
+    CHECK(apply(m, kAvgConsumption, "{\"averageConsumption\":{\"averageConsumption1\":18.9,\"averageConsumption2\":18.9,\"unit\":1}}", 0) && NEAR(m.avgConsumption, 18.9));
+    CHECK(apply(m, kAvgSpeed, "{\"averageSpeed\":{\"averageSpeed1\":13.8,\"averageSpeed2\":13.8,\"unit\":1}}", 0) && NEAR(m.avgSpeed, 13.8));
+    CHECK(apply(m, kStyle, "{\"drivingStyle\":{\"accelerate\":7.5,\"brake\":6.0,\"shift\":7.5}}", 0) && m.styleBrake == 6.0);
+    CHECK(apply(m, kShift, "{\"shiftIndicator\":0}", 0) && m.hasShift && m.shift == 0);
+    CHECK(apply(m, kFuel, "{\"fuel\":{\"range\":498,\"reserve\":0,\"tanklevel\":37}}", 0) && m.range == 498 && m.fuel == 37);
+    CHECK(apply(m, kGraphic, "{\"graphicalContext\":{\"visibleContext\":3,\"menuTitle\":\"Pomiary\",\"appType\":\"4\"}}", 0));
+    CHECK(m.hasTitle && strcmp(m.title, "Pomiary") == 0);
+    CHECK(!apply(m, kGraphic, "{\"graphicalContext\":{\"visibleContext\":3,\"menuTitle\":\"Pomiary\"}}", 0));
+    CHECK(!apply(m, kGraphic, "{\"graphicalContext\":{\"visibleContext\":3}}", 0) && strcmp(m.title, "Pomiary") == 0);
+    CHECK(strcmp(propName(kGraphic), "hmi.graphicalContext") == 0 && strcmp(propName(kConsumption), "engine.consumption") == 0);
+}
+
+static void testDriveStats() {
+    // g per direction: two samples on the same side, the smaller counts
+    GMax g;
+    g.sample(true, 0.5, -0.8);
+    CHECK(!g.has[kGRight]);
+    g.sample(true, 0.4, -1.0);
+    CHECK(g.has[kGRight] && NEAR(g.v[kGRight], 0.4) && g.has[kGBrake] && NEAR(g.v[kGBrake], 0.8) && !g.has[kGLeft]);
+    g.sample(true, -0.3, 0.2);                                   // side changed: nothing
+    CHECK(!g.has[kGLeft] && !g.has[kGAccel]);
+
+    // torque envelope and load
+    TorqueEnv e;
+    e.sample(3000, 300); e.sample(3100, 320);                    // same bin: 300
+    CHECK(NEAR(e.at(3050), 300) && NEAR(e.at(3300), 300) && NEAR(e.at(5000), 0));
+    Metrics m;
+    m.hasTorque = m.hasRpm = true; m.torque = 150; m.rpm = 3000;
+    double l = 0;
+    CHECK(e.load(m, &l) && NEAR(l, 50));
+    m.rpm = 6000;
+    CHECK(!e.load(m, &l));                                       // nothing known there
+    char buf[512];
+    formatEnv(e, buf, sizeof(buf));
+    TorqueEnv e2;
+    parseEnv(e2, buf);
+    CHECK(NEAR(e2.nm[12], 300) && NEAR(e2.nm[0], 0));
+
+    // fuel calibration from the tank
+    FuelCal c;
+    CHECK(!c.tank(40));                                          // anchor
+    c.addSteps(4e6);
+    CHECK(!c.tank(35));                                          // 5 l: not enough
+    CHECK(c.tank(32) && c.calibrations == 1 && NEAR(c.factor, 8.0 / 4e6));
+    CHECK(!c.tank(45) && NEAR(c.anchorTank, 45));                // refuelled: new anchor
+    formatCal(c, buf, sizeof(buf));
+    FuelCal c2;
+    parseCal(c2, buf);
+    CHECK(fabs(c2.factor - c.factor) < 1e-12 && c2.calibrations == 1 && c2.hasAnchor && c2.anchorTank == 45);
+
+    // trip: distance, counter wrap, l/h, history bars
+    Trip t;
+    t.reset(0);
+    t.speed(0, 72); t.speed(1000, 72);                           // 72 km/h for 1 s = 20 m
+    CHECK(NEAR(t.km, 0.02));
+    t.counterValue(0, 65000);
+    CHECK(t.steps == 0);
+    t.counterValue(1000, 64);                                    // wrapped: +600
+    CHECK(t.steps == 600);
+    t.counterValue(2000, 1264);
+    t.counterValue(2500, 1864);                                  // 2400 steps over 2.5 s
+    double lph = 0;
+    CHECK(t.litresPerHour(2500, 1e-6, &lph) && fabs(lph - 2400 * 1e-6 / (2500 / 3600000.0)) < 0.01);
+    CHECK(t.litresPerHour(5000, 1e-6, &lph) && lph == 0);       // no reading for 2.5 s: no fuel
+    t.speed(3000, 72); t.speed(6000, 72); t.speed(9000, 72);    // 9 s at 72 km/h in all: 180 m
+    CHECK(fabs(t.km - 0.18) < 1e-9);
+    t.tick(10000, 1e-6);
+    CHECK(t.barCount == 1 && NEAR(t.bars[0], 2400 * 1e-6 / t.km * 100));
+    for (int i = 0; i < 40; ++i) t.tick(20000 + i * 10000, 1e-6);
+    CHECK(t.barCount == kTripBars);
+}
+
+static void testPerf() {
+    Perf p;
+    CHECK(p.status() == kPerfNoData);
+    p.speed(0, 0);
+    p.speed(500, 0);
+    CHECK(p.status() == kPerfReady);
+    // 0..100 in 10 km/h steps every 700 ms after the start at 500 ms; 100 reached at 500 + 7000 ms
+    for (int i = 1; i <= 12; ++i) p.speed(500 + i * 700, i * 10);
+    CHECK(p.r0100 == 7000 && p.best0100 == 7000);
+    CHECK(p.r60100 == 2800 && p.r80120 == 2800);                 // 60 at 4700 ms, 100 at 7500 ms
+    CHECK(p.status() == kPerfRunning);                           // the 1/4 mile is still on
+    // brake from 120 to 0: passes 100 between two readings
+    long t0 = 500 + 12 * 700;
+    p.speed(t0 + 500, 110);                                      // slower: the run ends
+    CHECK(p.status() != kPerfRunning);
+    p.speed(t0 + 1000, 90);
+    CHECK(p.status() == kPerfBraking);
+    for (int k = 1; k <= 9; ++k) p.speed(t0 + 1000 + k * 300, 90 - k * 10);
+    CHECK(p.rBrake > 20 && p.rBrake < 60 && p.status() == kPerfReady);
+    // an aborted run (slower before 100) keeps the old result
+    p.speed(t0 + 5000, 20);
+    p.speed(t0 + 5500, 10);
+    CHECK(p.r0100 == 7000);
+}
+
+static void testScreens() {
+    Metrics m;
+    m.language = 18;
+    GMax g;
+    TorqueEnv e;
+    unsigned v[64];
+    computeDriving(m, g, e, 0, v);
+    CHECK(v[kDrvSlotGasBar] == kImgGasBar && v[kDrvSlotGasPct] == kImgBlank && v[kDrvSlotGear] == kImgGear2 + 12);
+    m.hasPedal = true; m.pedal = 50; m.hasBrake = true; m.brake = 15; m.hasGear = true; m.gear = 6;
+    m.hasSteer = true; m.steer = 35;
+    computeDriving(m, g, e, 0, v);
+    CHECK(v[kDrvSlotGasBar] == kImgGasBar + kBarSteps / 2 && v[kDrvSlotGasPct] == kImgPct + 50);
+    CHECK(v[kDrvSlotBrakeBar] == kImgBrakeBar + kBarSteps / 2);  // 15 of the minimum full scale 30
+    CHECK(v[kDrvSlotGear] == kImgGear2 + 5);                     // D2
+    CHECK(v[kDrvSlotWheel] == kImgWheel + kWheelSteps - 7 && v[kDrvSlotAngle] == kImgAngle + kAngleMax + 35);
+    Trip t;
+    FuelCal c;
+    computeFuel(m, t, c, 0, v);
+    CHECK(v[kFuelSlotInst] == kImgBigNone && v[kFuelSlotRange] == kImgTileNone && v[kFuelSlotBar0] == kImgChart);
+    m.hasRange = true; m.range = 498; m.hasAvgConsumption = true; m.avgConsumption = 18.9;
+    computeFuel(m, t, c, 0, v);
+    CHECK(v[kFuelSlotRange] == kImgTileInt + 498 && v[kFuelSlotBcavg] == kImgTileDec + 189);
+    CHECK(tileNum(true, 123.4, true) == kImgTileInt + 123 && tileNum(true, 9.96, false) == kImgTileDec + kDecStride + 100);
+    Perf p;
+    computePerf(m, p, g, 0, v);
+    CHECK(v[kPerfSlotStatus] == kImgStatus + kPerfNoData && v[kPerfSlotP0100] == kImgBigNone);
+    m.hasSpeed = true;
+    p.speed(0, 0); p.speed(400, 0);
+    p.r0100 = 7400; p.best0100 = 7100;
+    m.language = 3;
+    computePerf(m, p, g, 0, v);
+    CHECK(v[kPerfSlotStatus] == kImgStatus + 10 + kPerfReady);
+    CHECK(v[kPerfSlotP0100] == kImgBigDec + kBigDecStride + 74 && v[kPerfSlotBest] == kImgAmberDec + kBigDecStride + 71);
+}
+
+static void testWarm() {
+    Metrics m;
+    CHECK(apply(m, kTempExt, "{\"temperatureExterior\":-5.0}", 0) && m.tempExt == -5.0);
+    CHECK(apply(m, kTempInt, "{\"temperatureInterior\":10.3}", 0) && NEAR(m.tempInt, 10.3));
+    CHECK(apply(m, kAcTemps, "{\"ACSystemTemperatures\":{\"evaporator\":6,\"heatExchanger\":5}}", 0) && m.evaporator == 6);
+    CHECK(!apply(m, kBattery, "{\"battery\":255}", 0) && !m.hasBattery);        // 255 = none
+    CHECK(apply(m, kBattery, "{\"battery\":97}", 0) && m.battery == 97);
+    CHECK(apply(m, kEngineStatus, "{\"status\":2}", 0) && m.engineStatus == 2);
+
+    WarmUp w;
+    Metrics e;                                                   // engine off, no oil yet
+    w.update(e, 0);
+    CHECK(w.status(e) == kWarmNoData && !w.running);
+    e.hasOil = true; e.oil = 10;
+    e.hasEngineStatus = true; e.engineStatus = 0;
+    w.update(e, 0);
+    CHECK(w.status(e) == kWarmOff);
+    e.engineStatus = 2;
+    w.update(e, 1000);                                           // started at 1 s, oil 10
+    CHECK(w.running && w.status(e) == kWarmWarming && NEAR(w.progress(e), 0));
+    double left = 0;
+    CHECK(!w.minutesLeft(e, 1000, &left));
+    e.oil = 45;                                                  // +35 deg in 5 min: 7 deg/min, 35 to go = 5 min
+    w.update(e, 301000);
+    CHECK(NEAR(w.progress(e), 0.5) && w.runMinutes(301000) == 5);
+    CHECK(w.minutesLeft(e, 301000, &left) && NEAR(left, 5));
+    e.oil = 82;
+    w.update(e, 400000);
+    CHECK(w.status(e) == kWarmReady && w.progress(e) == 1 && w.minutesLeft(e, 400000, &left) && left == 0);
+    e.engineStatus = 0;
+    w.update(e, 500000);
+    CHECK(w.status(e) == kWarmOff && w.runMinutes(500000) == 0);
+    Metrics r;                                                   // no engine.status: the engine speed decides
+    r.hasRpm = true; r.rpm = 800;
+    CHECK(WarmUp::isRunning(r));
+
+    Settings st;
+    unsigned v[64];
+    e.engineStatus = 2; w.update(e, 600000);
+    e.oil = 48; e.hasCoolant = true; e.coolant = 64; m.language = 18;
+    e.hasTempExt = true; e.tempExt = -5; e.hasBattery = true; e.battery = 97;
+    computeWarm(e, w, st, 600000, v);
+    CHECK(v[kWarmSlotOilMax] == kImgMaxNum + 80 && v[kWarmSlotOilLo] == kImgScaleNum + 0 && v[kWarmSlotOilHi] == kImgScaleNum + 140);
+    CHECK(v[kWarmSlotCoolantMax] == kImgBlank && v[kWarmSlotCoolantHi] == kImgScaleNum + 120);
+    CHECK(v[kWarmSlotStatus] == kImgWarmStatus + kWarmWarming);
+    CHECK(v[kWarmSlotExt] == kImgTileSInt + (unsigned)(-5 - kTileSIntMin) && v[kWarmSlotBatt] == kImgTileInt + 97);
+    CHECK(v[kWarmSlotExtUnit] == kImgUnit + kUnitC && v[kWarmSlotInt] == kImgTileNone);
+    st.temp = kFahrenheit;
+    computeWarm(e, w, st, 600000, v);
+    CHECK(v[kWarmSlotExt] == kImgTileSInt + (unsigned)(23 - kTileSIntMin) && v[kWarmSlotOilMax] == kImgMaxNum + 176);
+    CHECK(v[kWarmSlotOilHi] == kImgScaleNum + 284 && v[kWarmSlotExtUnit] == kImgUnit + kUnitF);
+}
+
 int main() {
+    testWarm();
     testParse();
     testSpeedDerivative();
     testMaxima();
     testView();
     testUnitsAndSettings();
     testLanguage();
+    testNewProps();
+    testDriveStats();
+    testPerf();
+    testScreens();
     if (g_fail) { printf("%d check(s) failed\n", g_fail); return 1; }
     printf("test_cds_values OK\n");
     return 0;

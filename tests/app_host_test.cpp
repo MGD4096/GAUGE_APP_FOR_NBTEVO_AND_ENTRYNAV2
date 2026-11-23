@@ -12,6 +12,7 @@
 #include <string>
 #include "fake_appframework.hpp"
 #include "gauge_view.hpp"
+#include "drive_stats.hpp"
 
 using namespace eng::ids;
 
@@ -51,11 +52,13 @@ static void feed(const char* prop, const char* ascii) {
 }
 
 static unsigned slot(int s) { return g_fake.modelImage[kFirstModel + (unsigned)s]; }
+// Screen k (1..3), slot i (-1: its background).
+static unsigned sslot(int k, int i) { return g_fake.modelImage[1000u * (unsigned)k + 100u + (unsigned)i]; }
 static int writes(int s) { return g_fake.modelWrites[kFirstModel + (unsigned)s]; }
 
 // A frame pack (layout of make_db.py write_frames) with the frames first..last, each the text "ID:<id + mark>": the
 // fake framework turns the picture data back into that number (mark tells packs apart).
-static void writeFramePack(const std::string& path, unsigned first = 56000, unsigned last = 61199,
+static void writeFramePack(const std::string& path, unsigned first = 56000, unsigned last = 61999,
                            unsigned mark = 0) {
     std::vector<std::string> data;
     for (unsigned id = first; id <= last; ++id) {
@@ -112,6 +115,9 @@ int main(int argc, char** argv) {
     FILE* pf = fopen(png.c_str(), "wb");
     if (pf) { fputs("\x89PNG fake picture data", pf); fclose(pf); }
     writeFramePack(std::string(argv[2]) + "/GaugeApp_frames.bin");
+    writeFramePack(std::string(argv[2]) + "/GaugeApp_frames_s.bin", 62000, 72499);   // screens 1..4
+    unlink((std::string(argv[2]) + "/torque-env.txt").c_str());
+    unlink((std::string(argv[2]) + "/fuel-cal.txt").c_str());
     // colour 1: the arc frames again, marked +100000 (no pack for colour 0: everything from the common pack)
     writeFramePack(std::string(argv[2]) + "/GaugeApp_frames_c1.bin", kImgArc, kImgArc + kArcSteps, 100000);
     unlink((std::string(argv[2]) + "/GaugeApp_frames_c0.bin").c_str());
@@ -133,7 +139,9 @@ int main(int argc, char** argv) {
 
     // ---- the subscription: six handlers, then the render loop ----
     runPosted();
-    CHECK(g_fake.cds.size() == 8);
+    CHECK(g_fake.cds.size() == eng::kPropCount);
+    CHECK(g_fake.cds.count("hmi.graphicalContext") && g_fake.cds.count("engine.consumption") &&
+          g_fake.cds.count("driving.steeringWheel"));
     CHECK(g_fake.cds.count("engine.temperature") && g_fake.cds.count("engine.RPMSpeed") &&
           g_fake.cds.count("engine.torque") && g_fake.cds.count("driving.gear") &&
           g_fake.cds.count("driving.acceleration") && g_fake.cds.count("driving.speedActual") &&
@@ -197,6 +205,48 @@ int main(int argc, char** argv) {
     CHECK(slot(kSlotFuel) == kImgFuelNum + 39);
     CHECK(slot(kSlotFuelUnit) == kImgFuelUnit);
 
+    // ---- screens 1..3: written every tick until the car names the screen on display ----
+    CHECK(sslot(1, -1) == kImgScreenBg + 0 && sslot(2, -1) == kImgScreenBg + 2 && sslot(3, -1) == kImgScreenBg + 4);
+    feed("driving.acceleratorPedal", "{\"acceleratorPedal\":{\"position\":50,\"ecoPosition\":0}}");
+    feed("sensors.fuel", "{\"fuel\":{\"range\":498,\"reserve\":0,\"tanklevel\":39}}");
+    runPosted();
+    CHECK(sslot(1, kDrvSlotGasPct) == kImgPct + 50 && sslot(1, kDrvSlotGear) == kImgGear2 + 5);   // D2
+    CHECK(sslot(2, kFuelSlotRange) == kImgTileInt + 498 && sslot(2, kFuelSlotTank) == kImgTileInt + 39);
+    CHECK(sslot(3, kPerfSlotStatus) == kImgStatus + eng::kPerfNoData);
+    CHECK(sslot(4, -1) == kImgScreenBg + 6 && sslot(4, kWarmSlotStatus) == kImgWarmStatus + eng::kWarmNoData);
+    CHECK(sslot(4, kWarmSlotRuntime) == kImgTileTime + 0);       // running by the engine speed (3600 above)
+    feed("engine.status", "{\"status\":2}");
+    feed("engine.temperature", "{\"temperature\":{\"engine\":60,\"oil\":50}}");
+    feed("sensors.temperatureExterior", "{\"temperatureExterior\":5.0}");
+    runPosted();
+    CHECK(sslot(4, kWarmSlotStatus) == kImgWarmStatus + eng::kWarmWarming);
+    feed("engine.temperature", "{\"temperature\":{\"engine\":90,\"oil\":104}}");
+    runPosted();
+    CHECK(sslot(4, kWarmSlotStatus) == kImgWarmStatus + eng::kWarmReady && sslot(4, kWarmSlotProgress) == kImgWarmDone);
+    CHECK(sslot(4, kWarmSlotRuntime) == kImgTileTime + 0 && sslot(4, kWarmSlotExt) == kImgTileSInt + 5 + 60);
+    // the car says Performance is on display: only that one is written now
+    feed("hmi.graphicalContext", "{\"graphicalContext\":{\"visibleContext\":50,\"menuTitle\":\"Pomiary\"}}");
+    feed("driving.speedActual", "{\"speedActual\":0}");
+    feed("driving.acceleratorPedal", "{\"acceleratorPedal\":{\"position\":80,\"ecoPosition\":0}}");
+    runPosted();
+    CHECK(sslot(1, kDrvSlotGasPct) == kImgPct + 50);              // Driving not on display: not written
+    feed("driving.speedActual", "{\"speedActual\":0}");
+    runPosted();
+    CHECK(sslot(3, kPerfSlotStatus) == kImgStatus + eng::kPerfReady);
+    feed("hmi.graphicalContext", "{\"graphicalContext\":{\"visibleContext\":50,\"menuTitle\":\"Driving\"}}");
+    runPosted();
+    CHECK(sslot(1, kDrvSlotGasPct) == kImgPct + 80);              // on display again: brought up to date
+    int engW = writes(kSlotFuel);
+    feed("sensors.fuel", "{\"fuel\":{\"range\":498,\"reserve\":0,\"tanklevel\":38}}");
+    runPosted();
+    CHECK(writes(kSlotFuel) == engW);                           // the engine screen is not on display
+    feed("hmi.graphicalContext", "{\"graphicalContext\":{\"visibleContext\":50,\"menuTitle\":\"GAUGE APP\"}}");
+    runPosted();
+    CHECK(slot(kSlotFuel) == kImgFuelNum + 38);
+    // engine load needs the envelope: two torque samples in one rpm bin
+    feed("engine.torque", "{\"torque\":300}");
+    feed("engine.torque", "{\"torque\":320}");
+
     // ---- settings buttons (OPTION menu): temperature -> Fahrenheit, colour -> 1 ----
     feed("engine.temperature", "{\"temperature\":{\"engine\":90,\"oil\":100}}");
     runPosted();
@@ -224,6 +274,9 @@ int main(int argc, char** argv) {
     std::string saved = readFile(maxFile);
     printf("max.txt: %s", saved.c_str());
     CHECK(saved.find("coolant=90.0\n") != std::string::npos && saved.find("torque=380.0\n") != std::string::npos);
+    std::string env = readFile(std::string(argv[2]) + "/torque-env.txt");
+    CHECK(env.find("env=") == 0 && env.find(",380,") != std::string::npos);   // 3600 rpm bin: min(380, 400) and later
+    CHECK(readFile(std::string(argv[2]) + "/fuel-cal.txt").find("factor=") == 0);
     CHECK(app->onInit());
     CHECK(slot(kSlotCoolantMark) == kImgBlank && slot(kSlotCoolantMax) == kImgBlank);   // maxima reset at start
     CHECK(slot(kSlotTorqueMax) == kImgBlank && slot(kSlotTorqueHi) == kImgScaleNum + 250);   // scale back to its minimum

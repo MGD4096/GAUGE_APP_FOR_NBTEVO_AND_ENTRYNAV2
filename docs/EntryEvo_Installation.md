@@ -55,8 +55,8 @@ df -k /
 ```
 
 - Każdy plik musi odpowiedzieć `OK`.
-- W kolumnie `Available` musi być co najmniej ok. 16000 (KB) wolnego miejsca (paczka ma ok. 12,5 MB: klatki
-  ekranu w czterech kolorach i gotowe obrazki liczb).
+- W kolumnie `Available` musi być co najmniej ok. 26000 (KB) wolnego miejsca (paczka ma ok. 21 MB: klatki
+  czterech ekranów, w czterech kolorach, i gotowe obrazki liczb). Przy aktualizacji stara wersja zwalnia ok. 12 MB.
 
 Teraz loader systemu sprawdzi, czy jednostka ma każdą bibliotekę i funkcję, której potrzebuje aplikacja, niczego
 przy tym nie uruchamiając:

@@ -45,6 +45,42 @@ nich, więc obie aplikacje mogą być zainstalowane razem.
 
 **Biegi:** w D auto wysyła w `driving.gear` bieg skrzyni + 4 (sprawdzone na EntryNav2 F40: 5 = D1). 4 to samo „D”.
 
+**Wiedza o jednostce EntryNav2** (system, framework aplikacji, pełna lista CDS z formatami i wynikami skanu):
+[docs/EntryNav2](docs/EntryNav2/README.md).
+
+### Więcej ekranów (OPTION)
+
+Klawisz OPTION na każdym ekranie przełącza między ekranami i otwiera Ustawienia. Każdy ekran to osobny stan HMI
+z własnym limitem ok. 60 obrazków:
+
+| Ekran | Co pokazuje | Dane CDS |
+|---|---|---|
+| **Silnik** (stan 10) | jak wyżej | |
+| **Jazda** (stan 14), [podgląd](res/preview_driving.png) | gaz i hamulec (paski), przeciążenie z maksimami w 4 kierunkach, kierownica i kąt, obciążenie silnika w %, bieg, podpowiedź zmiany biegu | `acceleratorPedal`, `brakeContact`, `steeringWheel`, `acceleration`, `torque` + `RPMSpeed`, `gear`, `shiftIndicator` |
+| **Spalanie i trasa** (stan 15), [podgląd](res/preview_fuel.png) | spalanie chwilowe (l/100 km i l/h), wykres ostatnich 5 min, średnia tej trasy, średnie z komputera, zasięg, bak, km i czas od startu, zużyte paliwo, styl jazdy | `engine.consumption`, `speedActual`, `averageConsumption`, `averageSpeed`, `sensors.fuel`, `drivingStyle` |
+| **Pomiary** (stan 16), [podgląd](res/preview_performance.png) | 0–100 (ostatni i najlepszy), 60–100, 80–120, 100–0 (m), 1/4 mili, stan, max przeciążenie boczne i hamowania | `speedActual`, `acceleration` |
+| **Rozgrzewanie** (stan 17), [podgląd](res/preview_warmup.png) | olej i płyn na łukach od 0 °C (olej z celem 80 °C i zieloną strefą), stan, pasek postępu, czas pracy silnika, szacowany czas do rozgrzania, temperatura na zewnątrz, wewnątrz i parownika klimatyzacji, akumulator w % | `engine.temperature`, `engine.status`, `RPMSpeed`, `temperatureExterior`, `temperatureInterior`, `ACSystemTemperatures`, `sensors.battery` |
+
+- **Obciążenie silnika** = moment / największy moment widziany przy tych obrotach. Krzywa uczy się w czasie jazdy
+  i zostaje w `<folder danych>/torque-env.txt`. Dopóki przy danych obrotach nie ma co najmniej 60 Nm, karta pokazuje
+  „--”. To zamiennik wskaźnika doładowania: CDS nie podaje ciśnienia doładowania.
+- **Spalanie chwilowe** liczy się z licznika `engine.consumption`. Ten licznik tylko rośnie i przekręca się przy 65536.
+  Jego jednostka nie jest opisana; na start przyjęte jest 1 µl na krok. Prawdziwy współczynnik aplikacja ustala sama
+  z ubytku paliwa w baku: po każdych 8 l bez tankowania, zapis w `<folder danych>/fuel-cal.txt`, w logu „fuel counter
+  calibrated”. Do pierwszej kalibracji spalanie chwilowe i zużyte paliwo mogą się różnić od komputera pokładowego.
+- **Pomiary** korzystają z `driving.speedActual`, czyli całych km/h. Momenty przekroczenia progu są interpolowane
+  między odczytami. 0–100 i 1/4 mili startują od ostatniego odczytu na postoju („Gotowy – ruszaj”), a 60–100 i 80–120
+  mierzą się same przy każdym przyspieszaniu. Dokładność zależy od tego, jak często auto wysyła prędkość.
+- **Odświeżanie tylko widocznego ekranu:** aplikacja czyta tytuł stanu na ekranie (`hmi.graphicalContext`,
+  `menuTitle`) i wysyła obrazki tylko do niego. Dopóki tytuł nie przyjdzie, odświeża wszystkie ekrany.
+- **Rozgrzewanie:** silnik pracuje, gdy `engine.status` = 2 (albo obroty > 400, jeśli auto nie wysyła stanu). Silnik
+  jest rozgrzany, gdy olej osiągnie 80 °C (`kWarmOilTarget`, typowa zasada dla silników BMW). Pasek postępu liczy się
+  od temperatury oleju przy starcie. Czas do rozgrzania jest szacowany z tempa wzrostu temperatury oleju w ostatnich
+  1–5 minutach, więc przez pierwszą minutę pokazuje „--”. Temperatury idą za ustawieniem °C / °F.
+- Nowe ekrany pokazują paliwo w litrach, niezależnie od ustawienia jednostki paliwa.
+- Obrazki liczb nowych ekranów są w `GaugeApp_frames_s.bin` jako PNG z paletą 32 kolorów, bo są 4–6 razy mniejsze.
+  Jeśli na nowych ekranach będą karty, ale bez liczb, to iDrive nie czyta takich PNG (napisz).
+
 ## Jak to działa
 
 HmiMain3D przy starcie ładuje `Plugins/GaugeApp/GaugeApp.manifest` (framework `PluginApp`, ten sam co w BMW

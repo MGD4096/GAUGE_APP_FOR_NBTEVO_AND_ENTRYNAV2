@@ -10,7 +10,8 @@ CXX ?= g++
 WARN := -Wall -Wextra
 NBT_DATA := $(abspath $(OUT))/nbt-data
 EN2_DATA := $(abspath $(OUT))/entrynav2-data
-SRC := ../src/engine_data.cpp ../src/cds_values.hpp ../src/gauge_view.hpp ../src/gauge_ids.hpp
+SRC := ../src/engine_data.cpp ../src/cds_values.hpp ../src/gauge_view.hpp ../src/gauge_ids.hpp \
+       ../src/drive_stats.hpp ../src/screens_view.hpp
 
 .PHONY: check clean
 check: $(OUT)/test_cds_values $(OUT)/app_host_test $(OUT)/libGaugeApp.so $(OUT)/libGaugeApp-entrynav2.so
@@ -34,7 +35,8 @@ $(OUT):
 	mkdir -p $(OUT)
 
 # The app is C++98 (QNX SDP 6.5 / GCC 4.4); keep the host build in the same dialect.
-$(OUT)/test_cds_values: test_cds_values.cpp ../src/cds_values.hpp ../src/gauge_view.hpp ../src/gauge_ids.hpp | $(OUT)
+$(OUT)/test_cds_values: test_cds_values.cpp ../src/cds_values.hpp ../src/gauge_view.hpp ../src/gauge_ids.hpp \
+                        ../src/drive_stats.hpp ../src/screens_view.hpp | $(OUT)
 	$(CXX) -std=gnu++98 $(WARN) -I../src -o $@ test_cds_values.cpp
 
 $(OUT)/libGaugeApp.so: $(SRC) | $(OUT)
@@ -47,7 +49,8 @@ $(OUT)/libGaugeApp-entrynav2.so: $(SRC) | $(OUT)
 	    -o $@ ../src/engine_data.cpp -ldl -lpthread
 
 # -rdynamic: the library looks up bmw::Runnable's vtable with dlsym(RTLD_DEFAULT) and needs the fake's symbols.
-$(OUT)/app_host_test: app_host_test.cpp fake_appframework.cpp fake_appframework.hpp ../src/gauge_view.hpp | $(OUT)
+$(OUT)/app_host_test: app_host_test.cpp fake_appframework.cpp fake_appframework.hpp ../src/gauge_view.hpp \
+                      ../src/gauge_ids.hpp ../src/drive_stats.hpp | $(OUT)
 	$(CXX) -std=gnu++11 $(WARN) -rdynamic -I../src -o $@ app_host_test.cpp fake_appframework.cpp -ldl
 
 clean:

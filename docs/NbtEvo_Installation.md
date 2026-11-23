@@ -26,7 +26,11 @@ w trybie zapisu tylko na czas kopiowania.
 - Jedno z kodowań **A4A, A4A_REMOTE_APPS, REMOTE_HMI, TOUCH_COMMAND** – bez niego HmiMain3D nie ładuje aplikacji
   PluginApp (tak samo jak dla NbtAad).
 - Zbudowana aplikacja: folder **`dist\nbt\GaugeApp`** z `build_nbt.bat` (QNX Momentics IDE 4.7 / QNX SDP 6.5.0,
+<<<<<<< Updated upstream
   patrz [README_PL.md](../README_PL.md#budowanie)). Powinno w nim być 10 plików:
+=======
+  patrz [README_PL.md](README_PL.md#budowanie)). Powinno w nim być 11 plików:
+>>>>>>> Stashed changes
 
   | Plik | Co to |
   |---|---|
@@ -34,10 +38,10 @@ w trybie zapisu tylko na czas kopiowania.
   | `GaugeApp.manifest` | manifest dla iDrive |
   | `GaugeApp.xml` | wiersz w menu i ekrany |
   | `GaugeApp_ALL_Texts.zip`, `GaugeApp_ALL_Images.zip` | teksty i ikona wiersza |
-  | `GaugeApp_frames.bin`, `GaugeApp_frames_c0.bin` … `c3.bin` | klatki ekranu (wspólne i w 4 kolorach) |
+  | `GaugeApp_frames.bin`, `GaugeApp_frames_s.bin`, `GaugeApp_frames_c0.bin` … `c3.bin` | klatki ekranów (ekran silnika, pozostałe ekrany i 4 kolory) |
 
 - **Pendrive** (FAT32) **albo SSH z komputera**, żeby przenieść pliki na jednostkę.
-- Ok. **16 MB** wolnego miejsca na partycji systemowej.
+- Ok. **26 MB** wolnego miejsca na partycji systemowej.
 
 ## 1. Przenieś pliki na jednostkę
 
@@ -93,8 +97,8 @@ ls -l $SRC
 df -h /fs/sda0
 ```
 
-- W `$SRC` musi być 10 plików z tabeli wyżej; `libGaugeApp.so` ma kilkadziesiąt KB, `GaugeApp_frames.bin` ok. 6 MB.
-- Na `/fs/sda0` musi być co najmniej ok. 16 MB wolnego miejsca.
+- W `$SRC` musi być 11 plików z tabeli wyżej; `libGaugeApp.so` ma kilkadziesiąt KB, `GaugeApp_frames.bin` ok. 6 MB, `GaugeApp_frames_s.bin` ok. 9 MB.
+- Na `/fs/sda0` musi być co najmniej ok. 26 MB wolnego miejsca.
 
 ## 4. Zainstaluj
 
@@ -110,7 +114,7 @@ ls -l /opt/hmi/ID5/data/ro/Plugins/GaugeApp
 
 - `rm -f` przed kopiowaniem jest celowe: iDrive trzyma starą bibliotekę w pamięci aż do restartu, a plik usunięty
   i skopiowany na nowo nie jest nadpisywany pod działającym programem.
-- `ls -l` po kopiowaniu musi pokazać te same 10 plików i te same rozmiary co w kroku 3.
+- `ls -l` po kopiowaniu musi pokazać te same 11 plików i te same rozmiary co w kroku 3.
 - Jednostka nie zapisuje wszystkiego na żądanie: zostaw ją włączoną jeszcze ok. minuty, zanim wyłączysz zapłon.
 - Folder danych `/var/opt/gaugeapp` (ustawienia, maksima) tworzy sama aplikacja przy pierwszym starcie.
 
