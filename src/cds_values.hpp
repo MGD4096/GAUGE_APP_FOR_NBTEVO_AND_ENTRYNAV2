@@ -152,6 +152,7 @@ struct Metrics {
     int    shift;
     bool   hasTitle;
     char   title[48];                                // hmi.graphicalContext menuTitle: which state is on screen
+    char   appType[8];                               // and its appType ("4" seen for plugin apps' states)
     // Warm-up screen
     bool   hasTempExt, hasTempInt, hasEvaporator, hasBattery, hasEngineStatus;
     double tempExt, tempInt, evaporator, battery;
@@ -165,7 +166,7 @@ struct Metrics {
           avgConsumption(0), avgSpeed(0), range(0), styleAccelerate(0), styleBrake(0), styleShift(0),
           consumption(0), shift(0), hasTitle(false), hasTempExt(false), hasTempInt(false), hasEvaporator(false),
           hasBattery(false), hasEngineStatus(false), tempExt(0), tempInt(0), evaporator(0), battery(0),
-          engineStatus(0) { title[0] = 0; }
+          engineStatus(0) { title[0] = 0; appType[0] = 0; }
 
     // Texts in the pictures: Polish until the language is known (the car this was made for), then Polish only for
     // a Polish HMI.
@@ -198,8 +199,12 @@ inline bool apply(Metrics& m, int prop, const char* text, long nowMs) {
     case kEngineTemp: {
         bool a = numField(text, "engine", &v) && inRange(v, -40, 200);
         ch = setValue(m.hasCoolant, m.coolant, a, v) || ch;
+        const double coolant = v;
         v = 0;
         bool b = numField(text, "oil", &v) && inRange(v, -40, 250);
+        // The first value after an engine start can be {"engine":68,"oil":0} (EntryNav2 F40): the oil sensor is not
+        // read yet. 0 deg C oil next to a warm coolant is that placeholder, not a reading.
+        if (b && v == 0 && a && coolant > 30) b = false;
         ch = setValue(m.hasOil, m.oil, b, v) || ch;
         break;
     }
@@ -315,9 +320,12 @@ inline bool apply(Metrics& m, int prop, const char* text, long nowMs) {
         char t[sizeof(m.title)];
         bool ok = strField(text, "menuTitle", t, sizeof(t));
         if (!ok) break;                              // a context without a title keeps the last one
-        ch = !m.hasTitle || strcmp(t, m.title) != 0;
+        char a[sizeof(m.appType)];
+        if (!strField(text, "appType", a, sizeof(a))) a[0] = 0;
+        ch = !m.hasTitle || strcmp(t, m.title) != 0 || strcmp(a, m.appType) != 0;
         m.hasTitle = true;
         memcpy(m.title, t, sizeof(t));
+        memcpy(m.appType, a, sizeof(a));
         break;
     }
     case kTempExt: {

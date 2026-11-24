@@ -282,7 +282,7 @@ static void testNewProps() {
     CHECK(apply(m, kFuel, "{\"fuel\":{\"range\":498,\"reserve\":0,\"tanklevel\":37}}", 0) && m.range == 498 && m.fuel == 37);
     CHECK(apply(m, kGraphic, "{\"graphicalContext\":{\"visibleContext\":3,\"menuTitle\":\"Pomiary\",\"appType\":\"4\"}}", 0));
     CHECK(m.hasTitle && strcmp(m.title, "Pomiary") == 0);
-    CHECK(!apply(m, kGraphic, "{\"graphicalContext\":{\"visibleContext\":3,\"menuTitle\":\"Pomiary\"}}", 0));
+    CHECK(!apply(m, kGraphic, "{\"graphicalContext\":{\"visibleContext\":5,\"menuTitle\":\"Pomiary\",\"appType\":\"4\"}}", 0));
     CHECK(!apply(m, kGraphic, "{\"graphicalContext\":{\"visibleContext\":3}}", 0) && strcmp(m.title, "Pomiary") == 0);
     CHECK(strcmp(propName(kGraphic), "hmi.graphicalContext") == 0 && strcmp(propName(kConsumption), "engine.consumption") == 0);
 }
@@ -409,6 +409,15 @@ static void testScreens() {
 
 static void testWarm() {
     Metrics m;
+    // oil 0 next to a warm coolant = the sensor not read yet (first value after a start)
+    apply(m, kEngineTemp, "{\"temperature\":{\"engine\":68,\"oil\":0}}", 0);
+    CHECK(m.hasCoolant && m.coolant == 68 && !m.hasOil);
+    apply(m, kEngineTemp, "{\"temperature\":{\"engine\":68,\"oil\":63}}", 0);
+    CHECK(m.hasOil && m.oil == 63);
+    apply(m, kEngineTemp, "{\"temperature\":{\"engine\":2,\"oil\":0}}", 0);   // a real 0 deg C on a cold day
+    CHECK(m.hasOil && m.oil == 0);
+    apply(m, kGraphic, "{\"graphicalContext\":{\"menuTitle\":\"CDS SCAN\",\"appType\":\"4\"}}", 0);
+    CHECK(strcmp(m.appType, "4") == 0);
     CHECK(apply(m, kTempExt, "{\"temperatureExterior\":-5.0}", 0) && m.tempExt == -5.0);
     CHECK(apply(m, kTempInt, "{\"temperatureInterior\":10.3}", 0) && NEAR(m.tempInt, 10.3));
     CHECK(apply(m, kAcTemps, "{\"ACSystemTemperatures\":{\"evaporator\":6,\"heatExchanger\":5}}", 0) && m.evaporator == 6);

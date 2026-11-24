@@ -72,7 +72,14 @@ z własnym limitem ok. 60 obrazków:
   między odczytami. 0–100 i 1/4 mili startują od ostatniego odczytu na postoju („Gotowy – ruszaj”), a 60–100 i 80–120
   mierzą się same przy każdym przyspieszaniu. Dokładność zależy od tego, jak często auto wysyła prędkość.
 - **Odświeżanie tylko widocznego ekranu:** aplikacja czyta tytuł stanu na ekranie (`hmi.graphicalContext`,
-  `menuTitle`) i wysyła obrazki tylko do niego. Dopóki tytuł nie przyjdzie, odświeża wszystkie ekrany.
+  `menuTitle`, `appType`) i wysyła obrazki tylko do niego. Gdy na ekranie jest coś innego (radio, menu, ustawienia),
+  nie wysyła nic. Wszystkie ekrany odświeża tylko wtedy, gdy tytuł jeszcze nie przyszedł albo gdy widać stan jakiejś
+  wtyczki (`appType` „4”) z nieznanym tytułem. W logu: linie `on screen: '…'`.
+- **Paczki klatek są mapowane (`mmap`), a nie wczytywane do pamięci.** System ładuje tylko strony z wysyłanymi
+  klatkami i może je zwolnić, gdy brakuje pamięci. Paczka ekranów 1–4 (`GaugeApp_frames_s.bin`) jest mapowana
+  dopiero przy pierwszym rysowaniu któregoś z nich; kto używa tylko ekranu Silnik, w ogóle jej nie otwiera.
+- **Olej 0 °C w pierwszym odczycie po starcie** (`{"engine":68,"oil":0}`, czujnik jeszcze nieodczytany) jest
+  traktowany jak brak danych, gdy płyn ma ponad 30 °C.
 - **Rozgrzewanie:** silnik pracuje, gdy `engine.status` = 2 (albo obroty > 400, jeśli auto nie wysyła stanu). Silnik
   jest rozgrzany, gdy olej osiągnie 80 °C (`kWarmOilTarget`, typowa zasada dla silników BMW). Pasek postępu liczy się
   od temperatury oleju przy starcie. Czas do rozgrzania jest szacowany z tempa wzrostu temperatury oleju w ostatnich
@@ -193,12 +200,18 @@ a obiekt `bmw::Image` ma na NBT tę samą budowę co na EntryNav2 (sprawdzone w 
 obraz Dockera z `toolchain/Dockerfile` (Ubuntu 12.04: armhf GCC 4.6 i eglibc 2.15, ta sama wersja co w aucie).
 Nowszy kompilator podlinkowałby funkcje, których auto nie ma (np. `clock_gettime@GLIBC_2.17`).
 
+**Windows:** `build_entryNav2.bat` robi wszystko sam: w razie potrzeby uruchamia Docker Desktop, za pierwszym razem
+buduje obraz kompilatora, buduje paczkę i sprawdza, że biblioteka wymaga tylko `GLIBC_2.4`.
+`build_entryNav2.bat test` najpierw uruchamia testy w WSL (`make check`) i buduje paczkę tylko wtedy, gdy przejdą.
+
+Ręcznie (Linux / WSL):
+
 ```
 docker build -t gauge-entrynav2-tc toolchain        # raz
-bash toolchain/tc-entrynav2.sh make entrynav2-dist  # Windows: docker run --rm -v "%CD%:/work" -w /work gauge-entrynav2-tc make entrynav2-dist
+bash toolchain/tc-entrynav2.sh make entrynav2-dist
 ```
 
-Wynik: `dist/gauge-app-entrynav2.tar` (biblioteka, manifest, XML, dwa zipy, `MD5SUMS`).
+Wynik: `dist/gauge-app-entrynav2.tar` (biblioteka, manifest, XML, dwa zipy, paczki klatek, `MD5SUMS`).
 
 ## Instalacja
 

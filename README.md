@@ -89,7 +89,9 @@ layout with larger fonts; the image ids and `src/gauge_ids.hpp` stay the same, s
 - **NBT Evo:** QNX SDP 6.5 (`qcc`) and the car's BMW libraries (`/opt/hmi/ID5/lib`) in `lib/NBT_evo_libs`, then `make`.
 - **EntryNav2:** the car's `libAppFramework.A.so` / `libCoreFramework.A.so` (`/opt/hmi/lib`) in `lib/Entry_Evo_libs`,
   `docker build -t gauge-entrynav2-tc toolchain` once (Ubuntu 12.04: armhf GCC 4.6 against eglibc 2.15, the car's
-  version), then `bash toolchain/tc-entrynav2.sh make entrynav2-dist` → `dist/gauge-app-entrynav2.tar`.
+  version), then `bash toolchain/tc-entrynav2.sh make entrynav2-dist` → `dist/gauge-app-entrynav2.tar`. On Windows:
+  `build_entryNav2.bat` (starts Docker Desktop, builds the image once, builds and checks the package;
+  `build_entryNav2.bat test` runs `make check` in WSL first).
 
 ## Install
 

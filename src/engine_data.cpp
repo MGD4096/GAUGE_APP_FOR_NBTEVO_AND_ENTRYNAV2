@@ -33,6 +33,7 @@
 #include <new>
 #include <dirent.h>
 #include <sys/stat.h>
+#include <sys/mman.h>
 #include <dlfcn.h>
 #ifndef RTLD_DEFAULT
 #define RTLD_DEFAULT ((void*)-2)   // QNX value
@@ -293,8 +294,7 @@ eng::Trip       g_trip;                      // since onInit
 eng::Perf       g_perf;
 eng::WarmUp     g_warm;
 double          g_brakeFull = 0;             // the largest brakeContact seen
-bool            g_titleMatched = false;      // a screen title was seen in hmi.graphicalContext: render only that one
-int             g_visible = -1;              // screen on display (-1: none of ours)
+int             g_visible = -1;              // screen on display, or kVisUnknown (-1) / kVisOther / kVisSomeApp
 struct ScreenCache { unsigned shown[64]; bool valid; unsigned bg; };
 ScreenCache     g_cache[eng::ids::kScreenCount];   // screens 1..3 (index 0 unused: the engine screen has g_shown)
 
@@ -527,43 +527,72 @@ unsigned char* readPluginFile(const char* name, unsigned* size, long maxSize = k
 
 // ---- the frames (make_db.py write_frames): GaugeApp_frames.bin, the same in every colour, loaded once and kept; and
 // GaugeApp_frames_c<k>.bin, the frames drawn in gauge colour k (arcs, g-meter dot, lit gear), loaded for the colour in
-// use. "GFR1", u32 count, count x (u32 id, u32 offset, u32 size) sorted by id, then the PNG data; little endian.
+// use; GaugeApp_frames_s.bin, the frames of screens 1..4, mapped the first time one of them is drawn.
+// "GFR1", u32 count, count x (u32 id, u32 offset, u32 size) sorted by id, then the PNG data; little endian.
+// The packs are mapped read-only (mmap), not read into memory: only the pages of frames that are sent get loaded, and
+// the system can drop them again under memory pressure (the whole set is ~17 MB in HmiMain3D's address space).
 const char* const kFramesFile = "GaugeApp_frames.bin";
+const char* const kScreensFile = "GaugeApp_frames_s.bin";
 const long        kFramesMax = 16L * 1024L * 1024L;
 struct Pack { unsigned char* data; unsigned size, count; };
 Pack              g_common = { NULL, 0, 0 };
-Pack              g_screens = { NULL, 0, 0 };     // GaugeApp_frames_s.bin: screens 1..3
+Pack              g_screens = { NULL, 0, 0 };
 Pack              g_color = { NULL, 0, 0 };
 int               g_colorLoaded = -1;
+bool              g_screensTried = false;         // the screens pack was asked for (a missing one is logged once)
 bool              g_missingLogged = false;
 
 unsigned le32(const unsigned char* p) {
     return (unsigned)p[0] | ((unsigned)p[1] << 8) | ((unsigned)p[2] << 16) | ((unsigned)p[3] << 24);
 }
 
+void releasePack(Pack& pk) {
+    if (pk.data) munmap(pk.data, pk.size);
+    pk.data = NULL;
+    pk.size = pk.count = 0;
+}
+
 bool loadPack(const char* name, Pack& out) {
+    char path[256];
+    snprintf(path, sizeof(path), "%s/%s", GAUGE_PLUGIN_DIR, name);
+    int fd = open(path, O_RDONLY);
+    if (fd < 0) { elog("cannot read %s: pictures are missing", path); return false; }
+    struct stat st;
+    void* m = MAP_FAILED;
     unsigned size = 0;
-    unsigned char* p = readPluginFile(name, &size, kFramesMax);
-    if (!p) { elog("cannot read %s/%s: pictures are missing", GAUGE_PLUGIN_DIR, name); return false; }
-    unsigned n = size >= 8 ? le32(p + 4) : 0;
-    bool ok = size >= 8 && memcmp(p, "GFR1", 4) == 0 && n > 0 && n < 100000 && 8 + 12ul * n <= size;
-    for (unsigned i = 0; ok && i < n; ++i) {
+    if (fstat(fd, &st) == 0 && (long)st.st_size >= 8 && (long)st.st_size <= kFramesMax) {
+        size = (unsigned)st.st_size;
+        m = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
+    }
+    close(fd);                                           // the mapping stays valid without the descriptor
+    if (m == MAP_FAILED) { elog("cannot map %s (size %u)", path, size); return false; }
+    unsigned char* p = static_cast<unsigned char*>(m);
+    unsigned n = le32(p + 4);
+    bool ok = memcmp(p, "GFR1", 4) == 0 && n > 0 && n < 100000 && 8 + 12ul * n <= size;
+    for (unsigned i = 0; ok && i < n; ++i) {             // reads the table only, not the pictures
         const unsigned char* e = p + 8 + 12 * i;
         unsigned off = le32(e + 4), len = le32(e + 8);
         ok = off >= 8 + 12 * n && len > 0 && off <= size && len <= size - off && (i == 0 || le32(e) > le32(e - 12));
     }
-    if (!ok) { elog("%s is damaged", name); free(p); return false; }
-    free(out.data);
+    if (!ok) { elog("%s is damaged", name); munmap(m, size); return false; }
+    releasePack(out);
     out.data = p;
     out.size = size;
     out.count = n;
-    elog("%s: %u frames, %u bytes", name, n, size);
+    elog("%s: %u frames, %u bytes (mapped)", name, n, size);
     return true;
 }
 
 bool loadFrames() {
-    if (!g_screens.data) loadPack("GaugeApp_frames_s.bin", g_screens);
     return g_common.data || loadPack(kFramesFile, g_common);
+}
+
+// The pack of screens 1..4, the first time one of them is drawn (an engine-screen-only user never maps it).
+bool loadScreens() {
+    if (g_screens.data) return true;
+    if (g_screensTried) return false;
+    g_screensTried = true;
+    return loadPack(kScreensFile, g_screens);
 }
 
 // The frame pack of gauge colour k (only when it is not the one already loaded).
@@ -669,7 +698,7 @@ int renderScreen(bmw::PluginApp* app, int s, bool force) {
         break;
     }
     pthread_mutex_unlock(&g_dataMutex);
-    if (!g_common.data || !count) return 0;
+    if (!g_common.data || !count || !loadScreens()) return 0;
     ScreenCache& c = g_cache[s];
     int written = 0;
     const unsigned base = 1000u * (unsigned)s;
@@ -687,8 +716,11 @@ int renderScreen(bmw::PluginApp* app, int s, bool force) {
     return written;
 }
 
-// Which screen hmi.graphicalContext says is on display: its menuTitle is the title of the state (the text DB's, Polish
-// or English). -1: none of ours (another app, the settings, a menu).
+// What hmi.graphicalContext says is on display: one of our screens (0..4), or
+enum { kVisUnknown = -1,                     // no context yet (or the car never sends it): every screen is written
+       kVisOther = -2,                       // something else (radio, a menu, our settings): nothing is written
+       kVisSomeApp = -3 };                   // a plugin app's state (appType "4") whose title we do not know: all
+// Its menuTitle is the title of the state (the text DB's, Polish or English). -1: not one of our titles.
 int screenForTitle(const char* t) {
     static const char* const kTitles[eng::ids::kScreenCount][2] = {
         { "GAUGE APP", "GAUGE APP" }, { "Jazda", "Driving" }, { "Spalanie i trasa", "Fuel and trip" },
@@ -748,19 +780,20 @@ void diagAnimTick(bmw::PluginApp* app) {
 void renderRun(void* /*self*/) {
     bmw::PluginApp* app = g_app;
     if (!app) return;                                    // finalized: do not post again
-    bool dirty, maxDirty, matched;
+    bool dirty, maxDirty;
     int visible;
     pthread_mutex_lock(&g_dataMutex);
     dirty = g_dirty;
     maxDirty = g_maxDirty;
-    matched = g_titleMatched;
     visible = g_visible;
     g_trip.tick(monoMs(), g_cal.factor);
     pthread_mutex_unlock(&g_dataMutex);
-    // Until a title of ours was seen, every screen is written (the car may not report it); then only the one shown.
-    if (dirty && (!matched || visible == eng::kScreenEngine)) renderView(app, false);
+    // Only the screen on display is written; all of them while that is not known. Screens 1..4 (and their frame pack)
+    // are not touched while only the engine screen is used.
+    const bool all = visible == kVisUnknown || visible == kVisSomeApp;
+    if (dirty && (all || visible == eng::kScreenEngine)) renderView(app, false);
     for (int s = 1; s < eng::ids::kScreenCount; ++s)
-        if (!matched || visible == s) renderScreen(app, s, false);
+        if (all || visible == s) renderScreen(app, s, false);
     diagAnimTick(app);
     if (monoSec() - g_savedAt >= kSaveEveryS) {
         if (maxDirty) saveMaxima();
@@ -783,8 +816,9 @@ void handleCds(int prop, const bmw::BasicString<unsigned short>& value) {
     bool ok, wasOk, newMax;
     int seen;
     long now = monoMs();
-    int titleScreen = -2;
-    char title[sizeof(g_metrics.title)];
+    int titleScreen = -2;                                // -1 / 0: the screen on display changed (logged)
+    int visibleNow = kVisUnknown;
+    char title[96];
     pthread_mutex_lock(&g_dataMutex);
     if (eng::apply(g_metrics, prop, text, now)) g_dirty = true;
     newMax = eng::updateMaxima(g_maxima, g_metrics, prop);
@@ -821,11 +855,14 @@ void handleCds(int prop, const bmw::BasicString<unsigned short>& value) {
         break;
     case eng::kGraphic:
         if (m.hasTitle) {
-            titleScreen = screenForTitle(m.title);
-            if (titleScreen >= 0) g_titleMatched = true;
-            if (titleScreen != g_visible) memcpy(title, m.title, sizeof(title));
-            else titleScreen = -2;                       // no change
-            if (titleScreen != -2) g_visible = titleScreen;
+            int v = screenForTitle(m.title);
+            if (v < 0) v = strcmp(m.appType, "4") == 0 ? kVisSomeApp : kVisOther;
+            if (v != g_visible) {
+                g_visible = v;
+                titleScreen = v == kVisOther ? -1 : 0;   // (logged below)
+                snprintf(title, sizeof(title), "%s' appType '%s", m.title, m.appType);
+                visibleNow = v;
+            }
         }
         break;
     }
@@ -836,7 +873,9 @@ void handleCds(int prop, const bmw::BasicString<unsigned short>& value) {
     ++g_totalSeen;
     double factor = g_cal.factor;
     pthread_mutex_unlock(&g_dataMutex);
-    if (titleScreen >= -1) elog("on screen: '%s' -> %s", title, titleScreen >= 0 ? "screen of this app" : "other");
+    if (titleScreen >= -1)
+        elog("on screen: '%s' -> %s", title, visibleNow >= 0 ? "a screen of this app" :
+             visibleNow == kVisSomeApp ? "a plugin app (all screens written)" : "something else (nothing written)");
     if (titleScreen == -3) elog("fuel counter calibrated from the tank level: %.3f ul per step", factor * 1e6);
     // The first values of every property are logged raw (that is what is needed to check a car's layout); after that
     // only a change between usable / not usable, so a revving engine does not flood the log.
@@ -938,10 +977,10 @@ bool appOnInit(bmw::PluginApp* self) {
     g_perf = eng::Perf();
     g_warm.reset();
     g_brakeFull = 0;
-    g_titleMatched = false;
-    g_visible = -1;
+    g_visible = kVisUnknown;
     pthread_mutex_unlock(&g_dataMutex);
     invalidateScreens();
+    g_screensTried = false;                              // a missing screens pack is looked for again
     loadFrames();
     loadColor(g_settings.color);
     for (int s = 0; s < eng::kSettingCount; ++s) showSettingText(self, s);

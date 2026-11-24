@@ -243,6 +243,16 @@ int main(int argc, char** argv) {
     feed("hmi.graphicalContext", "{\"graphicalContext\":{\"visibleContext\":50,\"menuTitle\":\"GAUGE APP\"}}");
     runPosted();
     CHECK(slot(kSlotFuel) == kImgFuelNum + 38);
+    // something else on display (radio): nothing is written; an unknown plugin app's state (appType 4): everything
+    feed("hmi.graphicalContext", "{\"graphicalContext\":{\"menuTitle\":\"Radio\",\"appType\":\"7\"}}");
+    feed("sensors.fuel", "{\"fuel\":{\"range\":498,\"reserve\":0,\"tanklevel\":37}}");
+    feed("driving.acceleratorPedal", "{\"acceleratorPedal\":{\"position\":30,\"ecoPosition\":0}}");
+    runPosted();
+    CHECK(slot(kSlotFuel) == kImgFuelNum + 38 && sslot(1, kDrvSlotGasPct) == kImgPct + 80);
+    feed("hmi.graphicalContext", "{\"graphicalContext\":{\"menuTitle\":\"Something\",\"appType\":\"4\"}}");
+    runPosted();
+    CHECK(slot(kSlotFuel) == kImgFuelNum + 37 && sslot(1, kDrvSlotGasPct) == kImgPct + 30);
+    feed("hmi.graphicalContext", "{\"graphicalContext\":{\"visibleContext\":50,\"menuTitle\":\"GAUGE APP\"}}");
     // engine load needs the envelope: two torque samples in one rpm bin
     feed("engine.torque", "{\"torque\":300}");
     feed("engine.torque", "{\"torque\":320}");
@@ -279,6 +289,13 @@ int main(int argc, char** argv) {
     CHECK(readFile(std::string(argv[2]) + "/fuel-cal.txt").find("factor=") == 0);
     CHECK(app->onInit());
     CHECK(slot(kSlotCoolantMark) == kImgBlank && slot(kSlotCoolantMax) == kImgBlank);   // maxima reset at start
+    // the engine screen is on display from the start: screens 1..4 are not written at all
+    int drvBg = g_fake.modelWrites[1099];
+    runPosted();                                                // the subscription
+    feed("hmi.graphicalContext", "{\"graphicalContext\":{\"visibleContext\":50,\"menuTitle\":\"GAUGE APP\"}}");
+    runPosted();
+    runPosted();
+    CHECK(g_fake.modelWrites[1099] == drvBg);
     CHECK(slot(kSlotTorqueMax) == kImgBlank && slot(kSlotTorqueHi) == kImgScaleNum + 250);   // scale back to its minimum
     CHECK(slot(kSlotCoolantUnit) == kImgUnit + kUnitF);         // settings kept (Fahrenheit)
     app->onFinalize();
