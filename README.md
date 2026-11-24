@@ -86,6 +86,17 @@ needs no Pillow. After changing the look: `python3 make_db.py` (Pillow + DejaVu 
 For 6.5" EntryNav2 units with an 800×480 screen: `python3 make_db.py --screen 800x480` (a separate 760×446
 layout with larger fonts; the image ids and `src/gauge_ids.hpp` stay the same, so `libGaugeApp.so` does not change).
 
+**BMW libraries (`lib/`).** Building links against the head unit's `libAppFramework.A.so` and `libCoreFramework.A.so`.
+They are BMW's files and not in the repository (`lib/` is git-ignored): copy them from a unit of the same type.
+
+- EntryNav2 (`/opt/hmi/lib` → `lib\Entry_Evo_libs`), over the install SSH link:
+  `scp root@169.254.1.0:/opt/hmi/lib/libAppFramework.A.so root@169.254.1.0:/opt/hmi/lib/libCoreFramework.A.so lib\Entry_Evo_libs\`
+- NBT Evo (`/opt/hmi/ID5/lib` on `hu-omap` → `lib/NBT_evo_libs`): no `scp` there, so either copy them to a USB stick on
+  the unit (`cp /opt/hmi/ID5/lib/lib*Framework.A.so /fs/usb0/` after `on -f /net/hu-omap/ /bin/sh`) or stream them
+  over SSH: `ssh root@CAR "cat /net/hu-omap/opt/hmi/ID5/lib/<file>" > lib/NBT_evo_libs/<file>`.
+
+Details: [README_PL.md](README_PL.md#biblioteki-bmw-lib).
+
 - **NBT Evo:** QNX SDP 6.5 (`qcc`) and the car's BMW libraries (`/opt/hmi/ID5/lib`) in `lib/NBT_evo_libs`, then `make`.
 - **EntryNav2:** the car's `libAppFramework.A.so` / `libCoreFramework.A.so` (`/opt/hmi/lib`) in `lib/Entry_Evo_libs`,
   `docker build -t gauge-entrynav2-tc toolchain` once (Ubuntu 12.04: armhf GCC 4.6 against eglibc 2.15, the car's

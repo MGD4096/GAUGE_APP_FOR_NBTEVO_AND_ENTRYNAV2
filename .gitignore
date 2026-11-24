@@ -3,3 +3,6 @@ build/
 tests/build/
 dist/
 diag/
+
+# BMW's framework libraries, copied from the head units (not ours, not redistributable): see README, "Biblioteki BMW"
+lib/

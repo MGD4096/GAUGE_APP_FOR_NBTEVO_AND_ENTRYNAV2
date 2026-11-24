@@ -184,6 +184,48 @@ python3 make_db.py --screen 800x480   # ekran 6,5" 800x480: osobny układ 760x44
 make check                      # testy hostowe obu wersji (zwykły g++)
 ```
 
+### Biblioteki BMW (`lib/`)
+
+Do zbudowania biblioteki potrzebne są dwa pliki frameworka iDrive: `libAppFramework.A.so` i `libCoreFramework.A.so`.
+To pliki BMW, więc **nie ma ich w repozytorium** (`lib/` jest w `.gitignore`). Trzeba je skopiować z jednostki tego
+samego typu, najlepiej z auta, do którego budujesz (ta sama wersja oprogramowania). Są potrzebne tylko do linkowania;
+do auta trafia wyłącznie `libGaugeApp.so`.
+
+| Jednostka | Ścieżka w jednostce | Folder w projekcie | Rozmiary (F40 / NBT Evo ID5) |
+|---|---|---|---|
+| EntryNav2 | `/opt/hmi/lib/` | `lib\Entry_Evo_libs\` | ok. 40 KB / 72 KB |
+| NBT Evo | `/opt/hmi/ID5/lib/` (na `hu-omap`) | `lib\NBT_evo_libs\` | ok. 52 KB / 95 KB |
+
+**EntryNav2 przez SSH** (to samo połączenie co przy instalacji), w PowerShellu, w folderze projektu:
+
+```powershell
+New-Item -ItemType Directory -Force lib\Entry_Evo_libs
+scp root@169.254.1.0:/opt/hmi/lib/libAppFramework.A.so root@169.254.1.0:/opt/hmi/lib/libCoreFramework.A.so lib\Entry_Evo_libs\
+```
+
+Albo przez pendrive, na jednostce: `cp /opt/hmi/lib/libAppFramework.A.so /opt/hmi/lib/libCoreFramework.A.so
+/media/<pendrive>/` i `sync`.
+
+**NBT Evo** nie ma `scp`. Przez pendrive, na jednostce (logowanie jak w
+[docs/NbtEvo_Installation.md](docs/NbtEvo_Installation.md), potem `on -f /net/hu-omap/ /bin/sh`):
+
+```sh
+cp /opt/hmi/ID5/lib/libAppFramework.A.so /opt/hmi/ID5/lib/libCoreFramework.A.so /fs/usb0/
+```
+
+Albo przez SSH z komputera (Git Bash / WSL, w folderze projektu; `root@CAR` i opcje SSH jak w instrukcji NBT):
+
+```sh
+mkdir -p lib/NBT_evo_libs
+for f in libAppFramework.A.so libCoreFramework.A.so; do
+  ssh root@CAR "cat /net/hu-omap/opt/hmi/ID5/lib/$f" > lib/NBT_evo_libs/$f
+done
+```
+
+Sprawdzenie: oba pliki mają rozmiar podobny do tabeli wyżej (nie 0 bajtów). `make` i `build_entryNav2.bat` same
+przerywają z komunikatem, jeśli plików brakuje. Pliki z innej wersji oprogramowania zwykle też działają (te same
+eksportowane funkcje `bmw::PluginApp`), ale zbudowana biblioteka jest sprawdzona tylko z plikami z F40 (EntryNav2).
+
 **NBT Evo:** QNX SDP 6.5.0 (`qcc`; instaluje się razem z QNX Momentics IDE 4.7) i kopie bibliotek BMW z
 `/opt/hmi/ID5/lib` w `lib/NBT_evo_libs`.
 
