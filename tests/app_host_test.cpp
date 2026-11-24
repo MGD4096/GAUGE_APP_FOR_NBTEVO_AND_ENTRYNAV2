@@ -115,7 +115,7 @@ int main(int argc, char** argv) {
     FILE* pf = fopen(png.c_str(), "wb");
     if (pf) { fputs("\x89PNG fake picture data", pf); fclose(pf); }
     writeFramePack(std::string(argv[2]) + "/GaugeApp_frames.bin");
-    writeFramePack(std::string(argv[2]) + "/GaugeApp_frames_s.bin", 62000, 72499);   // screens 1..4
+    writeFramePack(std::string(argv[2]) + "/GaugeApp_frames_s.bin", 62000, 72799);   // screens 1..4
     unlink((std::string(argv[2]) + "/torque-env.txt").c_str());
     unlink((std::string(argv[2]) + "/fuel-cal.txt").c_str());
     // colour 1: the arc frames again, marked +100000 (no pack for colour 0: everything from the common pack)

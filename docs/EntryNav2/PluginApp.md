@@ -103,7 +103,7 @@ and 5 words), copies the data. **There is no exported `~Image`**: call `BufferSt
 | Visible area of a state | about **1250 × 470 px** (GaugeApp: 960 × 400 design, scale 1.15, origin at 73,4) |
 | Positions and stacking | work: pictures sit at the given pixels and stack in XML order |
 | `raImageModel` (PNG as data) | works, and replacing it 5 times a second is smooth (about 4.9 frames/s) |
-| PNG | RGBA works. Indexed (palette) PNG not tested yet (GaugeApp with the Driving / Fuel / Performance screens is the first test) |
+| PNG | RGBA and indexed (palette, 32 / 256 colours with transparency) both work. GaugeApp stores every frame as an indexed PNG: 4-6 times smaller |
 | Texts | ASCII only in `*.txt`. Polish letters can only be shown drawn into pictures |
 
 That is why GaugeApp keeps its frames in its own packs (`*_frames*.bin`) and sends them as data, and the image DB
@@ -121,5 +121,4 @@ only holds the menu row icon.
 ## Not verified
 
 - the result type of `cdsIsPropertyAvailable` and whether `cdsGetPropertyAsync` works;
-- indexed (palette) PNG (in progress);
 - the exact mount point of a USB stick.

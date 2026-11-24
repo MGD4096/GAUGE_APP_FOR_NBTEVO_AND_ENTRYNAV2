@@ -25,9 +25,10 @@ gotowymi obrazkami całych liczb – jeden element na liczbę. Ekran ma 47 obraz
 Obok biegów jest **ilość paliwa** w zbiorniku (`sensors.fuel`, `tanklevel`).
 
 **Język** dopasowuje się do języka iDrive. Teksty menu i ustawień są w bazie tekstów (`pl.txt` po polsku, pozostałe
-języki po angielsku), którą iDrive wybiera sam. Napisy na samym ekranie (tytuły kart, „bok/wzdł.”, „KM”, przecinek
-dziesiętny) są w obrazkach, więc aplikacja wybiera je według `vehicle.language` z CDS: 18 = polski, każdy inny język
-= angielski („Coolant”, „lat./long.”, „PS”, kropka dziesiętna). Dopóki język nie przyjdzie, ekran jest po polsku.
+języki po angielsku), którą iDrive wybiera sam. Napisy na samym ekranie (tytuły kart, „bok/wzdł.”, „KM”) są
+w obrazkach, więc aplikacja wybiera je według `vehicle.language` z CDS: 18 = polski, każdy inny język = angielski
+(„Coolant”, „lat./long.”, „PS”). Dopóki język nie przyjdzie, ekran jest po polsku. Liczby dziesiętne mają zawsze
+**przecinek**, także po angielsku: osobne zestawy z kropką zajmowały ok. 2,4 MB.
 Podgląd angielski: [`res/preview_en.png`](res/preview_en.png).
 
 **Ustawienia** (klawisz OPTION na ekranie GAUGE APP → Ustawienia; zapis w `<folder danych>/settings.txt`):
@@ -85,8 +86,10 @@ z własnym limitem ok. 60 obrazków:
   od temperatury oleju przy starcie. Czas do rozgrzania jest szacowany z tempa wzrostu temperatury oleju w ostatnich
   1–5 minutach, więc przez pierwszą minutę pokazuje „--”. Temperatury idą za ustawieniem °C / °F.
 - Nowe ekrany pokazują paliwo w litrach, niezależnie od ustawienia jednostki paliwa.
-- Obrazki liczb nowych ekranów są w `GaugeApp_frames_s.bin` jako PNG z paletą 32 kolorów, bo są 4–6 razy mniejsze.
-  Jeśli na nowych ekranach będą karty, ale bez liczb, to iDrive nie czyta takich PNG (napisz).
+- Wszystkie klatki są zapisane jako PNG z paletą (32 kolory dla napisów i liczb, 256 dla reszty), bo są 4–6 razy
+  mniejsze niż RGBA; sprawdzone w aucie. Paczka ma ok. 12 MB: `GaugeApp_frames.bin` ok. 1,4 MB, każda paczka
+  koloru ok. 1 MB, `GaugeApp_frames_s.bin` ok. 6 MB.
+- Na ekranie Rozgrzewanie temperatury i akumulator są na środku kafelków.
 
 ## Jak to działa
 

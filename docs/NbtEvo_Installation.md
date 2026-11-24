@@ -41,7 +41,7 @@ w trybie zapisu tylko na czas kopiowania.
   | `GaugeApp_frames.bin`, `GaugeApp_frames_s.bin`, `GaugeApp_frames_c0.bin` … `c3.bin` | klatki ekranów (ekran silnika, pozostałe ekrany i 4 kolory) |
 
 - **Pendrive** (FAT32) **albo SSH z komputera**, żeby przenieść pliki na jednostkę.
-- Ok. **26 MB** wolnego miejsca na partycji systemowej.
+- Ok. **20 MB** wolnego miejsca na partycji systemowej.
 
 ## 1. Przenieś pliki na jednostkę
 
@@ -97,8 +97,8 @@ ls -l $SRC
 df -h /fs/sda0
 ```
 
-- W `$SRC` musi być 11 plików z tabeli wyżej; `libGaugeApp.so` ma kilkadziesiąt KB, `GaugeApp_frames.bin` ok. 6 MB, `GaugeApp_frames_s.bin` ok. 9 MB.
-- Na `/fs/sda0` musi być co najmniej ok. 26 MB wolnego miejsca.
+- W `$SRC` musi być 11 plików z tabeli wyżej; `libGaugeApp.so` ma kilkadziesiąt KB, `GaugeApp_frames.bin` ok. 1,4 MB, `GaugeApp_frames_s.bin` ok. 6 MB.
+- Na `/fs/sda0` musi być co najmniej ok. 20 MB wolnego miejsca.
 
 ## 4. Zainstaluj
 

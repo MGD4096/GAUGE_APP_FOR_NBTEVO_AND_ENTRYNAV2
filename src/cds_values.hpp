@@ -202,9 +202,10 @@ inline bool apply(Metrics& m, int prop, const char* text, long nowMs) {
         const double coolant = v;
         v = 0;
         bool b = numField(text, "oil", &v) && inRange(v, -40, 250);
-        // The first value after an engine start can be {"engine":68,"oil":0} (EntryNav2 F40): the oil sensor is not
-        // read yet. 0 deg C oil next to a warm coolant is that placeholder, not a reading.
-        if (b && v == 0 && a && coolant > 30) b = false;
+        // Oil 0 is what the car sends while the oil sensor is not read (EntryNav2 F40: {"engine":68,"oil":0} right
+        // after a start, {"engine":6,"oil":0} with the engine off). Oil and coolant are close when cold and the oil
+        // is warmer when running, so an exact 0 more than 3 deg away from the coolant is that placeholder.
+        if (b && v == 0 && a && fabs(coolant) > 3) b = false;
         ch = setValue(m.hasOil, m.oil, b, v) || ch;
         break;
     }

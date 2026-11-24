@@ -423,7 +423,7 @@ def common_images(fp):
     for v in range(FUELNUM_MAX + 1):
         imgs[IMG_FUELNUM + v] = number_image(fp, str(v), fw, fh, FUEL_SIZE, TEXT, "r")
     imgs[IMG_FUELNUM_NONE] = number_image(fp, "--", fw, fh, FUEL_SIZE, TEXT, "r")
-    for s, sep in enumerate((",", ".")):
+    for s, sep in enumerate((",",)):            # decimal comma in every language (no "." sets)
         for v in range(GNUM_MAX + 1):
             imgs[IMG_GNUM + SEP_STRIDE * s + v] = number_image(fp, g_text(v, sep), G_BIG_BOX[2], G_BIG_BOX[3],
                                                                G_SIZE, TEXT, "m")
@@ -493,14 +493,16 @@ IMG_BDEC, BDEC_STRIDE = 67000, 500                # big 0,0..49,9
 IMG_BNONE = 68000                                 # big "--"
 IMG_ADEC = 68100                                  # amber 0,0..49,9 (+ 500: point)
 IMG_PCT = 69200                                   # 0..100 %
-IMG_ANGLE, ANGLE_MAX = 69400, 720                 # -720..720 deg: + angle + 720
+IMG_ANGLE, ANGLE_MAX = 69400, 540                 # steering angle 0..540 deg, without a sign: + angle
+IMG_SARROW = 69990                                # + 0 left, + 1 right: the direction next to the angle
 IMG_WHEEL = 71000                                 # + 0..71 (5 deg steps)
 IMG_GASBAR, IMG_BRKBAR, IMG_CHART, IMG_STYLE = 71100, 71200, 71300, 71400
 IMG_GEAR2 = 71500                                 # P R N D D1..D8, 12 = "--" (colour pack)
 IMG_SHIFT = 71520                                 # 0 up, 1 down
 IMG_STATUS = 71600                                # + 10 * language (0 pl, 1 en) + PerfStatus
 IMG_BG_S = 71800                                  # + 2 * (screen - 1) + language
-IMG_TSINT, TSINT_MIN, TSINT_MAX = 72000, -60, 160 # tile -60..160 (temperatures): + value - TSINT_MIN
+IMG_TSINT, TSINT_MIN, TSINT_MAX = 72000, -60, 160 # tile -60..160, centred (warm-up temperatures): + value - TSINT_MIN
+IMG_TCINT, IMG_TCNONE = 72600, 72710              # tile 0..100, centred (battery %); centred "--"
 IMG_WPROG, WARM_STEPS = 72300, 40                 # warm-up progress bar 0..40 (amber)
 IMG_WDONE = 72350                                 # full bar, green
 IMG_WSTATUS = 72400                               # + 10 * language + WarmStatus
@@ -575,6 +577,7 @@ def drv_slots():
         out.append(("MAX_" + key, mx + 50, 352, G_LAT_BOX[2], G_LAT_BOX[3]))
     out.append(("WHEEL", 670 + 20, 0 + 45, WHEEL, WHEEL))
     out.append(("ANGLE", 670 + 165, 0 + 90, ANG["w"], ANG["h"]))
+    out.append(("STEER_DIR", 670 + 165 + ANG["w"] - 30, 0 + 90 + ANG["h"] + 2, 30, ANG["h"]))   # under the number
     out.append(("LOAD_ARC", DRV_LOAD_C[0] - ARC_C[0] + ARC_BOX[0], 200 + ARC_BOX[1], ARC_BOX[2], ARC_BOX[3]))
     x0 = DRV_LOAD_C[0] - 3 * BIG["cell"] // 2
     for k in range(3):
@@ -633,8 +636,8 @@ def warm_slots():
     out.append(("PROGRESS", mx + 14, my + 96, WPROG_BOX[0], WPROG_BOX[1]))
     out.append(("RUNTIME", mx + 14, my + 190, TILE["w"], TILE["h"]))
     out.append(("ETA", mx + 14, my + 300, TILE["w"], TILE["h"]))
-    for key, x, y, w, h in WARM_TILES:
-        out.append((key,) + tile_num_xy(x, y, w, h) + (TILE["w"], TILE["h"]))
+    for key, x, y, w, h in WARM_TILES:              # value in the middle of the tile (centred pictures)
+        out.append((key, x + (w - TILE["w"]) // 2, y + (h - TILE["h"]) // 2 + 14, TILE["w"], TILE["h"]))
         if key != "BATT":
             out.append((key + "_UNIT", x + w - 10 - UNIT_BOX[0], y + 34, UNIT_BOX[0], UNIT_BOX[1]))
     return out
@@ -780,7 +783,10 @@ def screen_images(fp):
         for li, lang in enumerate(("pl", "en")):
             imgs[IMG_BG_S + 2 * (s - 1) + li] = s_background(fp, s, lang)
     for v in range(TSINT_MIN, TSINT_MAX + 1):
-        imgs[IMG_TSINT + v - TSINT_MIN] = number_image(fp, str(v), TILE["w"], TILE["h"], TILE["size"], TEXT, "l")
+        imgs[IMG_TSINT + v - TSINT_MIN] = number_image(fp, str(v), TILE["w"], TILE["h"], TILE["size"], TEXT, "m")
+    for v in range(101):
+        imgs[IMG_TCINT + v] = number_image(fp, str(v), TILE["w"], TILE["h"], TILE["size"], TEXT, "m")
+    imgs[IMG_TCNONE] = number_image(fp, "--", TILE["w"], TILE["h"], TILE["size"], TEXT, "m")
     for lv in range(WARM_STEPS + 1):
         imgs[IMG_WPROG + lv] = bar_frame(lv, WARM_STEPS, WPROG_BOX[0], WPROG_BOX[1], AMBER, 7, False)
     imgs[IMG_WDONE] = bar_frame(WARM_STEPS, WARM_STEPS, WPROG_BOX[0], WPROG_BOX[1], (99, 153, 34, 255), 7, False)
@@ -789,7 +795,7 @@ def screen_images(fp):
             c = Canvas(*WSTATUS_BOX)
             c.text((0, WSTATUS_BOX[1] / 2.0), t, font(fp, 22), TEXT, "lm")
             imgs[IMG_WSTATUS + 10 * li + k] = c.image()
-    for si, sep in enumerate((",", ".")):
+    for si, sep in enumerate((",",)):          # decimal comma in every language (no "." sets)
         for v in range(1000):
             imgs[IMG_TDEC + DEC_STRIDE * si + v] = number_image(fp, dec_text(v, sep), TILE["w"], TILE["h"],
                                                                 TILE["size"], TEXT, "l")
@@ -807,8 +813,10 @@ def screen_images(fp):
     imgs[IMG_BNONE] = number_image(fp, "--", BIGN["w"], BIGN["h"], BIGN["size"], TEXT, "m")
     for v in range(101):
         imgs[IMG_PCT + v] = number_image(fp, "%d%%" % v, PCT["w"], PCT["h"], PCT["size"], TEXT, "m")
-    for a in range(-ANGLE_MAX, ANGLE_MAX + 1):
-        imgs[IMG_ANGLE + a + ANGLE_MAX] = number_image(fp, str(a), ANG["w"], ANG["h"], ANG["size"], TEXT, "r")
+    for a in range(ANGLE_MAX + 1):                 # one set for both directions; the arrow tells left / right
+        imgs[IMG_ANGLE + a] = number_image(fp, str(a), ANG["w"], ANG["h"], ANG["size"], TEXT, "r")
+    for i, ch in enumerate(("◀", "▶")):
+        imgs[IMG_SARROW + i] = number_image(fp, ch, 30, ANG["h"], 22, AMBER, "m")
     for k in range(WHEEL_STEPS):
         imgs[IMG_WHEEL + k] = wheel_frame(k)
     for lv in range(BAR["steps"] + 1):
@@ -843,22 +851,23 @@ def screen_color_images(fp, color):
 def screen_preview(imgs, screen, lang="pl"):
     """Screen 1..3 with sample values, composed like the HMI would."""
     comma = lang == "pl"
-    s = 0 if comma else 1
-    dec = lambda v: IMG_TDEC + DEC_STRIDE * s + int(round(v * 10))
+    s = 0 if comma else 1                          # language (texts, statuses)
+    d = 0                                          # decimal comma sets in every language
+    dec = lambda v: IMG_TDEC + DEC_STRIDE * d + int(round(v * 10))
     names = {}
     if screen == 1:
         names = {"GAS_BAR": IMG_GASBAR + 29, "GAS_PCT": IMG_PCT + 72, "BRAKE_BAR": IMG_BRKBAR + 0,
-                 "BRAKE_PCT": IMG_PCT + 0, "G_DOT": IMG_DOT + 8 * 21 + 14, "G_BIG": IMG_GNUM + SEP_STRIDE * s + 48,
-                 "MAX_LEFT": IMG_LATNUM + SEP_STRIDE * s + 92, "MAX_RIGHT": IMG_LATNUM + SEP_STRIDE * s + 88,
-                 "MAX_ACC": IMG_LATNUM + SEP_STRIDE * s + 41, "MAX_BRK": IMG_LATNUM + SEP_STRIDE * s + 105,
-                 "WHEEL": IMG_WHEEL + (WHEEL_STEPS - 7), "ANGLE": IMG_ANGLE + ANGLE_MAX - 35,
+                 "BRAKE_PCT": IMG_PCT + 0, "G_DOT": IMG_DOT + 8 * 21 + 14, "G_BIG": IMG_GNUM + SEP_STRIDE * d + 48,
+                 "MAX_LEFT": IMG_LATNUM + SEP_STRIDE * d + 92, "MAX_RIGHT": IMG_LATNUM + SEP_STRIDE * d + 88,
+                 "MAX_ACC": IMG_LATNUM + SEP_STRIDE * d + 41, "MAX_BRK": IMG_LATNUM + SEP_STRIDE * d + 105,
+                 "WHEEL": IMG_WHEEL + (WHEEL_STEPS - 7), "ANGLE": IMG_ANGLE + 35, "STEER_DIR": IMG_SARROW + 0,
                  "LOAD_ARC": IMG_ARC + round(0.84 * ARC_STEPS), "LOAD_BIG0": IMG_BLANK,
                  "LOAD_BIG1": IMG_BIG + 16 + 8, "LOAD_BIG2": IMG_BIG + 16 + 4, "GEAR": IMG_GEAR2 + 7,
                  "SHIFT": IMG_SHIFT + 0}
         names["LOAD_BIG0"], names["LOAD_BIG1"], names["LOAD_BIG2"] = IMG_BIG + 16 + 8, IMG_BIG + 16 + 4, IMG_BLANK
         slot_list = drv_slots()
     elif screen == 2:
-        names = {"INST": IMG_BDEC + BDEC_STRIDE * s + 78, "INST_LPH": dec(3.2), "TRIP_AVG": dec(6.9),
+        names = {"INST": IMG_BDEC + BDEC_STRIDE * d + 78, "INST_LPH": dec(3.2), "TRIP_AVG": dec(6.9),
                  "BCAVG": dec(18.9), "AVGSPD": dec(13.8), "RANGE": IMG_TINT + 498, "TANK": IMG_TINT + 37,
                  "TRIP_KM": dec(23.4), "TRIP_TIME": IMG_TTIME + 31, "USED": dec(1.9),
                  "STYLE0": IMG_STYLE + 15, "STYLE1": IMG_STYLE + 15, "STYLE2": IMG_STYLE + 15}
@@ -878,13 +887,13 @@ def screen_preview(imgs, screen, lang="pl"):
                  "COOLANT_HI": IMG_SCALENUM + WARM_COOLANT[1],
                  "STATUS": IMG_WSTATUS + 10 * s + 2, "PROGRESS": IMG_WPROG + 16, "RUNTIME": IMG_TTIME + 4,
                  "ETA": IMG_TINT + 3, "EXT": IMG_TSINT + 5 - TSINT_MIN, "INT": IMG_TSINT + 18 - TSINT_MIN,
-                 "EVAP": IMG_TSINT + 6 - TSINT_MIN, "BATT": IMG_TINT + 97, "EXT_UNIT": IMG_UNIT,
+                 "EVAP": IMG_TSINT + 6 - TSINT_MIN, "BATT": IMG_TCINT + 97, "EXT_UNIT": IMG_UNIT,
                  "INT_UNIT": IMG_UNIT, "EVAP_UNIT": IMG_UNIT}
         slot_list = warm_slots()
     else:
-        names = {"P0100": IMG_BDEC + BDEC_STRIDE * s + 74, "BEST": IMG_ADEC + BDEC_STRIDE * s + 71, "P60": dec(4.2),
+        names = {"P0100": IMG_BDEC + BDEC_STRIDE * d + 74, "BEST": IMG_ADEC + BDEC_STRIDE * d + 71, "P60": dec(4.2),
                  "P80": dec(5.6), "PBRK": dec(37.8), "PQ": dec(15.3), "STATUS": IMG_STATUS + 10 * s + 1,
-                 "LIVE": dec(0), "MAXLAT": IMG_GNUM + SEP_STRIDE * s + 92, "MAXBRK": IMG_GNUM + SEP_STRIDE * s + 105}
+                 "LIVE": dec(0), "MAXLAT": IMG_GNUM + SEP_STRIDE * d + 92, "MAXBRK": IMG_GNUM + SEP_STRIDE * d + 105}
         slot_list = perf_slots()
     out = Image.new("RGBA", (sc(W), sc(H)), (11, 13, 16, 255))
     out.alpha_composite(imgs[IMG_BG_S + 2 * (screen - 1) + (0 if comma else 1)])
@@ -901,14 +910,15 @@ def screen_header():
     consts = [("kImgTileDec", IMG_TDEC), ("kDecStride", DEC_STRIDE), ("kImgTileInt", IMG_TINT),
               ("kTileIntMax", TINT_MAX), ("kImgTileTime", IMG_TTIME), ("kImgTileNone", IMG_TNONE),
               ("kImgBigDec", IMG_BDEC), ("kBigDecStride", BDEC_STRIDE), ("kImgBigNone", IMG_BNONE),
-              ("kImgAmberDec", IMG_ADEC), ("kImgPct", IMG_PCT), ("kImgAngle", IMG_ANGLE), ("kAngleMax", ANGLE_MAX),
+              ("kImgAmberDec", IMG_ADEC), ("kImgPct", IMG_PCT), ("kImgAngle", IMG_ANGLE), ("kAngleMax", ANGLE_MAX), ("kImgSteerDir", IMG_SARROW),
               ("kImgWheel", IMG_WHEEL), ("kWheelSteps", WHEEL_STEPS), ("kImgGasBar", IMG_GASBAR),
               ("kImgBrakeBar", IMG_BRKBAR), ("kBarSteps", BAR["steps"]), ("kImgChart", IMG_CHART),
               ("kChartSteps", CHART["steps"]), ("kChartBars", CHART["n"]), ("kImgStyle", IMG_STYLE),
               ("kStyleSteps", STYLE["steps"]), ("kImgGear2", IMG_GEAR2), ("kImgShift", IMG_SHIFT),
               ("kImgStatus", IMG_STATUS), ("kImgScreenBg", IMG_BG_S), ("kScreenCount", len(SCREEN_STATES)),
               ("kTextScreens", 260), ("kImgTileSInt", IMG_TSINT), ("kTileSIntMin", TSINT_MIN),
-              ("kTileSIntMax", TSINT_MAX), ("kImgWarmProg", IMG_WPROG), ("kWarmSteps", WARM_STEPS),
+              ("kTileSIntMax", TSINT_MAX), ("kImgTileCInt", IMG_TCINT), ("kImgTileCNone", IMG_TCNONE),
+              ("kImgWarmProg", IMG_WPROG), ("kWarmSteps", WARM_STEPS),
               ("kImgWarmDone", IMG_WDONE), ("kImgWarmStatus", IMG_WSTATUS), ("kWarmOilLo", WARM_OIL[0]),
               ("kWarmOilHi", WARM_OIL[1]), ("kWarmCoolantLo", WARM_COOLANT[0]), ("kWarmCoolantHi", WARM_COOLANT[1])]
     for i, (k, v) in enumerate(consts):
@@ -1164,20 +1174,25 @@ def add(z, name, data):
     z.writestr(info, data)
 
 
-def png_bytes(im, palette=False):
-    """PNG data. palette: 32 colours with transparency (indexed PNG) - single-colour text needs no more, and the file
-    is 4-6 times smaller than RGBA."""
+def png_bytes(im, colors=0):
+    """PNG data. colors > 0: an indexed PNG with that many colours (with transparency) - 4-6 times smaller than RGBA.
+    Car-verified on an EntryNav2 (the Warm-up screen's numbers)."""
     import io
     b = io.BytesIO()
-    if palette:
-        im = im.quantize(colors=32, method=Image.Quantize.FASTOCTREE)
+    if colors:
+        im = im.quantize(colors=colors, method=Image.Quantize.FASTOCTREE)
     im.save(b, "PNG", optimize=True)
     return b.getvalue()
 
 
-def is_number_set(iid):
-    """The number pictures and steering wheel frames of screens 1..4 (stored as indexed PNGs, see png_bytes)."""
-    return IMG_TDEC <= iid < IMG_GASBAR or IMG_TSINT <= iid < IMG_WPROG
+def palette_colors(iid):
+    """Colours of every frame's indexed PNG: 32 for single-colour text (digits, numbers, units, labels), 256 for the
+    rest (backgrounds, arcs, dots, bars, wheel, gear cells), which keeps their anti-aliased edges smooth."""
+    text = (IMG_BIG <= iid < IMG_BIG + 32 or IMG_UNIT <= iid < IMG_UNIT + 20 or
+            IMG_MAXNUM <= iid <= IMG_LATNUM + SEP_STRIDE + GNUM_MAX or
+            IMG_TDEC <= iid < IMG_WHEEL or IMG_TSINT <= iid < IMG_WPROG or IMG_TCINT <= iid <= IMG_TCNONE or
+            IMG_STATUS <= iid < IMG_STATUS + 20 or IMG_WSTATUS <= iid < IMG_WSTATUS + 20)
+    return 32 if text else 256
 
 
 def preview(imgs, slot_list, lang="pl"):
@@ -1210,7 +1225,7 @@ def preview(imgs, slot_list, lang="pl"):
         pick[name + "_HI"] = IMG_SCALENUM + int(hi)
     pick["FUEL"] = IMG_FUELNUM + 39
     pick["FUEL_UNIT"] = IMG_FUEL_UNIT
-    s = 0 if lang == "pl" else SEP_STRIDE             # decimal separator of the language
+    s = 0                                             # decimal comma in every language
     pick["G_BIG"] = IMG_GNUM + s + 62
     pick["G_LAT"] = IMG_LATNUM + s + 58
     pick["G_LON"] = IMG_LATNUM + s + 21
@@ -1225,10 +1240,10 @@ def preview(imgs, slot_list, lang="pl"):
     return out
 
 
-def write_frames(path, imgs, palette=lambda iid: False):
+def write_frames(path, imgs, palette=palette_colors):
     """GaugeApp_frames.bin, read by engine_data.cpp (loadFrames): little endian
          "GFR1", u32 count, count x (u32 id, u32 offset, u32 size) sorted by id, then the PNG data
-       offset counted from the start of the file."""
+       offset counted from the start of the file. Every frame is an indexed PNG (palette_colors)."""
     items = [(iid, png_bytes(imgs[iid], palette(iid))) for iid in sorted(imgs)]
     head = 8 + 12 * len(items)
     table, data, off = [], [], head
@@ -1396,7 +1411,7 @@ def main():
     common = common_images(fp)
     size = write_frames(os.path.join(HERE, "GaugeApp_frames.bin"), common)
     scr = screen_images(fp)
-    size += write_frames(os.path.join(HERE, "GaugeApp_frames_s.bin"), scr, is_number_set)
+    size += write_frames(os.path.join(HERE, "GaugeApp_frames_s.bin"), scr)
     os.makedirs(os.path.join(HERE, "res"), exist_ok=True)
     for k, color in enumerate(COLORS):
         colored = color_images(fp, color)

@@ -250,7 +250,7 @@ static void testLanguage() {
     apply(m, kAccel, "{\"acceleration\":{\"lateral\":6.0822,\"longitudinal\":0}}", 0);   // 0.62 g
     computeView(m, mx, st, view);
     CHECK(view[kSlotPowerUnit] == kImgUnit + kUnitPs);           // "PS" in English, "KM" in Polish
-    CHECK(view[kSlotGBig] == kImgGNum + kSepStride + 62 && view[kSlotGLat] == kImgLatNum + kSepStride + 62);   // "0.62"
+    CHECK(view[kSlotGBig] == kImgGNum + 62 && view[kSlotGLat] == kImgLatNum + 62);   // "0,62": comma in every language
     char t[8];
     gText(0.62, t, sizeof(t), false);
     CHECK(std::string(t) == "0.62");
@@ -386,7 +386,17 @@ static void testScreens() {
     CHECK(v[kDrvSlotGasBar] == kImgGasBar + kBarSteps / 2 && v[kDrvSlotGasPct] == kImgPct + 50);
     CHECK(v[kDrvSlotBrakeBar] == kImgBrakeBar + kBarSteps / 2);  // 15 of the minimum full scale 30
     CHECK(v[kDrvSlotGear] == kImgGear2 + 5);                     // D2
-    CHECK(v[kDrvSlotWheel] == kImgWheel + kWheelSteps - 7 && v[kDrvSlotAngle] == kImgAngle + kAngleMax + 35);
+    CHECK(v[kDrvSlotWheel] == kImgWheel + kWheelSteps - 7 && v[kDrvSlotAngle] == kImgAngle + 35);
+    CHECK(v[kDrvSlotSteerDir] == kImgSteerDir + 0);              // anticlockwise picture = left arrow
+    m.steer = -480;
+    computeDriving(m, g, e, 0, v);
+    CHECK(v[kDrvSlotAngle] == kImgAngle + 480 && v[kDrvSlotSteerDir] == kImgSteerDir + 1);
+    m.steer = 700;                                               // beyond the set: shown as 540
+    computeDriving(m, g, e, 0, v);
+    CHECK(v[kDrvSlotAngle] == kImgAngle + kAngleMax);
+    m.steer = 0.4;                                               // straight ahead: no arrow
+    computeDriving(m, g, e, 0, v);
+    CHECK(v[kDrvSlotAngle] == kImgAngle + 0 && v[kDrvSlotSteerDir] == kImgBlank);
     Trip t;
     FuelCal c;
     computeFuel(m, t, c, 0, v);
@@ -404,7 +414,7 @@ static void testScreens() {
     m.language = 3;
     computePerf(m, p, g, 0, v);
     CHECK(v[kPerfSlotStatus] == kImgStatus + 10 + kPerfReady);
-    CHECK(v[kPerfSlotP0100] == kImgBigDec + kBigDecStride + 74 && v[kPerfSlotBest] == kImgAmberDec + kBigDecStride + 71);
+    CHECK(v[kPerfSlotP0100] == kImgBigDec + 74 && v[kPerfSlotBest] == kImgAmberDec + 71);   // comma in English too
 }
 
 static void testWarm() {
@@ -416,6 +426,8 @@ static void testWarm() {
     CHECK(m.hasOil && m.oil == 63);
     apply(m, kEngineTemp, "{\"temperature\":{\"engine\":2,\"oil\":0}}", 0);   // a real 0 deg C on a cold day
     CHECK(m.hasOil && m.oil == 0);
+    apply(m, kEngineTemp, "{\"temperature\":{\"engine\":6,\"oil\":0}}", 0);   // engine off, sensor not read
+    CHECK(m.hasCoolant && !m.hasOil);
     apply(m, kGraphic, "{\"graphicalContext\":{\"menuTitle\":\"CDS SCAN\",\"appType\":\"4\"}}", 0);
     CHECK(strcmp(m.appType, "4") == 0);
     CHECK(apply(m, kTempExt, "{\"temperatureExterior\":-5.0}", 0) && m.tempExt == -5.0);
@@ -461,8 +473,8 @@ static void testWarm() {
     CHECK(v[kWarmSlotOilMax] == kImgMaxNum + 80 && v[kWarmSlotOilLo] == kImgScaleNum + 0 && v[kWarmSlotOilHi] == kImgScaleNum + 140);
     CHECK(v[kWarmSlotCoolantMax] == kImgBlank && v[kWarmSlotCoolantHi] == kImgScaleNum + 120);
     CHECK(v[kWarmSlotStatus] == kImgWarmStatus + kWarmWarming);
-    CHECK(v[kWarmSlotExt] == kImgTileSInt + (unsigned)(-5 - kTileSIntMin) && v[kWarmSlotBatt] == kImgTileInt + 97);
-    CHECK(v[kWarmSlotExtUnit] == kImgUnit + kUnitC && v[kWarmSlotInt] == kImgTileNone);
+    CHECK(v[kWarmSlotExt] == kImgTileSInt + (unsigned)(-5 - kTileSIntMin) && v[kWarmSlotBatt] == kImgTileCInt + 97);
+    CHECK(v[kWarmSlotExtUnit] == kImgUnit + kUnitC && v[kWarmSlotInt] == kImgTileCNone);
     st.temp = kFahrenheit;
     computeWarm(e, w, st, 600000, v);
     CHECK(v[kWarmSlotExt] == kImgTileSInt + (unsigned)(23 - kTileSIntMin) && v[kWarmSlotOilMax] == kImgMaxNum + 176);

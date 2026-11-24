@@ -69,7 +69,7 @@ inline unsigned gear2(const Metrics& m) {            // P R N D D1..D8, "--" (sa
 inline void computeDriving(const Metrics& m, const GMax& gm, const TorqueEnv& env, double brakeFull,
                            unsigned* out) {
     using namespace ids;
-    const bool comma = m.polish();
+    const bool comma = kDecimalComma;
     out[kDrvSlotGasBar] = m.hasPedal ? level(kImgGasBar, m.pedal / 100.0, kBarSteps) : (unsigned)kImgGasBar;
     out[kDrvSlotGasPct] = m.hasPedal ? kImgPct + (unsigned)clampInt(m.pedal, 0, 100) : (unsigned)kImgBlank;
     double bf = m.hasBrake ? m.brake / (brakeFull > kBrakeFullMin ? brakeFull : kBrakeFullMin) : 0;
@@ -83,8 +83,11 @@ inline void computeDriving(const Metrics& m, const GMax& gm, const TorqueEnv& en
     for (int i = 0; i < 4; ++i)
         out[kDrvSlotMaxLeft + i] = gm.has[dirs[i]] ? gImage(kImgLatNum, gm.v[dirs[i]], comma) : (unsigned)kImgBlank;
     out[kDrvSlotWheel] = wheelFrame(m.hasSteer, m.steer);
-    out[kDrvSlotAngle] = m.hasSteer ? kImgAngle + (unsigned)(clampInt(m.steer, -kAngleMax, kAngleMax) + kAngleMax)
-                                    : (unsigned)kImgBlank;
+    // The angle without a sign (0..540) and an arrow for the direction the wheel picture turns (kSteerSign).
+    const double turn = kSteerSign * m.steer;          // > 0: clockwise on screen = right
+    out[kDrvSlotAngle] = m.hasSteer ? kImgAngle + (unsigned)clampInt(fabs(m.steer), 0, kAngleMax) : (unsigned)kImgBlank;
+    out[kDrvSlotSteerDir] = !m.hasSteer || fabs(m.steer) < 1 ? (unsigned)kImgBlank
+                                                             : kImgSteerDir + (turn > 0 ? 1u : 0u);
     double load = 0;
     bool hasLoad = env.load(m, &load);
     out[kDrvSlotLoadArc] = arcFrame(hasLoad, load, 0, 100);
@@ -98,7 +101,7 @@ inline void computeDriving(const Metrics& m, const GMax& gm, const TorqueEnv& en
 // ---- Fuel and trip ----------------------------------------------------------------------------------------------------
 inline void computeFuel(const Metrics& m, const Trip& trip, const FuelCal& cal, long now, unsigned* out) {
     using namespace ids;
-    const bool comma = m.polish();
+    const bool comma = kDecimalComma;
     double lph = 0;
     bool hasLph = m.hasConsumption && trip.litresPerHour(now, cal.factor, &lph);
     out[kFuelSlotInstLph] = hasLph ? tileDec(lph, comma) : (unsigned)kImgTileNone;
@@ -127,7 +130,7 @@ inline void computeFuel(const Metrics& m, const Trip& trip, const FuelCal& cal, 
 // ---- Performance ------------------------------------------------------------------------------------------------------
 inline void computePerf(const Metrics& m, const Perf& p, const GMax& gm, long now, unsigned* out) {
     using namespace ids;
-    const bool comma = m.polish();
+    const bool comma = kDecimalComma;
     out[kPerfSlotP0100] = bigDec(p.r0100 >= 0, p.r0100 / 1000.0, comma);
     out[kPerfSlotBest] = amberDec(p.best0100 >= 0, p.best0100 / 1000.0, comma);
     out[kPerfSlotP60] = tileNum(p.r60100 >= 0, p.r60100 / 1000.0, comma);
@@ -144,9 +147,13 @@ inline void computePerf(const Metrics& m, const Perf& p, const GMax& gm, long no
 }
 
 // ---- Warm-up ------------------------------------------------------------------------------------------------------------
+// Warm-up tiles: centred pictures (the value sits in the middle of the tile).
 inline unsigned tileSInt(bool has, double v) {     // -60..160 (temperatures)
     return has ? ids::kImgTileSInt + (unsigned)(clampInt(v, ids::kTileSIntMin, ids::kTileSIntMax) - ids::kTileSIntMin)
-               : (unsigned)ids::kImgTileNone;
+               : (unsigned)ids::kImgTileCNone;
+}
+inline unsigned tileCInt(bool has, double v) {     // 0..100 (battery %)
+    return has && v >= 0 ? ids::kImgTileCInt + (unsigned)clampInt(v, 0, 100) : (unsigned)ids::kImgTileCNone;
 }
 
 inline void computeWarm(const Metrics& m, const WarmUp& w, const Settings& st, long now, unsigned* out) {
@@ -169,7 +176,7 @@ inline void computeWarm(const Metrics& m, const WarmUp& w, const Settings& st, l
     out[kWarmSlotInt] = tileSInt(m.hasTempInt, showTemp(st, m.tempInt));
     out[kWarmSlotEvap] = tileSInt(m.hasEvaporator, showTemp(st, m.evaporator));
     out[kWarmSlotExtUnit] = out[kWarmSlotIntUnit] = out[kWarmSlotEvapUnit] = unit;
-    out[kWarmSlotBatt] = tileInt(m.hasBattery, m.battery);
+    out[kWarmSlotBatt] = tileCInt(m.hasBattery, m.battery);
 }
 
 } // namespace eng
