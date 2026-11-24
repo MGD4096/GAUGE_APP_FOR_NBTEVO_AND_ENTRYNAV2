@@ -69,6 +69,24 @@ From `/proc/*/exe` of a running unit. The likely role in brackets.
   online navigation, seat memory, Wi-Fi, charging) through which the HMI provides some properties itself.
 - Restarting the HMI (or `reboot`) loads the plugins again.
 
+## Display
+
+Read on the car (F40 with the original 8.8" CID, November 2026):
+
+| | |
+|---|---|
+| Display controller | TI OMAP DSS rev 6.1, kernel driver `omapdrm` (`/dev/dri/card0`, framebuffer `fb0`) |
+| Panel driver | `panel-entryevo` (kernel, device `connector.10`), logs `Panel Mode: 1280x480` at boot |
+| DRM connector | `/sys/class/drm/card0-Unknown-1`: connected, one mode only: **1280x480** |
+| HMI drawing | `HmiMain3D`: own 3D engine *Ines* on OpenGL ES 2 (EGL), a Wayland client; layers through GENIVI ILM (`CWal3dEntryEvo`, log tag `[WAL3D]`) |
+| Resolutions the HMI code knows | `TEConstDefinitionType_` 800x480, 1280x480, 1280x720, 1440x540, 1920x720; taken from the unit's coding (`CRbCoding::getDisplaySize`); fallbacks 1440x540 / 800x480 when the coding is invalid |
+| Plugin state area | about 1250 x 470 px of the 1280 x 480 panel |
+
+The video mode is set by the kernel panel driver, not by the HMI: the HMI knowing 1920x720 does not make the unit send
+it. Retrofit test with an MGU CID (APIX3, 1920x720, powered over the APIX cable): coded APIX3 + 1920x720 →
+"power supply" fault, "No signal"; coded APIX2 → power supply fault + display controller fault, "No signal". Not solved;
+what decides the panel mode (device tree, boot arguments, coding read by the driver) is still open.
+
 ## Where the CDS data comes from
 
 ```

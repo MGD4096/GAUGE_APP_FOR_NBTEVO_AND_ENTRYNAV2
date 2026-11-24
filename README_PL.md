@@ -51,8 +51,10 @@ nich, więc obie aplikacje mogą być zainstalowane razem.
 
 ### Więcej ekranów (OPTION)
 
-Klawisz OPTION na każdym ekranie przełącza między ekranami i otwiera Ustawienia. Każdy ekran to osobny stan HMI
-z własnym limitem ok. 60 obrazków:
+Ekran wybiera się w Ustawieniach, tak jak kolor wskaźników: klawisz OPTION na dowolnym ekranie → Ustawienia, na
+górze listy są ekrany (Silnik, Jazda, Spalanie i trasa, Pomiary, Rozgrzewanie), pod kreską ustawienia. Menu OPTION
+ma tylko jedną pozycję aplikacji, „Ustawienia”; pozycje nad nią (np. „Wyłącz pojazd”) dodaje iDrive. Każdy ekran to
+osobny stan HMI z własnym limitem ok. 60 obrazków:
 
 | Ekran | Co pokazuje | Dane CDS |
 |---|---|---|

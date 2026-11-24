@@ -953,17 +953,18 @@ def screen_parts(ox, oy):
     return models, actions, states
 
 
-def screen_options(s, comp_ids):
-    """OPTION menu of screen s: the other screens, then Settings."""
-    out = []
-    for k in range(len(SCREEN_STATES)):
-        if k == s:
-            continue
-        out.append("          <button action=\"%d\" id=\"%d\" model=\"%d\" text=\"%s\"/>\n"
-                   % (SCREEN_ACTIONS[k], next(comp_ids), SCREEN_TEXTMODELS[k], SCREEN_TEXTS[260 + k][1]))
-    out.append("          <button action=\"%d\" id=\"%d\" model=\"%d\" text=\"%s\"/>\n"
-               % (OPTION_ACTION, next(comp_ids), OPTION_TEXTMODEL, SETTINGS_TITLE[1]))
-    return out
+def screen_options(_s, comp_ids):
+    """OPTION menu of every screen: only Settings (the screens are chosen on the settings page). The HMI adds entries
+    of its own above it ("Wylacz pojazd", ...)."""
+    return ["          <button action=\"%d\" id=\"%d\" model=\"%d\" text=\"%s\"/>\n"
+            % (OPTION_ACTION, next(comp_ids), OPTION_TEXTMODEL, SETTINGS_TITLE[1])]
+
+
+def settings_screen_buttons(comp_ids):
+    """The first buttons of the settings page: one per screen, each opening it (hmiAction to its state)."""
+    return ["          <button action=\"%d\" id=\"%d\" model=\"%d\" text=\"%s\"/>\n"
+            % (SCREEN_ACTIONS[k], next(comp_ids), SCREEN_TEXTMODELS[k], SCREEN_TEXTS[260 + k][1])
+            for k in range(len(SCREEN_STATES))]
 
 
 # ---- outputs --------------------------------------------------------------------------------------------------------
@@ -1065,15 +1066,18 @@ def xml(slot_list, ox, oy, diag=False, menu_name=DEFAULT_MENU):
         xm, xa, xs = screen_parts(ox, oy)
         models += xm
         actions += xa
-        comp_ids = iter(range(600, 700))                 # OPTION buttons
+        comp_ids = iter(range(600, 700))                 # OPTION buttons, screen buttons, separator
+        # The settings page starts with the screens (like the colour, a choice made there), then the settings.
+        page = settings_screen_buttons(comp_ids) + ["          <separator id=\"%d\"/>\n" % next(comp_ids)] + sb
         states = [state(10, TITLE, 3, gc, options=screen_options(0, comp_ids)),
-                  state(SETTINGS_STATE, SETTINGS_TITLE[1], OPTION_TEXTMODEL, sb, 10)]
+                  state(SETTINGS_STATE, SETTINGS_TITLE[1], OPTION_TEXTMODEL, page, 10)]
         for s, comps in xs:
             states.append(state(SCREEN_STATES[s], SCREEN_TEXTS[260 + s][1], SCREEN_TEXTMODELS[s], comps, 10,
                                 options=screen_options(s, comp_ids)))
-        what = ("hmiState 10 (engine) is one background image and %d image components on top of it; its OPTION menu"
-                " opens the other screens - Driving 14, Fuel and trip 15, Performance 16, each its own background and"
-                " images - and the settings page (hmiState 12)" % len(slot_list))
+        what = ("hmiState 10 (engine) is one background image and %d image components on top of it. The OPTION menu"
+                " of every screen has one entry, Settings (hmiState 12); the settings page lists the screens - Engine"
+                " 10, Driving 14, Fuel and trip 15, Performance 16, Warm-up 17, each its own background and images -"
+                " then the settings" % len(slot_list))
     else:
         what = ("DIAGNOSTIC build 3: hmiState 10 is a menu of test pages E1..E4 (states 11..14). The gauge models stay"
                 " (the app writes them) but have no components")

@@ -89,8 +89,10 @@ and 5 words), copies the data. **There is no exported `~Image`**: call `BufferSt
 - **Image properties:** 2 = SELECTABLE, 3 = VISIBLE, 9 = width, 10 = height, 20 = X, 21 = Y (in pixels).
 - **Components:** `image`, `button` (with `action`; its text is changed with `updateModel(TextID)`), `label`,
   `checkbox`, `separator`.
-- **OPTION:** `optionComponents` with `hmiAction` buttons → another state. That is how the settings and switching
-  between screens work. Child states have a `parentId`.
+- **OPTION:** `optionComponents` with `hmiAction` buttons → another state. The HMI shows entries of its own above
+  them (e.g. "Wyłącz pojazd", or its own "Ustawienia" in some contexts), so an app entry named like one of them looks
+  duplicated. GaugeApp has only "Ustawienia" there; its settings page holds the screen buttons (`hmiAction` to each
+  screen's state) above the settings. Child states have a `parentId`.
 - **The title of the state on screen** arrives in CDS `hmi.graphicalContext` → `menuTitle` (the text DB's text). That
   tells which screen of the app is visible.
 
