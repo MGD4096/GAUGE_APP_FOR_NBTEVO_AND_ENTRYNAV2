@@ -842,7 +842,7 @@
               <property id="3" value="true"/>
               <property id="9" value="126"/>
               <property id="10" value="41"/>
-              <property id="20" value="1033"/>
+              <property id="20" value="1004"/>
               <property id="21" value="107"/>
             </properties>
           </image>
@@ -852,7 +852,7 @@
               <property id="3" value="true"/>
               <property id="9" value="34"/>
               <property id="10" value="41"/>
-              <property id="20" value="1125"/>
+              <property id="20" value="1096"/>
               <property id="21" value="151"/>
             </properties>
           </image>
@@ -1323,7 +1323,7 @@
               <property id="3" value="true"/>
               <property id="9" value="150"/>
               <property id="10" value="46"/>
-              <property id="20" value="257"/>
+              <property id="20" value="268"/>
               <property id="21" value="402"/>
             </properties>
           </image>

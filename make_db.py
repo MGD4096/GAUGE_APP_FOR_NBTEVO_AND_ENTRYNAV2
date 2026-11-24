@@ -476,6 +476,9 @@ BIGN = dict(w=260, h=90, size=80)                 # big numbers (white, centred)
 AMB = dict(w=90, h=26, size=20)                   # small amber numbers (best 0-100)
 PCT = dict(w=100, h=34, size=26)                  # throttle / brake %
 ANG = dict(w=110, h=36, size=28)                  # steering angle
+TRIP_TIME_X = 170                                 # x of the trip time in the "This trip" card (distance at 14)
+ANG_X = 670 + 140                                # left of the angle box (number right-aligned, "°" after it): it keeps
+                                                  # ~30 px from the card's right edge (car photo: 165 was too close)
 BAR = dict(w=40, h=290, steps=40)                 # throttle / brake bar
 CHART = dict(w=8, h=150, steps=20, n=30)          # history bars
 STYLE = dict(w=180, h=10, steps=20)               # driving style bars
@@ -576,8 +579,8 @@ def drv_slots():
     for key, mx in DRV_MAXROW:
         out.append(("MAX_" + key, mx + 50, 352, G_LAT_BOX[2], G_LAT_BOX[3]))
     out.append(("WHEEL", 670 + 20, 0 + 45, WHEEL, WHEEL))
-    out.append(("ANGLE", 670 + 165, 0 + 90, ANG["w"], ANG["h"]))
-    out.append(("STEER_DIR", 670 + 165 + ANG["w"] - 30, 0 + 90 + ANG["h"] + 2, 30, ANG["h"]))   # under the number
+    out.append(("ANGLE", ANG_X, 0 + 90, ANG["w"], ANG["h"]))
+    out.append(("STEER_DIR", ANG_X + ANG["w"] - 30, 0 + 90 + ANG["h"] + 2, 30, ANG["h"]))   # under the number
     out.append(("LOAD_ARC", DRV_LOAD_C[0] - ARC_C[0] + ARC_BOX[0], 200 + ARC_BOX[1], ARC_BOX[2], ARC_BOX[3]))
     x0 = DRV_LOAD_C[0] - 3 * BIG["cell"] // 2
     for k in range(3):
@@ -595,7 +598,7 @@ def fuel_slots():
     for key, x, y, w, h in FUEL_CARDS[2:6]:
         out.append((key,) + tile_num_xy(x, y, w, h) + (TILE["w"], TILE["h"]))
     out.append(("TRIP_KM",) + tile_num_xy(0, 260, 300, 140) + (TILE["w"], TILE["h"]))
-    out.append(("TRIP_TIME", 160, 260 + 140 - 14 - TILE["h"], TILE["w"], TILE["h"]))
+    out.append(("TRIP_TIME", TRIP_TIME_X, 260 + 140 - 14 - TILE["h"], TILE["w"], TILE["h"]))
     out.append(("USED",) + tile_num_xy(310, 260, 330, 140) + (TILE["w"], TILE["h"]))
     for i in range(3):
         out.append(("STYLE%d" % i, 650 + 100, 260 + 50 + i * 28, STYLE["w"], STYLE["h"]))
@@ -677,7 +680,7 @@ def s_background(fp, screen, lang):
         c.text((gc[0] + 64, 284 + G_BIG_BOX[3] - 12), "g", f_unit, MUTED, "ls")
         for key, mx in DRV_MAXROW:
             c.text((mx + 46, 352 + G_LAT_BOX[3] - 5), tx[key], f_small, MUTED, "rs")
-        c.text((670 + 165 + ANG["w"] + 2, 0 + 90 + ANG["h"] / 2.0), "°", f_unit, MUTED, "lm")
+        c.text((ANG_X + ANG["w"] + 2, 0 + 90 + ANG["h"] / 2.0), "°", f_unit, MUTED, "lm")
         lc = DRV_LOAD_C
         c.arc(lc, ARC_R, ARC_W, 0, 1, TRACK)
         c.text((lc[0], 200 + BIG_Y + BIG["h"] + 12), "%", f_unit, MUTED, "mm")
@@ -694,8 +697,9 @@ def s_background(fp, screen, lang):
         c.line((322, 45 + CHART["h"]), (322 + 10 * CHART["n"], 45 + CHART["h"]), TRACK, 1)
         c.text((628, 45), "20", f_small, FAINT, "ra")
         c.text((325 + 140, 200 + TILE["h"] / 2.0), tx["TRIPAVG"] + "  l/100 km", f_small, MUTED, "lm")
-        c.text((14 + 115, 260 + 140 - 14 - TILE["h"] / 2.0), "km", f_unit, MUTED, "lm")
-        c.text((160 + 75, 260 + 140 - 14 - TILE["h"] / 2.0), tx["TIME"], f_small, MUTED, "lm")
+        # "This trip": the units as captions over the two values (next to them they ran into each other)
+        c.text((14, 260 + 40), "km", f_small, MUTED, "la")
+        c.text((TRIP_TIME_X, 260 + 40), tx["TIME"] + " (h:mm)", f_small, MUTED, "la")
         for i, k in enumerate(("STA", "STB", "STS")):
             c.text((664, 260 + 55 + i * 28), tx[k], f_small, TEXT2, "lm")
             c.rrect(650 + 100, 260 + 50 + i * 28, STYLE["w"], STYLE["h"], 5, TRACK)
