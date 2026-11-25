@@ -147,6 +147,9 @@ value; the change shows at once and is saved in `/var/opt/gaugeapp/settings.txt`
 | Torque | Nm, lb-ft |
 | Fuel | litres, US gallons |
 
+The same file holds `screen=` – the screen shown last (0 Engine … 4 Warm-up). Opening GAUGE APP goes back to
+the screen you were on last, also after a restart.
+
 **The language** follows the iDrive language by itself (`vehicle.language`): Polish for Polish, English for any
 other language.
 

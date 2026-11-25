@@ -193,16 +193,20 @@ static void testUnitsAndSettings() {
     cycleSetting(st, kSetColor);
     CHECK(st.color == 0 && kColorCount == 4);
 
-    st.temp = kFahrenheit; st.power = kKw; st.torque = kLbFt; st.fuel = kGallon; st.color = 2;
+    st.temp = kFahrenheit; st.power = kKw; st.torque = kLbFt; st.fuel = kGallon; st.color = 2; st.screen = 3;
     char buf[128];
     formatSettings(st, buf, sizeof(buf));
-    CHECK(std::string(buf) == "color=2\ntemp=1\npower=1\ntorque=1\nfuel=1\n");
+    CHECK(std::string(buf) == "color=2\ntemp=1\npower=1\ntorque=1\nfuel=1\nscreen=3\n");
     Settings back;
     parseSettings(back, buf);
-    CHECK(back.color == 2 && back.temp == 1 && back.power == 1 && back.torque == 1 && back.fuel == 1);
+    CHECK(back.color == 2 && back.temp == 1 && back.power == 1 && back.torque == 1 && back.fuel == 1 &&
+          back.screen == 3);
     Settings junk;
-    parseSettings(junk, "color=9\ntemp=x\npower=2\n");
-    CHECK(junk.color == 0 && junk.temp == 0 && junk.power == kHp);
+    parseSettings(junk, "color=9\ntemp=x\npower=2\nscreen=7\n");
+    CHECK(junk.color == 0 && junk.temp == 0 && junk.power == kHp && junk.screen == 0);
+    Settings old;                                                // a file from before the screen was remembered
+    parseSettings(old, "color=1\ntemp=0\npower=0\ntorque=0\nfuel=0\n");
+    CHECK(old.color == 1 && old.screen == 0);
 
     CHECK(NEAR(showTemp(st, 100), 212) && NEAR(showTemp(Settings(), 100), 100));
     CHECK(fabs(showPower(st, 100) - 73.549875) < 1e-6);

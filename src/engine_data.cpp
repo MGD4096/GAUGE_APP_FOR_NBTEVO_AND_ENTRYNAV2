@@ -112,6 +112,7 @@ public:
     void updateModel(unsigned modelId, const Image& image);        // raImageModel: picture data (car-verified)
     void updateModel(unsigned modelId, const TextID& text);        // textIdModel (entry-aad, car-verified)
     void addHandler(unsigned actionId, const ActionDelegate& handler);   // raAction (entry-aad, car-verified)
+    void triggerEvent(unsigned eventId);     // focusEvent of the XML: opens its state (entry-aad, car-verified)
     void cdsAddPropertyChangedEventHandler(BasicString<char>& property, unsigned id, const CdsDelegate& handler);
     bool onInit();                           // base implementations, called from our overrides
     void onFinalize();
@@ -818,6 +819,7 @@ void handleCds(int prop, const bmw::BasicString<unsigned short>& value) {
     long now = monoMs();
     int titleScreen = -2;                                // -1 / 0: the screen on display changed (logged)
     int visibleNow = kVisUnknown;
+    bool screenChanged = false;                          // one of our screens is on display, another than last time
     char title[96];
     pthread_mutex_lock(&g_dataMutex);
     if (eng::apply(g_metrics, prop, text, now)) g_dirty = true;
@@ -863,6 +865,10 @@ void handleCds(int prop, const bmw::BasicString<unsigned short>& value) {
                 snprintf(title, sizeof(title), "%s' appType '%s", m.title, m.appType);
                 visibleNow = v;
             }
+            if (v >= 0 && v != g_settings.screen) {     // remembered for the entry button
+                g_settings.screen = v;
+                screenChanged = true;
+            }
         }
         break;
     }
@@ -876,6 +882,7 @@ void handleCds(int prop, const bmw::BasicString<unsigned short>& value) {
     if (titleScreen >= -1)
         elog("on screen: '%s' -> %s", title, visibleNow >= 0 ? "a screen of this app" :
              visibleNow == kVisSomeApp ? "a plugin app (all screens written)" : "something else (nothing written)");
+    if (screenChanged) saveSettings();
     if (titleScreen == -3) elog("fuel counter calibrated from the tank level: %.3f ul per step", factor * 1e6);
     // The first values of every property are logged raw (that is what is needed to check a car's layout); after that
     // only a change between usable / not usable, so a revving engine does not flood the log.
@@ -949,11 +956,26 @@ const ActionStub kSettingStubs[eng::kSettingCount] = { &onSettingAction<0>, &onS
                                                        &onSettingAction<2>, &onSettingAction<3>,
                                                        &onSettingAction<4> };
 
+// The entry button (raAction): the screen shown last (settings.txt "screen"), opened with its focusEvent.
+bool onEntry(void* app, const bmw::Parcel&) {
+    pthread_mutex_lock(&g_dataMutex);
+    int s = g_settings.screen;
+    pthread_mutex_unlock(&g_dataMutex);
+    if (s < 0 || s >= eng::ids::kScreenCount) s = eng::kScreenEngine;
+    elog("entry button: screen %d (focusEvent %u)", s, eng::ids::kScreenEvent0 + (unsigned)s);
+    static_cast<bmw::PluginApp*>(app)->triggerEvent(eng::ids::kScreenEvent0 + (unsigned)s);
+    return true;
+}
+
 // ---- the app object ---------------------------------------------------------------------------------------------
 void* g_vtbl[2 + kVtblSlots];   // [offset-to-top, typeinfo, slots...] copied from bmw::PluginApp's vtable
 
 bool appOnInit(bmw::PluginApp* self) {
     // Action handlers before the base onInit, as entry-aad does.
+    bmw::ActionDelegate entry;
+    entry.object = self;
+    entry.stub = &onEntry;
+    self->addHandler(eng::ids::kEntryAction, entry);
     for (int s = 0; s < eng::kSettingCount; ++s) {
         bmw::ActionDelegate d;
         d.object = self;

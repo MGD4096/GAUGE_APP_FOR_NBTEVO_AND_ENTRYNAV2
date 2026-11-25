@@ -110,6 +110,8 @@ enum {
     kStyleSteps = 20,
     kImgGear2 = 71500,
     kImgShift = 71520,
+    kEntryAction = 6,
+    kScreenEvent0 = 90,
     kImgStatus = 71600,
     kImgScreenBg = 71800,
     kScreenCount = 5,

@@ -139,6 +139,9 @@ switches to the next value; the change shows on the screen at once and is saved 
 | Torque | Nm, lb-ft |
 | Fuel | litres, US gallons |
 
+The same file holds `screen=` – the screen shown last (0 Engine … 4 Warm-up). Opening GAUGE APP goes back to
+the screen you were on last, also after a restart.
+
 The maxima are kept in base units (°C, PS, Nm), so changing a unit does not spoil them – they are only shown
 differently. The fuel (amount in the tank) has its own tile next to the gears.
 
