@@ -468,6 +468,10 @@ SCREEN_TEXTS = {  # text id: (Polish, English); 260 + screen = the state titles 
 SCREEN_STATES = [10, 14, 15, 16, 17]              # screen k -> hmiState
 SCREEN_ACTIONS = [8, 9, 11, 13, 19]               # hmiAction that opens screen k
 SCREEN_TEXTMODELS = [80, 81, 82, 83, 84]          # textIdModel with text 260 + k
+# The entry button is a raAction: the app opens the screen used last with focusEvent SCREEN_EVENT0 + k (target state
+# k), the way entry-aad opens its menu from its entry button (car-verified there).
+ENTRY_ACTION = 6
+SCREEN_EVENT0 = 90
 SCREEN_KEYS = ["", "Drv", "Fuel", "Perf", "Warm"] # C++ name prefixes (gauge_ids.hpp)
 WARM_OIL, WARM_COOLANT, WARM_TARGET = (0, 140), (0, 120), 80   # deg C: warm-up arcs, oil "warm" from 80
 
@@ -919,6 +923,7 @@ def screen_header():
               ("kImgBrakeBar", IMG_BRKBAR), ("kBarSteps", BAR["steps"]), ("kImgChart", IMG_CHART),
               ("kChartSteps", CHART["steps"]), ("kChartBars", CHART["n"]), ("kImgStyle", IMG_STYLE),
               ("kStyleSteps", STYLE["steps"]), ("kImgGear2", IMG_GEAR2), ("kImgShift", IMG_SHIFT),
+              ("kEntryAction", ENTRY_ACTION), ("kScreenEvent0", SCREEN_EVENT0),
               ("kImgStatus", IMG_STATUS), ("kImgScreenBg", IMG_BG_S), ("kScreenCount", len(SCREEN_STATES)),
               ("kTextScreens", 260), ("kImgTileSInt", IMG_TSINT), ("kTileSIntMin", TSINT_MIN),
               ("kTileSIntMax", TSINT_MAX), ("kImgTileCInt", IMG_TCINT), ("kImgTileCNone", IMG_TCNONE),
@@ -1059,7 +1064,12 @@ def xml(slot_list, ox, oy, diag=False, menu_name=DEFAULT_MENU):
     gm, gc = gauge_parts(slot_list, ox, oy)
     models += gm
     actions = ["      <hmiAction id=\"5\" target=\"10\"/>\n"]
+    entry_action, events = 5, []
     if not diag:
+        entry_action = ENTRY_ACTION
+        actions = ["      <raAction id=\"%d\"/>\n" % ENTRY_ACTION]
+        events = ["      <focusEvent id=\"%d\" target=\"%d\"/>\n" % (SCREEN_EVENT0 + k, sid)
+                  for k, sid in enumerate(SCREEN_STATES)]
         sm, sa, sb, _so = settings_parts()
         models += sm
         actions += sa
@@ -1111,14 +1121,17 @@ def xml(slot_list, ox, oy, diag=False, menu_name=DEFAULT_MENU):
         "  <pluginApp applicationType=\"%s\" applicationWeight=\"210\" entryButtonFocusID=\"32751\" "
         "insertAfterFocusID=\"2270\" insertStateID=\"20\" text=\"%s\">\n"
         "    <comment/>\n"
-        "    <entryButton action=\"5\" id=\"1\" model=\"3\" imageModel=\"4\">\n      <properties/>\n    </entryButton>\n"
+        "    <entryButton action=\"%d\" id=\"1\" model=\"3\" imageModel=\"4\">\n      <properties/>\n    </entryButton>\n"
         "    <actions>\n%s    </actions>\n"
         "    <models>\n%s    </models>\n"
+        "%s"
         "    <hmiStates>\n%s    </hmiStates>\n"
         "  </pluginApp>\n"
         "</pluginApps>\n" % (app_type, "the ConnectedDrive menu" if menu_name == "connected" else
                              "the Media/Radio list after the Bluetooth audio row", what, app_type, TITLE,
-                             "".join(actions), "".join(models), "".join(states)))
+                             entry_action, "".join(actions), "".join(models),
+                             "    <events>\n%s    </events>\n" % "".join(events) if events else "",
+                             "".join(states)))
 
 
 def header(slot_list):

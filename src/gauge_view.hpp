@@ -18,7 +18,8 @@ enum FuelUnit { kLitre = 0, kGallon, kFuelUnits };          // US gallons
 
 struct Settings {
     int color, temp, power, torque, fuel;
-    Settings() : color(0), temp(kCelsius), power(kPs), torque(kNm), fuel(kLitre) {}
+    int screen;                                    // the screen shown last (0..kScreenCount-1): the entry button opens it
+    Settings() : color(0), temp(kCelsius), power(kPs), torque(kNm), fuel(kLitre), screen(0) {}
 };
 
 enum Setting { kSetColor = 0, kSetTemp, kSetPower, kSetTorque, kSetFuel, kSettingCount };
@@ -63,33 +64,39 @@ inline void cycleSetting(Settings& st, int s) {
 // Text id of the button that shows setting s with its current value (texts written by make_db.py).
 inline unsigned settingText(const Settings& st, int s) { return ids::kTextSettings + 10u * (unsigned)s + (unsigned)settingValue(st, s); }
 
-// "color=0\ntemp=1\n..."
+// "color=0\ntemp=1\n...\nscreen=2\n"
 inline void formatSettings(const Settings& st, char* out, size_t n) {
     size_t o = 0;
     out[0] = 0;
-    for (int s = 0; s < kSettingCount && o < n; ++s) {
-        int w = snprintf(out + o, n - o, "%s=%d\n", settingKey(s), settingValue(st, s));
+    for (int s = 0; s <= kSettingCount && o < n; ++s) {
+        int w = s < kSettingCount ? snprintf(out + o, n - o, "%s=%d\n", settingKey(s), settingValue(st, s))
+                                  : snprintf(out + o, n - o, "screen=%d\n", st.screen);
         if (w < 0) break;
         o += (size_t)w;
     }
 }
 
+// The value of "<name>=<n>" at the start of a line of text, if it is a number in 0..count-1.
+inline bool settingField(const char* text, const char* name, int count, int* out) {
+    char key[24];
+    snprintf(key, sizeof(key), "%s=", name);
+    const char* p = text;
+    while ((p = strstr(p, key)) != NULL) {
+        if (p == text || p[-1] == '\n') break;
+        p += 1;
+    }
+    if (!p) return false;
+    char* end = NULL;
+    long v = strtol(p + strlen(key), &end, 10);
+    if (end == p + strlen(key) || v < 0 || v >= count) return false;
+    *out = (int)v;
+    return true;
+}
+
 // Reads what formatSettings wrote; missing, broken or out-of-range values keep their default.
 inline void parseSettings(Settings& st, const char* text) {
-    for (int s = 0; s < kSettingCount; ++s) {
-        char key[24];
-        snprintf(key, sizeof(key), "%s=", settingKey(s));
-        const char* p = text;
-        while ((p = strstr(p, key)) != NULL) {
-            if (p == text || p[-1] == '\n') break;
-            p += 1;
-        }
-        if (!p) continue;
-        char* end = NULL;
-        long v = strtol(p + strlen(key), &end, 10);
-        if (end == p + strlen(key) || v < 0 || v >= settingCount(s)) continue;
-        settingRef(st, s) = (int)v;
-    }
+    for (int s = 0; s < kSettingCount; ++s) settingField(text, settingKey(s), settingCount(s), &settingRef(st, s));
+    settingField(text, "screen", ids::kScreenCount, &st.screen);
 }
 
 // ---- units ------------------------------------------------------------------------------------------------------------

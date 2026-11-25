@@ -82,6 +82,13 @@ static void writeFramePack(const std::string& path, unsigned first = 56000, unsi
     if (f) { fwrite(out.data(), 1, out.size(), f); fclose(f); }
 }
 
+// The entry button is pressed (its raAction handler).
+static void entry() {
+    bmw::Parcel parcel;
+    bmw::ActionDelegate a = g_fake.actions[kEntryAction];
+    if (a.stub) a.stub(a.object, parcel);
+}
+
 static std::string readFile(const std::string& p) {
     std::string out;
     FILE* f = fopen(p.c_str(), "r");
@@ -123,7 +130,7 @@ int main(int argc, char** argv) {
     unlink((std::string(argv[2]) + "/GaugeApp_frames_c0.bin").c_str());
     unlink((std::string(argv[2]) + "/settings.txt").c_str());
     CHECK(app->onInit());
-    CHECK(g_fake.actions.size() == 5 && g_fake.actions.count(kSettingsAction) && g_fake.actions.count(kSettingsAction + 4));
+    CHECK(g_fake.actions.size() == 6 && g_fake.actions.count(kEntryAction) && g_fake.actions.count(kSettingsAction) && g_fake.actions.count(kSettingsAction + 4));
     CHECK(g_fake.modelText[kSettingsTextModel] == 200 && g_fake.modelText[kSettingsTextModel + 1] == 210 &&
           g_fake.modelText[kSettingsTextModel + 4] == 240);
     CHECK(g_fake.baseOnInit == 1);
@@ -236,6 +243,10 @@ int main(int argc, char** argv) {
     feed("hmi.graphicalContext", "{\"graphicalContext\":{\"visibleContext\":50,\"menuTitle\":\"Driving\"}}");
     runPosted();
     CHECK(sslot(1, kDrvSlotGasPct) == kImgPct + 80);              // on display again: brought up to date
+    // the screen on display is remembered: the entry button opens it (focusEvent 90 + screen)
+    CHECK(readFile(std::string(argv[2]) + "/settings.txt").find("screen=1\n") != std::string::npos);
+    entry();
+    CHECK(!g_fake.events.empty() && g_fake.events.back() == kScreenEvent0 + 1);
     int engW = writes(kSlotFuel);
     feed("sensors.fuel", "{\"fuel\":{\"range\":498,\"reserve\":0,\"tanklevel\":38}}");
     runPosted();
@@ -272,7 +283,13 @@ int main(int argc, char** argv) {
     CHECK(g_fake.modelText[kSettingsTextModel] == 201);
     CHECK(slot(kSlotCoolantArc) == kImgArc + 30 + 100000);     // the arc now comes from the colour-1 pack
     CHECK(slot(kSlotCoolantBig0) == eng::bigGlyph('1', 0));     // the rest from the common one
-    CHECK(readFile(std::string(argv[2]) + "/settings.txt") == "color=1\ntemp=1\npower=0\ntorque=0\nfuel=0\n");
+    CHECK(readFile(std::string(argv[2]) + "/settings.txt") == "color=1\ntemp=1\npower=0\ntorque=0\nfuel=0\nscreen=0\n");
+
+    // something else on display (our settings page, the radio): the screen shown last stays remembered
+    feed("hmi.graphicalContext", "{\"graphicalContext\":{\"visibleContext\":50,\"menuTitle\":\"Rozgrzewanie\"}}");
+    feed("hmi.graphicalContext", "{\"graphicalContext\":{\"visibleContext\":50,\"menuTitle\":\"Ustawienia\"}}");
+    entry();
+    CHECK(g_fake.events.back() == kScreenEvent0 + 4);
 
     // ---- finalize writes max.txt (the last run's maxima); a new onInit starts from no maxima, keeps the settings ----
     bmw::BasicString<char> msg("integration error");
@@ -288,6 +305,8 @@ int main(int argc, char** argv) {
     CHECK(env.find("env=") == 0 && env.find(",380,") != std::string::npos);   // 3600 rpm bin: min(380, 400) and later
     CHECK(readFile(std::string(argv[2]) + "/fuel-cal.txt").find("factor=") == 0);
     CHECK(app->onInit());
+    entry();                                                    // kept over a restart
+    CHECK(g_fake.events.back() == kScreenEvent0 + 4);
     CHECK(slot(kSlotCoolantMark) == kImgBlank && slot(kSlotCoolantMax) == kImgBlank);   // maxima reset at start
     // the engine screen is on display from the start: screens 1..4 are not written at all
     int drvBg = g_fake.modelWrites[1099];

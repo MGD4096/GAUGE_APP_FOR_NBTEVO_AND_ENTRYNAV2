@@ -83,6 +83,7 @@ public:
     void updateModel(unsigned modelId, const Image& image);
     void updateModel(unsigned modelId, const TextID& text);
     void addHandler(unsigned actionId, const ActionDelegate& handler);
+    void triggerEvent(unsigned eventId);
     void cdsAddPropertyChangedEventHandler(BasicString<char>& name, unsigned id, const CdsDelegate& d);
     char name[64];
 };
@@ -98,6 +99,7 @@ struct FakeState {
     std::map<std::string, bmw::CdsDelegate> cds;   // property name -> handler
     std::map<unsigned, bmw::ActionDelegate> actions;   // raAction id -> handler
     std::map<unsigned, unsigned> modelText;        // textIdModel -> latest text id
+    std::vector<unsigned> events;                  // triggerEvent ids, in order
     int baseOnInit, baseOnFinalize;
     FakeState() : bufferStreamsDestroyed(0), baseOnInit(0), baseOnFinalize(0) {}
 };
