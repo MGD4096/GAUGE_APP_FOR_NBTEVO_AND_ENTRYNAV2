@@ -112,6 +112,8 @@ enum {
     kImgShift = 71520,
     kEntryAction = 6,
     kScreenEvent0 = 90,
+    kUiLangCount = 2,
+    kStatusLangStride = 10,
     kImgStatus = 71600,
     kImgScreenBg = 71800,
     kScreenCount = 5,
@@ -129,6 +131,15 @@ enum {
     kWarmOilHi = 140,
     kWarmCoolantLo = 0,
     kWarmCoolantHi = 120
+};
+
+// menuTitle of screen k in hmi.graphicalContext, [k][UiLang] (text DB texts, ASCII)
+static const char* const kScreenTitles[kScreenCount][kUiLangCount] = {
+    { "GAUGE APP", "GAUGE APP" },
+    { "Jazda", "Driving" },
+    { "Spalanie i trasa", "Fuel and trip" },
+    { "Pomiary", "Performance" },
+    { "Rozgrzewanie", "Warm-up" }
 };
 
 // screen k: background model k * 1000 + 99, slot i in model k * 1000 + 100 + i

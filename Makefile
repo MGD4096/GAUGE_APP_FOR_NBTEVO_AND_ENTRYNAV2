@@ -26,7 +26,9 @@ RHMI_LIBDIR ?= ./lib/NBT_evo_libs
 RHMI_LIBS = $(wildcard $(RHMI_LIBDIR)/libAppFramework.A.so $(RHMI_LIBDIR)/libCoreFramework.A.so)
 
 PLUGIN_CXX      = $(QCC) -Vgcc_ntoarmv7le_gpp
-PLUGIN_CXXFLAGS = -O2 -Wall -D_QNX_SOURCE -march=armv7-a -mfpu=vfpv3 -mfloat-abi=softfp -fPIC -I./src
+# -Wc,<option> hands an option to qcc's gcc 4.4 unchanged: the same language level and warnings as the EntryNav2 build.
+PLUGIN_CXXFLAGS = -O2 -Wall -Wc,-Wextra -Wc,-std=gnu++98 -D_QNX_SOURCE -march=armv7-a -mfpu=vfpv3 -mfloat-abi=softfp \
+                  -fPIC -fvisibility=hidden -I./src
 
 # ---- EntryNav2 ----------------------------------------------------------------------------------------------------
 EN2_CXX      ?= arm-linux-gnueabihf-g++
@@ -44,8 +46,9 @@ EN2_OUT       = build/entrynav2
 EN2_PLUGIN    = opt/hmi/data/ro/Plugins/GaugeApp
 EN2_STAGE     = dist/entrynav2
 
-SRC = src/engine_data.cpp src/cds_values.hpp src/gauge_view.hpp src/gauge_ids.hpp src/drive_stats.hpp \
-      src/screens_view.hpp
+# The plugin's modules (src/app.hpp lists what each one does) and the headers they share.
+PLUGIN_SRC = src/engine_data.cpp src/cds.cpp src/render.cpp src/frames.cpp src/storage.cpp src/log.cpp
+SRC = $(PLUGIN_SRC) $(wildcard src/*.hpp)
 
 .PHONY: all lib db check clean entrynav2 entrynav2-dist entrynav2-diag-dist
 all: lib
@@ -55,7 +58,7 @@ lib: libGaugeApp.so
 libGaugeApp.so: $(SRC)
 	@test -n "$(RHMI_LIBS)" || { echo "put libAppFramework.A.so and libCoreFramework.A.so from the car into $(RHMI_LIBDIR) (or set RHMI_LIBDIR)"; exit 1; }
 	@echo [BUILD] $@
-	$(PLUGIN_CXX) $(PLUGIN_CXXFLAGS) -shared -Wl,-soname,libGaugeApp.so -o $@ src/engine_data.cpp $(RHMI_LIBS) -Wl,--allow-shlib-undefined -lang-c++
+	$(PLUGIN_CXX) $(PLUGIN_CXXFLAGS) -shared -Wl,-soname,libGaugeApp.so -o $@ $(PLUGIN_SRC) $(RHMI_LIBS) -Wl,--allow-shlib-undefined -lang-c++
 	@echo [DONE] $@ - install with GaugeApp.manifest, GaugeApp.xml and the two zips into Plugins/GaugeApp
 
 entrynav2: $(EN2_OUT)/libGaugeApp.so
@@ -64,7 +67,7 @@ $(EN2_OUT)/libGaugeApp.so: $(SRC)
 	@test -n "$(EN2_LIBS)" || { echo "put the EntryNav2 libAppFramework.A.so and libCoreFramework.A.so (/opt/hmi/lib of the car) into $(EN2_LIBDIR) (or set EN2_LIBDIR / SYSROOT)"; exit 1; }
 	@mkdir -p $(EN2_OUT)
 	@echo [BUILD] $@ for EntryNav2
-	$(EN2_CXX) $(EN2_CXXFLAGS) -shared -Wl,-soname,libGaugeApp.so -o $@ src/engine_data.cpp \
+	$(EN2_CXX) $(EN2_CXXFLAGS) -shared -Wl,-soname,libGaugeApp.so -o $@ $(PLUGIN_SRC) \
 	    $(EN2_LDFLAGS) -l:libAppFramework.A.so -l:libCoreFramework.A.so -lpthread -ldl
 	@echo [DONE] $@ - make entrynav2-dist packs it with the manifest, the XML and the two zips
 

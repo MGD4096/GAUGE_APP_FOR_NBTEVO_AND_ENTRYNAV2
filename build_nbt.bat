@@ -38,8 +38,9 @@ if not exist "%OUT%" mkdir "%OUT%"
 if exist "%OUT%\libGaugeApp.so" del "%OUT%\libGaugeApp.so"
 
 echo [BUILD] libGaugeApp.so for NBT Evo (QNX 6.5, ARMv7, GNU libstdc++ like HmiMain3D)
-qcc -Vgcc_ntoarmv7le_gpp -O2 -Wall -D_QNX_SOURCE -fPIC -I src -shared -Wl,-soname,libGaugeApp.so ^
-    -o "%OUT%\libGaugeApp.so" src\engine_data.cpp ^
+qcc -Vgcc_ntoarmv7le_gpp -O2 -Wall -Wc,-Wextra -Wc,-std=gnu++98 -D_QNX_SOURCE -fPIC -fvisibility=hidden -I src ^
+    -shared -Wl,-soname,libGaugeApp.so -o "%OUT%\libGaugeApp.so" ^
+    src\engine_data.cpp src\cds.cpp src\render.cpp src\frames.cpp src\storage.cpp src\log.cpp ^
     lib\NBT_evo_libs\libAppFramework.A.so lib\NBT_evo_libs\libCoreFramework.A.so ^
     -Wl,--allow-shlib-undefined -lang-c++
 if errorlevel 1 (

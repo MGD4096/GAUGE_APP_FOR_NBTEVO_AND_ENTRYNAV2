@@ -27,6 +27,9 @@ import argparse
 import math
 import os
 import zipfile
+from dataclasses import dataclass
+from typing import Callable, Optional, Tuple
+import xml.etree.ElementTree as ET
 
 try:
     from PIL import Image, ImageDraw, ImageFont
@@ -461,18 +464,17 @@ def color_images(fp, color):
 # 100 + i), so each has its own ~60-image budget. Their frames are in GaugeApp_frames_s.bin (colour-independent) and
 # in the colour packs (bars, lit gear). The app only writes the screen that is on display (hmi.graphicalContext's
 # menuTitle = the state's title).
-SCREEN_TEXTS = {  # text id: (Polish, English); 260 + screen = the state titles and the OPTION entries
-    260: ("Silnik", "Engine"), 261: ("Jazda", "Driving"), 262: ("Spalanie i trasa", "Fuel and trip"),
-    263: ("Pomiary", "Performance"), 264: ("Rozgrzewanie", "Warm-up"),
-}
-SCREEN_STATES = [10, 14, 15, 16, 17]              # screen k -> hmiState
-SCREEN_ACTIONS = [8, 9, 11, 13, 19]               # hmiAction that opens screen k
-SCREEN_TEXTMODELS = [80, 81, 82, 83, 84]          # textIdModel with text 260 + k
+# The screens themselves (ids, titles, slots) are the SCREEN_LIST entries below the slot lists.
 # The entry button is a raAction: the app opens the screen used last with focusEvent SCREEN_EVENT0 + k (target state
 # k), the way entry-aad opens its menu from its entry button (car-verified there).
 ENTRY_ACTION = 6
 SCREEN_EVENT0 = 90
-SCREEN_KEYS = ["", "Drv", "Fuel", "Perf", "Warm"] # C++ name prefixes (gauge_ids.hpp)
+# Languages drawn into the pictures (LANGS above is the text DB's list of iDrive language files). The index is the
+# frame offset: a per-language frame is base + index (backgrounds) or base + STATUS_LANG_STRIDE * index (status
+# lines); the C++ side gets the count as kUiLangCount and uses its own UiLang enum in the same order.
+UI_LANGS = ("pl", "en")
+STATUS_LANG_STRIDE = 10
+MAX_IMAGES_PER_STATE = 60                         # EntryNav2 car: images beyond about 60 in one state stayed empty
 WARM_OIL, WARM_COOLANT, WARM_TARGET = (0, 140), (0, 120), 80   # deg C: warm-up arcs, oil "warm" from 80
 
 TILE = dict(w=130, h=40, size=30)                 # tile numbers (white, left aligned)
@@ -650,7 +652,29 @@ def warm_slots():
     return out
 
 
-SCREENS = [None, ("Drv", drv_slots), ("Fuel", fuel_slots), ("Perf", perf_slots), ("Warm", warm_slots)]
+@dataclass(frozen=True)
+class Screen:
+    """One screen: everything every stage needs about it. A new screen is one more entry in SCREEN_LIST (plus its
+    slot list, drawing and the C++ compute* / kScreenDescs row); the XML, the header, the texts and the checks
+    iterate over the list."""
+    key: str                                       # C++ name prefix in gauge_ids.hpp ("" for the engine screen)
+    state: int                                     # hmiState
+    action: int                                    # hmiAction that opens it (its settings page button)
+    text_model: int                                # textIdModel of its title
+    text_id: int                                   # its title in the text DB
+    title: Tuple[str, str]                         # (Polish, English), ASCII: state title = button = menuTitle
+    slots: Optional[Callable[[], list]]            # slot list; None: the engine screen (slots())
+
+
+# Screen k = SCREEN_LIST[k], in the order of the C++ eng::Screen enum. The engine screen is state 10, the target of
+# the menu row; its menuTitle is the row's TITLE (see header()).
+SCREEN_LIST = [
+    Screen("", 10, 8, 80, 260, ("Silnik", "Engine"), None),
+    Screen("Drv", 14, 9, 81, 261, ("Jazda", "Driving"), drv_slots),
+    Screen("Fuel", 15, 11, 82, 262, ("Spalanie i trasa", "Fuel and trip"), fuel_slots),
+    Screen("Perf", 16, 13, 83, 263, ("Pomiary", "Performance"), perf_slots),
+    Screen("Warm", 17, 19, 84, 264, ("Rozgrzewanie", "Warm-up"), warm_slots),
+]
 
 
 def card_title(c, fp, x, y, text):
@@ -787,9 +811,9 @@ def status_image(fp, text):
 def screen_images(fp):
     """Colour-independent frames of screens 1..3: GaugeApp_frames_s.bin."""
     imgs = {}
-    for s in range(1, len(SCREEN_STATES)):
-        for li, lang in enumerate(("pl", "en")):
-            imgs[IMG_BG_S + 2 * (s - 1) + li] = s_background(fp, s, lang)
+    for s in range(1, len(SCREEN_LIST)):
+        for li, lang in enumerate(UI_LANGS):
+            imgs[IMG_BG_S + len(UI_LANGS) * (s - 1) + li] = s_background(fp, s, lang)
     for v in range(TSINT_MIN, TSINT_MAX + 1):
         imgs[IMG_TSINT + v - TSINT_MIN] = number_image(fp, str(v), TILE["w"], TILE["h"], TILE["size"], TEXT, "m")
     for v in range(101):
@@ -798,11 +822,11 @@ def screen_images(fp):
     for lv in range(WARM_STEPS + 1):
         imgs[IMG_WPROG + lv] = bar_frame(lv, WARM_STEPS, WPROG_BOX[0], WPROG_BOX[1], AMBER, 7, False)
     imgs[IMG_WDONE] = bar_frame(WARM_STEPS, WARM_STEPS, WPROG_BOX[0], WPROG_BOX[1], (99, 153, 34, 255), 7, False)
-    for li, lang in enumerate(("pl", "en")):
+    for li, lang in enumerate(UI_LANGS):
         for k, t in enumerate(WARM_STATUS_TEXTS[lang]):
             c = Canvas(*WSTATUS_BOX)
             c.text((0, WSTATUS_BOX[1] / 2.0), t, font(fp, 22), TEXT, "lm")
-            imgs[IMG_WSTATUS + 10 * li + k] = c.image()
+            imgs[IMG_WSTATUS + STATUS_LANG_STRIDE * li + k] = c.image()
     for si, sep in enumerate((",",)):          # decimal comma in every language (no "." sets)
         for v in range(1000):
             imgs[IMG_TDEC + DEC_STRIDE * si + v] = number_image(fp, dec_text(v, sep), TILE["w"], TILE["h"],
@@ -833,9 +857,9 @@ def screen_images(fp):
         imgs[IMG_STYLE + lv] = bar_frame(lv, STYLE["steps"], STYLE["w"], STYLE["h"], (99, 153, 34, 255), 5, False)
     for i, ch in enumerate(("▲", "▼")):
         imgs[IMG_SHIFT + i] = number_image(fp, ch, 40, 40, 30, AMBER, "m")
-    for li, lang in enumerate(("pl", "en")):
+    for li, lang in enumerate(UI_LANGS):
         for k, t in enumerate(STATUS_TEXTS[lang]):
-            imgs[IMG_STATUS + 10 * li + k] = status_image(fp, t)
+            imgs[IMG_STATUS + STATUS_LANG_STRIDE * li + k] = status_image(fp, t)
     return imgs
 
 
@@ -858,8 +882,7 @@ def screen_color_images(fp, color):
 
 def screen_preview(imgs, screen, lang="pl"):
     """Screen 1..3 with sample values, composed like the HMI would."""
-    comma = lang == "pl"
-    s = 0 if comma else 1                          # language (texts, statuses)
+    s = UI_LANGS.index(lang)                       # language: texts, statuses, background
     d = 0                                          # decimal comma sets in every language
     dec = lambda v: IMG_TDEC + DEC_STRIDE * d + int(round(v * 10))
     names = {}
@@ -893,18 +916,18 @@ def screen_preview(imgs, screen, lang="pl"):
                  "COOLANT_BIG0": IMG_BIG + 16 + 6, "COOLANT_BIG1": IMG_BIG + 16 + 4, "COOLANT_BIG2": IMG_BLANK,
                  "COOLANT_UNIT": IMG_UNIT, "COOLANT_LO": IMG_SCALENUM + WARM_COOLANT[0],
                  "COOLANT_HI": IMG_SCALENUM + WARM_COOLANT[1],
-                 "STATUS": IMG_WSTATUS + 10 * s + 2, "PROGRESS": IMG_WPROG + 16, "RUNTIME": IMG_TTIME + 4,
+                 "STATUS": IMG_WSTATUS + STATUS_LANG_STRIDE * s + 2, "PROGRESS": IMG_WPROG + 16, "RUNTIME": IMG_TTIME + 4,
                  "ETA": IMG_TINT + 3, "EXT": IMG_TSINT + 5 - TSINT_MIN, "INT": IMG_TSINT + 18 - TSINT_MIN,
                  "EVAP": IMG_TSINT + 6 - TSINT_MIN, "BATT": IMG_TCINT + 97, "EXT_UNIT": IMG_UNIT,
                  "INT_UNIT": IMG_UNIT, "EVAP_UNIT": IMG_UNIT}
         slot_list = warm_slots()
     else:
         names = {"P0100": IMG_BDEC + BDEC_STRIDE * d + 74, "BEST": IMG_ADEC + BDEC_STRIDE * d + 71, "P60": dec(4.2),
-                 "P80": dec(5.6), "PBRK": dec(37.8), "PQ": dec(15.3), "STATUS": IMG_STATUS + 10 * s + 1,
+                 "P80": dec(5.6), "PBRK": dec(37.8), "PQ": dec(15.3), "STATUS": IMG_STATUS + STATUS_LANG_STRIDE * s + 1,
                  "LIVE": dec(0), "MAXLAT": IMG_GNUM + SEP_STRIDE * d + 92, "MAXBRK": IMG_GNUM + SEP_STRIDE * d + 105}
         slot_list = perf_slots()
     out = Image.new("RGBA", (sc(W), sc(H)), (11, 13, 16, 255))
-    out.alpha_composite(imgs[IMG_BG_S + 2 * (screen - 1) + (0 if comma else 1)])
+    out.alpha_composite(imgs[IMG_BG_S + len(UI_LANGS) * (screen - 1) + s])
     for name, x, y, _w, _h in slot_list:
         im = imgs.get(names.get(name, IMG_BLANK))
         if im is not None and im.size != (1, 1):
@@ -924,7 +947,8 @@ def screen_header():
               ("kChartSteps", CHART["steps"]), ("kChartBars", CHART["n"]), ("kImgStyle", IMG_STYLE),
               ("kStyleSteps", STYLE["steps"]), ("kImgGear2", IMG_GEAR2), ("kImgShift", IMG_SHIFT),
               ("kEntryAction", ENTRY_ACTION), ("kScreenEvent0", SCREEN_EVENT0),
-              ("kImgStatus", IMG_STATUS), ("kImgScreenBg", IMG_BG_S), ("kScreenCount", len(SCREEN_STATES)),
+              ("kUiLangCount", len(UI_LANGS)), ("kStatusLangStride", STATUS_LANG_STRIDE),
+              ("kImgStatus", IMG_STATUS), ("kImgScreenBg", IMG_BG_S), ("kScreenCount", len(SCREEN_LIST)),
               ("kTextScreens", 260), ("kImgTileSInt", IMG_TSINT), ("kTileSIntMin", TSINT_MIN),
               ("kTileSIntMax", TSINT_MAX), ("kImgTileCInt", IMG_TCINT), ("kImgTileCNone", IMG_TCNONE),
               ("kImgWarmProg", IMG_WPROG), ("kWarmSteps", WARM_STEPS),
@@ -932,8 +956,19 @@ def screen_header():
               ("kWarmOilHi", WARM_OIL[1]), ("kWarmCoolantLo", WARM_COOLANT[0]), ("kWarmCoolantHi", WARM_COOLANT[1])]
     for i, (k, v) in enumerate(consts):
         out.append("    %s = %d%s\n" % (k, v, "," if i + 1 < len(consts) else ""))
-    out.append("};\n\n// screen k: background model k * 1000 + 99, slot i in model k * 1000 + 100 + i\n")
-    for key, fn in SCREENS[1:]:
+    out.append("};\n\n")
+    # The titles hmi.graphicalContext reports as menuTitle for screen k (the state's text in the text DB, one per
+    # UI language): the app finds the screen on display by them. Screen 0 (state 10) has the row's title.
+    titles = [(TITLE,) * len(UI_LANGS)] + [scr.title for scr in SCREEN_LIST[1:]]
+    for t in titles:
+        if len(t) != len(UI_LANGS) or not all(x.isascii() for x in t):
+            raise SystemExit("screen titles: one ASCII text per UI language (%r)" % (t,))
+    out.append("// menuTitle of screen k in hmi.graphicalContext, [k][UiLang] (text DB texts, ASCII)\n"
+               "static const char* const kScreenTitles[kScreenCount][kUiLangCount] = {\n%s\n};\n\n"
+               % ",\n".join("    { %s }" % ", ".join('"%s"' % x for x in t) for t in titles))
+    out.append("// screen k: background model k * 1000 + 99, slot i in model k * 1000 + 100 + i\n")
+    for scr in SCREEN_LIST[1:]:
+        key, fn = scr.key, scr.slots
         names = ",\n".join("    k%sSlot%s%s" % (key, "".join(p.capitalize() for p in n.split("_")), " = 0" if i == 0 else "")
                            for i, (n, *_r) in enumerate(fn()))
         out.append("enum %sSlot {\n%s,\n    k%sSlotCount\n};\n" % (key, names, key))
@@ -943,11 +978,11 @@ def screen_header():
 def screen_parts(ox, oy):
     """XML of screens 1..3: models, actions, states (with their OPTION menus)."""
     models, states = [], []
-    n = len(SCREEN_STATES)
-    for k in range(n):
-        models.append(text_model(SCREEN_TEXTMODELS[k], 260 + k))
-    actions = ["      <hmiAction id=\"%d\" target=\"%d\"/>\n" % (SCREEN_ACTIONS[k], SCREEN_STATES[k]) for k in range(n)]
-    for s, (_key, fn) in enumerate(SCREENS[1:], 1):
+    for scr in SCREEN_LIST:
+        models.append(text_model(scr.text_model, scr.text_id))
+    actions = ["      <hmiAction id=\"%d\" target=\"%d\"/>\n" % (scr.action, scr.state) for scr in SCREEN_LIST]
+    for s, scr in enumerate(SCREEN_LIST[1:], 1):
+        fn = scr.slots
         base = 1000 * s
         models.append("      <raImageModel id=\"%d\"/>\n" % (base + 99))
         comps = [image(base + 299, base + 99, props(ox, oy, sc(W), sc(H)))]
@@ -968,8 +1003,7 @@ def screen_options(_s, comp_ids):
 def settings_screen_buttons(comp_ids):
     """The first buttons of the settings page: one per screen, each opening it (hmiAction to its state)."""
     return ["          <button action=\"%d\" id=\"%d\" model=\"%d\" text=\"%s\"/>\n"
-            % (SCREEN_ACTIONS[k], next(comp_ids), SCREEN_TEXTMODELS[k], SCREEN_TEXTS[260 + k][1])
-            for k in range(len(SCREEN_STATES))]
+            % (scr.action, next(comp_ids), scr.text_model, scr.title[1]) for scr in SCREEN_LIST]
 
 
 # ---- outputs --------------------------------------------------------------------------------------------------------
@@ -1009,6 +1043,89 @@ def state(sid, title, text_model_id, comps, parent=None, options=None):
     return ("      <hmiState id=\"%d\"%s text=\"%s\" textModel=\"%d\">\n%s        <components>\n%s        </components>\n"
             "      </hmiState>\n" % (sid, " parentId=\"%d\"" % parent if parent else "", title, text_model_id, opt,
                                     "".join(comps)))
+
+
+def image_ranges():
+    """Every frame id range (name, first, last inclusive), decimal-point sets included (reserved, not generated). The
+    one table that says which ids are taken: check_image_ranges() rejects overlaps, check_frames() ids outside."""
+    n_lang = len(UI_LANGS)
+    return [
+        ("misc (icon, backgrounds, blank, test)", IMG_ICON, IMG_BG_EN),
+        ("arcs", IMG_ARC, IMG_ARC + ARC_STEPS), ("max markers", IMG_MARK, IMG_MARK + ARC_STEPS),
+        ("big digits", IMG_BIG, IMG_BIG + 2 * 16 - 1), ("units", IMG_UNIT, IMG_UNIT + len(UNITS) - 1),
+        ("fuel unit", IMG_FUEL_UNIT, IMG_FUEL_UNIT + 1), ("gears", IMG_GEAR, IMG_GEAR + 18),
+        ("g-meter dot", IMG_DOT, IMG_DOT + (2 * G_STEPS + 1) ** 2 - 1),
+        ("max numbers", IMG_MAXNUM, IMG_MAXNUM + MAXNUM_MAX),
+        ("scale numbers", IMG_SCALENUM, IMG_SCALENUM + SCALENUM_MAX),
+        ("fuel numbers", IMG_FUELNUM, IMG_FUELNUM + FUELNUM_MAX), ("fuel none", IMG_FUELNUM_NONE, IMG_FUELNUM_NONE),
+        ("g numbers", IMG_GNUM, IMG_GNUM + SEP_STRIDE + GNUM_MAX), ("g none", IMG_GNUM_NONE, IMG_GNUM_NONE),
+        ("lateral g numbers", IMG_LATNUM, IMG_LATNUM + SEP_STRIDE + GNUM_MAX),
+        ("tile decimals", IMG_TDEC, IMG_TDEC + DEC_STRIDE + 999), ("tile integers", IMG_TINT, IMG_TINT + TINT_MAX),
+        ("tile h:mm", IMG_TTIME, IMG_TTIME + 599), ("tile none", IMG_TNONE, IMG_TNONE),
+        ("big decimals", IMG_BDEC, IMG_BDEC + BDEC_STRIDE + 499), ("big none", IMG_BNONE, IMG_BNONE),
+        ("amber decimals", IMG_ADEC, IMG_ADEC + BDEC_STRIDE + 499), ("percent", IMG_PCT, IMG_PCT + 100),
+        ("steering angle", IMG_ANGLE, IMG_ANGLE + ANGLE_MAX), ("steering arrow", IMG_SARROW, IMG_SARROW + 1),
+        ("steering wheel", IMG_WHEEL, IMG_WHEEL + WHEEL_STEPS - 1),
+        ("throttle bar", IMG_GASBAR, IMG_GASBAR + BAR["steps"]), ("brake bar", IMG_BRKBAR, IMG_BRKBAR + BAR["steps"]),
+        ("history chart", IMG_CHART, IMG_CHART + CHART["steps"]), ("style bar", IMG_STYLE, IMG_STYLE + STYLE["steps"]),
+        ("gears (screens)", IMG_GEAR2, IMG_GEAR2 + 12), ("shift hint", IMG_SHIFT, IMG_SHIFT + 1),
+        ("performance status", IMG_STATUS, IMG_STATUS + STATUS_LANG_STRIDE * n_lang - 1),
+        ("screen backgrounds", IMG_BG_S, IMG_BG_S + n_lang * (len(SCREEN_LIST) - 1) - 1),
+        ("signed tiles", IMG_TSINT, IMG_TSINT + TSINT_MAX - TSINT_MIN),
+        ("warm-up progress", IMG_WPROG, IMG_WPROG + WARM_STEPS), ("warm-up done", IMG_WDONE, IMG_WDONE),
+        ("warm-up status", IMG_WSTATUS, IMG_WSTATUS + STATUS_LANG_STRIDE * n_lang - 1),
+        ("centred tiles", IMG_TCINT, IMG_TCINT + 100), ("centred none", IMG_TCNONE, IMG_TCNONE),
+    ]
+
+
+def check_image_ranges():
+    """No two frame id ranges overlap (a new range placed on top of another would silently replace its pictures)."""
+    ranges = sorted(image_ranges(), key=lambda r: r[1])
+    for (n1, a1, b1), (n2, a2, b2) in zip(ranges, ranges[1:]):
+        if a1 > b1:
+            raise SystemExit("image range %s is empty (%d..%d)" % (n1, a1, b1))
+        if a2 <= b1:
+            raise SystemExit("image ids overlap: %s %d..%d and %s %d..%d" % (n1, a1, b1, n2, a2, b2))
+
+
+def check_frames(name, ids):
+    """Every drawn frame id lies in a declared range."""
+    ranges = image_ranges()
+    stray = [i for i in ids if not any(a <= i <= b for _n, a, b in ranges)]
+    if stray:
+        raise SystemExit("%s: frame ids outside image_ranges(): %s" % (name, sorted(stray)[:20]))
+
+
+def check_xml(text):
+    """The generated XML before it is written: well formed, ASCII, every id unique, every reference resolved, and at
+    most MAX_IMAGES_PER_STATE images in a state."""
+    if not text.isascii():
+        raise SystemExit("GaugeApp.xml must stay ASCII")
+    root = ET.fromstring(text)
+    seen, kinds = {}, {}
+    for el in root.iter():
+        if el.tag == "property" or "id" not in el.attrib:
+            continue                                     # a property's id is its type, not an object id
+        i = int(el.get("id"))
+        if i in seen:
+            raise SystemExit("XML id %d used twice (<%s> and <%s>)" % (i, seen[i], el.tag))
+        seen[i] = el.tag
+        kinds.setdefault(el.tag, set()).add(i)
+    actions = set().union(*(kinds.get(t, set()) for t in ("hmiAction", "raAction", "combinedAction")))
+    models = set().union(*(ids for tag, ids in kinds.items() if tag.endswith("Model")))
+    states = kinds.get("hmiState", set())
+    for el in root.iter():
+        refs = [("action", actions), ("model", models), ("imageModel", models), ("textModel", models),
+                ("target", states), ("parentId", states)]
+        for attr, pool in refs:
+            v = el.get(attr)
+            if v is not None and int(v) not in pool:
+                raise SystemExit("<%s id=%s> %s=%s points nowhere" % (el.tag, el.get("id"), attr, v))
+    for st in root.iter("hmiState"):
+        n = sum(1 for _ in st.iter("image"))
+        if n > MAX_IMAGES_PER_STATE:
+            raise SystemExit("hmiState %s has %d images (at most %d show)" % (st.get("id"), n, MAX_IMAGES_PER_STATE))
+    return len(seen)
 
 
 # The settings page (hmiState 12), opened from the OPTION menu of the gauge screen (optionComponents). One button per
@@ -1069,7 +1186,7 @@ def xml(slot_list, ox, oy, diag=False, menu_name=DEFAULT_MENU):
         entry_action = ENTRY_ACTION
         actions = ["      <raAction id=\"%d\"/>\n" % ENTRY_ACTION]
         events = ["      <focusEvent id=\"%d\" target=\"%d\"/>\n" % (SCREEN_EVENT0 + k, sid)
-                  for k, sid in enumerate(SCREEN_STATES)]
+                  for k, sid in enumerate(scr.state for scr in SCREEN_LIST)]
         sm, sa, sb, _so = settings_parts()
         models += sm
         actions += sa
@@ -1084,7 +1201,8 @@ def xml(slot_list, ox, oy, diag=False, menu_name=DEFAULT_MENU):
         # The other screens are children of 10 (parentId) and the HMI shows the parent's OPTION entries in them too
         # (car-verified: an own Settings entry there appeared twice), so they get none of their own.
         for s, comps in xs:
-            states.append(state(SCREEN_STATES[s], SCREEN_TEXTS[260 + s][1], SCREEN_TEXTMODELS[s], comps, 10))
+            scr = SCREEN_LIST[s]
+            states.append(state(scr.state, scr.title[1], scr.text_model, comps, 10))
         what = ("hmiState 10 (engine) is one background image and %d image components on top of it. The OPTION menu"
                 " of every screen has one entry, Settings (hmiState 12); the settings page lists the screens - Engine"
                 " 10, Driving 14, Fuel and trip 15, Performance 16, Warm-up 17, each its own background and images -"
@@ -1111,7 +1229,7 @@ def xml(slot_list, ox, oy, diag=False, menu_name=DEFAULT_MENU):
         states.append(state(14, "E4", 513, [image(537, 563, props(0, 0, 549, 484))], 10))
     return (
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
-        "<!-- GENERATED by make_db.py - edit the layout there. applicationType %s: %s (make_db.py --menu).\n"
+        "<!-- GENERATED by make_db.py - edit the layout there. applicationType %s: %s (make_db.py, menu option).\n"
         "     entryButtonFocusID / applicationWeight differ from NBT-AAD's / entry-aad's so the apps can be installed\n"
         "     side by side. %s.\n"
         "     Each gauge image is bound to a raImageModel that libGaugeApp.so fills with PNG data from\n"
@@ -1213,7 +1331,8 @@ def palette_colors(iid):
     text = (IMG_BIG <= iid < IMG_BIG + 32 or IMG_UNIT <= iid < IMG_UNIT + 20 or
             IMG_MAXNUM <= iid <= IMG_LATNUM + SEP_STRIDE + GNUM_MAX or
             IMG_TDEC <= iid < IMG_WHEEL or IMG_TSINT <= iid < IMG_WPROG or IMG_TCINT <= iid <= IMG_TCNONE or
-            IMG_STATUS <= iid < IMG_STATUS + 20 or IMG_WSTATUS <= iid < IMG_WSTATUS + 20)
+            IMG_STATUS <= iid < IMG_STATUS + STATUS_LANG_STRIDE * len(UI_LANGS) or
+            IMG_WSTATUS <= iid < IMG_WSTATUS + STATUS_LANG_STRIDE * len(UI_LANGS))
     return 32 if text else 256
 
 
@@ -1293,8 +1412,8 @@ def write_texts(path):
                 for v, pair in enumerate(values):
                     texts[base + v] = pair[pl]
             texts[TEXT_SETTINGS_TITLE] = SETTINGS_TITLE[pl]
-            for tid, pair in SCREEN_TEXTS.items():
-                texts[tid] = pair[pl]
+            for scr in SCREEN_LIST:
+                texts[scr.text_id] = scr.title[pl]
             body = "100000=%s\n1=%s\n" % (langname, TITLE)
             body += "".join("%d=%s\n" % (k, v) for k, v in sorted(texts.items()))
             if not body.isascii():
@@ -1420,24 +1539,36 @@ def main():
     slot_list = slots()
     if a.diag_out:
         return diag(a, slot_list)
+    check_image_ranges()
+    doc = xml(slot_list, ox, oy, menu_name=a.menu)
+    n_ids = check_xml(doc)                               # before anything is written
+    hdr = header(slot_list)
     with open(os.path.join(HERE, "GaugeApp.xml"), "w", encoding="utf-8", newline="\n") as f:
-        f.write(xml(slot_list, ox, oy, menu_name=a.menu))
+        f.write(doc)
     with open(os.path.join(HERE, "src", "gauge_ids.hpp"), "w", encoding="utf-8", newline="\n") as f:
-        f.write(header(slot_list))
+        f.write(hdr)
     if a.layout_only:
-        print("wrote GaugeApp.xml, src/gauge_ids.hpp (%d slots)" % len(slot_list))
+        print("wrote GaugeApp.xml (%d ids, checked), src/gauge_ids.hpp (%d slots)" % (n_ids, len(slot_list)))
         return
     if Image is None:
         raise SystemExit("Pillow is missing (apt install python3-pil, or pip install pillow); --layout-only skips images")
     fp = find_font(a.font)
     common = common_images(fp)
-    size = write_frames(os.path.join(HERE, "GaugeApp_frames.bin"), common)
     scr = screen_images(fp)
+    check_frames("GaugeApp_frames.bin", common)
+    check_frames("GaugeApp_frames_s.bin", scr)
+    if set(common) & set(scr):
+        raise SystemExit("frame ids in both the common and the screens pack: %s" % sorted(set(common) & set(scr))[:20])
+    size = write_frames(os.path.join(HERE, "GaugeApp_frames.bin"), common)
     size += write_frames(os.path.join(HERE, "GaugeApp_frames_s.bin"), scr)
     os.makedirs(os.path.join(HERE, "res"), exist_ok=True)
     for k, color in enumerate(COLORS):
         colored = color_images(fp, color)
         colored.update(screen_color_images(fp, color))
+        check_frames("GaugeApp_frames_c%d.bin" % k, colored)
+        if set(colored) & (set(common) | set(scr)):  # the app looks in the colour pack first: it would hide them
+            raise SystemExit("colour pack %d repeats frame ids of the other packs: %s"
+                             % (k, sorted(set(colored) & (set(common) | set(scr)))[:20]))
         if k == 0:
             every = dict(common)
             every.update(scr)

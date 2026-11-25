@@ -49,7 +49,11 @@ enum Prop { kEngineTemp = 0, kRpm, kTorque, kGear, kAccel, kSpeed, kFuel, kLangu
             kPedal, kBrake, kSteer, kConsumption, kAvgConsumption, kAvgSpeed, kStyle, kShift, kGraphic,
             kTempExt, kTempInt, kAcTemps, kBattery, kEngineStatus, kPropCount };
 
-const int kLangPolish = 18;          // vehicle.language: the texts drawn into the pictures are Polish for it, else English
+const int kVehicleLangPolish = 18;   // vehicle.language value of a Polish HMI
+
+// The language of the texts drawn into the pictures. The order is the frame order in the packs (make_db.py UI_LANGS):
+// a per-language frame is base + lang (or base + stride * lang). Never pass the language as a bool.
+enum UiLang { kLangPl = 0, kLangEn, kLangCount };
 
 inline const char* propName(int p) {
     switch (p) {
@@ -169,8 +173,8 @@ struct Metrics {
           engineStatus(0) { title[0] = 0; appType[0] = 0; }
 
     // Texts in the pictures: Polish until the language is known (the car this was made for), then Polish only for
-    // a Polish HMI.
-    bool polish() const { return language == 0 || language == kLangPolish; }
+    // a Polish HMI, English for every other one. The only place that maps vehicle.language to a UiLang.
+    UiLang uiLang() const { return language == 0 || language == kVehicleLangPolish ? kLangPl : kLangEn; }
 
     bool hasPower() const { return hasTorque && hasRpm; }
     double power() const { return (torque > 0 ? torque : 0) * rpm * kPsPerNmRpm; }   // KM, 0 on overrun
