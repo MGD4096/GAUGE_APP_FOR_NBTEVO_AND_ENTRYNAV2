@@ -94,6 +94,10 @@ and 5 words), copies the data. **There is no exported `~Image`**: call `BufferSt
   duplicated. Child states (`parentId`) also show the **parent's** OPTION entries, so an entry repeated in a child
   appears twice: GaugeApp puts "Ustawienia" only in the parent state 10, and its settings page holds the screen
   buttons (`hmiAction` to each screen's state) above the settings.
+- **Opening a state from code:** `<events><focusEvent id="…" target="<state>"/></events>` and
+  `PluginApp::triggerEvent(id)` (entry-aad, car-verified there; iDrive refuses it while one of its own popups is on
+  top). An entry button with a `raAction` instead of an `hmiAction` lets the app choose the state: GaugeApp opens the
+  screen shown last (focusEvents 90..94).
 - **The title of the state on screen** arrives in CDS `hmi.graphicalContext` → `menuTitle` (the text DB's text). That
   tells which screen of the app is visible.
 

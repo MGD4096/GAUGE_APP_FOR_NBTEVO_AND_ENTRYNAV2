@@ -168,6 +168,9 @@ przycisku przełącza na następną wartość; zmiana jest od razu widoczna na e
 | Moment | Nm, lb-ft |
 | Paliwo | litry, galony (US) |
 
+W tym samym pliku jest `screen=` – ostatni wyświetlany ekran (0 Silnik … 4 Rozgrzewanie). Wejście do GAUGE APP
+otwiera ekran, na którym ostatnio byłeś, także po restarcie.
+
 Maksima są liczone w jednostkach bazowych (°C, KM, Nm), więc zmiana jednostek ich nie psuje – są tylko inaczej
 pokazane. Paliwo (ilość w zbiorniku) ma własny kafelek obok biegów.
 

@@ -152,6 +152,9 @@ następną wartość; zmiana jest od razu widoczna i zapisuje się w `/var/opt/g
 | Moment | Nm, lb-ft |
 | Paliwo | litry, galony (US) |
 
+W tym samym pliku jest `screen=` – ostatni wyświetlany ekran (0 Silnik … 4 Rozgrzewanie). Wejście do GAUGE APP
+otwiera ekran, na którym ostatnio byłeś, także po restarcie.
+
 **Język** przełącza się sam z językiem iDrive (`vehicle.language`): polski przy polskim, angielski przy każdym innym.
 
 **Maksima** płynu, oleju, mocy i momentu liczą się od zera przy każdym starcie aplikacji. Te z ostatniego przejazdu

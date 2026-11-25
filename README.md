@@ -28,8 +28,9 @@ in Polish: [docs/EntryNav2](docs/EntryNav2/README.md).
 ## More screens (OPTION)
 
 Screens are chosen on the Settings page, like the gauge colour: OPTION (any screen) → Settings lists the screens
-first, then the settings. The OPTION menu holds only Settings (entries above it come from iDrive). Each screen is
-its own HMI state with its own ~60-image budget:
+first, then the settings. The OPTION menu holds only Settings (entries above it come from iDrive). The menu row opens
+the screen shown last (`screen=` in `settings.txt`, kept over restarts: the entry button is a `raAction` and the app
+fires `focusEvent` 90 + screen). Each screen is its own HMI state with its own ~60-image budget:
 
 - **Driving** ([preview](res/preview_driving.png)): throttle and brake bars, g-meter with maxima in four directions,
   steering wheel and angle, engine load %, gear, shift hint.

@@ -53,8 +53,10 @@ nich, więc obie aplikacje mogą być zainstalowane razem.
 
 Ekran wybiera się w Ustawieniach, tak jak kolor wskaźników: klawisz OPTION na dowolnym ekranie → Ustawienia, na
 górze listy są ekrany (Silnik, Jazda, Spalanie i trasa, Pomiary, Rozgrzewanie), pod kreską ustawienia. Menu OPTION
-ma tylko jedną pozycję aplikacji, „Ustawienia”; pozycje nad nią (np. „Wyłącz pojazd”) dodaje iDrive. Każdy ekran to
-osobny stan HMI z własnym limitem ok. 60 obrazków:
+ma tylko jedną pozycję aplikacji, „Ustawienia”; pozycje nad nią (np. „Wyłącz pojazd”) dodaje iDrive. Aplikacja
+pamięta ostatni wyświetlany ekran (`screen=` w `settings.txt`, także po restarcie): przycisk GAUGE APP w menu otwiera
+właśnie jego (przycisk wejścia to `raAction`, aplikacja wywołuje `focusEvent` 90 + numer ekranu, jak entry-aad
+otwiera swoje menu). Każdy ekran to osobny stan HMI z własnym limitem ok. 60 obrazków:
 
 | Ekran | Co pokazuje | Dane CDS |
 |---|---|---|
