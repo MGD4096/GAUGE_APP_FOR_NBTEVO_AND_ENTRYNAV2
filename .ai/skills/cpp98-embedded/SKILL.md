@@ -67,7 +67,7 @@ the host**, **never block the host**, **compile on two old compilers with one so
 
 - **Never pass the UI language as a `bool`** (`isPolish`, `polish`, `english`, `pl`). A language is a value, not a
   yes/no: a third language turns every such flag into a rewrite, and `f(s, true)` does not say what `true` means.
-  GaugeApp passes one enum everywhere, and **generates** it (`gauge_ids.hpp`, from `make_db.py` `UI_LANG_DEFS`):
+  GaugeApp passes one enum everywhere, and **generates** it (`gauge_ids.hpp`, from `gaugegen/texts.py` `UI_LANG_DEFS`):
   ```cpp
   enum UiLang { kLangPl = 0, kLangEn, kLangCount };        // generated; order = frame order in the packs
   inline UiLang uiLangForVehicle(int vehicleLanguage);     // generated: vehicle.language -> UiLang
@@ -78,7 +78,7 @@ the host**, **never block the host**, **compile on two old compilers with one so
   inline unsigned statusFrame(unsigned base, UiLang lang, int status);   // base + kStatusLangStride * lang + status
   ```
   Frame ids per language are `base + lang` (or `base + stride * lang`), with the count and stride generated, so a
-  new language is one `TEXTS` block and one `UiLangDef` in `make_db.py` and no C++ change at all.
+  new language is one `TEXTS` block and one `UiLangDef` in `gaugegen/texts.py` and no C++ change at all.
 - Decide the language once (`m.uiLang()`) and hand the value down; helpers never re-read `vehicle.language` and
   C++ never names a language's code.
 - Things that only follow from the language are generated tables indexed by it (`ids::kPsUnit[lang]`: "KM" / "PS";

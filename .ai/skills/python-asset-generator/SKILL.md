@@ -1,9 +1,9 @@
 ---
 name: python-asset-generator
-description: Good Python practices for make_db.py, the generator of GaugeApp's look (XML, ids header, frame packs, text/image DBs, previews). Use when changing layout, texts, ids, screens or the pack format, or when refactoring the generator.
+description: Good Python practices for make_db.py and the gaugegen package, the generator of GaugeApp's look (XML, ids header, frame packs, text/image DBs, previews). Use when changing layout, texts, ids, screens or the pack format, or when refactoring the generator.
 ---
 
-# make_db.py: one source of truth, deterministic output
+# make_db.py + gaugegen/: one source of truth, deterministic output
 
 `make_db.py` turns a layout description into everything the car loads and into `src/gauge_ids.hpp`, which the C++
 code compiles against. Its outputs are committed, so a bad generator change ships silently unless the generator
@@ -17,7 +17,7 @@ itself refuses to produce bad output.
   `--layout-only` should simply skip rendering, not take a different code path for ids.
 - Pure functions that take data and return strings / bytes (`state(...)`, `screen_options(...)`) are easy to test;
   keep file I/O at the edges.
-- Group related constants in one structure instead of many module globals: `make_db.py` has a frozen `Screen`
+- Group related constants in one structure instead of many module globals: `gaugegen/screens.py` has a frozen `Screen`
   dataclass and `SCREEN_LIST` (key, state, action, text model, text id, title, slot list) instead of parallel lists,
   which are a classic source of off-by-one errors. Do the same for the next family of related constants.
 - Anything the C++ side needs (ids, counts, titles) is **exported into `gauge_ids.hpp`** from the same data, never
@@ -70,7 +70,7 @@ itself refuses to produce bad output.
   escapes attributes (`xml.sax.saxutils.quoteattr`) over hand-built strings.
 - Small functions (≤ ~50 lines); name drawing helpers after what they draw.
 - **The language is a value, never a flag**: pass `lang` (`"pl"`, `"en"`, as `background(fp, lang)` does), never
-  `is_polish=True` / `english=False`. `make_db.py` keeps every text in `TEXTS[lang]` (one complete block per
+  `is_polish=True` / `english=False`. `gaugegen/texts.py` keeps every text in `TEXTS[lang]` (one complete block per
   language, so a translator copies one block) and the languages in `UI_LANG_DEFS` (code, `vehicle.language` values,
   text DB files; `LANGS` is the text DB's list of iDrive language files). The index in `UI_LANG_DEFS` is the frame
   offset; the generator exports the C++ enum `UiLang`, `uiLangForVehicle`, `kUiLangCount`, `kStatusLangStride` and
@@ -79,7 +79,7 @@ itself refuses to produce bad output.
 - `check_texts()` runs before anything is written: same keys and list lengths in every block, ASCII text DB texts,
   a known power unit, no `vehicle.language` value or text DB file in two languages.
 - No bytecode in the repo: `__pycache__/` and `*.pyc` are in `.gitignore`.
-- Lint with `python3 -m pyflakes make_db.py` (or ruff) before committing.
+- Lint with `python3 -m pyflakes make_db.py gaugegen` (or ruff) before committing.
 
 ## Tests for the generator
 
@@ -90,8 +90,10 @@ itself refuses to produce bad output.
 
 ## Where GaugeApp differs today
 
-- `make_db.py` is ~1580 lines with ~110 module-level constants and parallel lists per screen; all stages in one file
-  and reading module globals (S, D). Per-screen drawing and preview values are still `if screen == k` branches
+- Done: `make_db.py` is a short entry point and the stages are modules in `gaugegen/` (S), each importing only
+  earlier ones. Still open: the modules read module-level constants rather than receiving them (D); the layout
+  geometry is rebound by `apply_screen_preset`, so `layout.configure()` must run before the other modules are
+  imported (`require_configured()` in each stops a wrong order). Per-screen drawing and preview values are still `if screen == k` branches
   (`s_background`, `screen_preview`) (O).
 - XML is built with `%` string formatting; attributes are not escaped (safe only because all texts are ASCII
   literals, which `check_xml` enforces).
