@@ -1071,9 +1071,10 @@ def xml(slot_list, ox, oy, diag=False, menu_name=DEFAULT_MENU):
         page = settings_screen_buttons(comp_ids) + ["          <separator id=\"%d\"/>\n" % next(comp_ids)] + sb
         states = [state(10, TITLE, 3, gc, options=screen_options(0, comp_ids)),
                   state(SETTINGS_STATE, SETTINGS_TITLE[1], OPTION_TEXTMODEL, page, 10)]
+        # The other screens are children of 10 (parentId) and the HMI shows the parent's OPTION entries in them too
+        # (car-verified: an own Settings entry there appeared twice), so they get none of their own.
         for s, comps in xs:
-            states.append(state(SCREEN_STATES[s], SCREEN_TEXTS[260 + s][1], SCREEN_TEXTMODELS[s], comps, 10,
-                                options=screen_options(s, comp_ids)))
+            states.append(state(SCREEN_STATES[s], SCREEN_TEXTS[260 + s][1], SCREEN_TEXTMODELS[s], comps, 10))
         what = ("hmiState 10 (engine) is one background image and %d image components on top of it. The OPTION menu"
                 " of every screen has one entry, Settings (hmiState 12); the settings page lists the screens - Engine"
                 " 10, Driving 14, Fuel and trip 15, Performance 16, Warm-up 17, each its own background and images -"

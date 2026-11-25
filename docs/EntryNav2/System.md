@@ -76,14 +76,82 @@ Read on the car (F40 with the original 8.8" CID, November 2026):
 | | |
 |---|---|
 | Display controller | TI OMAP DSS rev 6.1, kernel driver `omapdrm` (`/dev/dri/card0`, framebuffer `fb0`) |
-| Panel driver | `panel-entryevo` (kernel, device `connector.10`), logs `Panel Mode: 1280x480` at boot |
+| Panel driver | `panel-entryevo`, a loadable module (`/lib/modules/3.12.25-FR21.0/kernel/drivers/video/omap2/displays-new/panel-entryevo.ko`), device `connector.10` = device tree node `/connector@0` (`compatible = "xse,panel-entryevo"`); logs `Panel Mode: 1280x480` at boot |
+| Kernel | 3.12.25-FR21.0 |
 | DRM connector | `/sys/class/drm/card0-Unknown-1`: connected, one mode only: **1280x480** |
 | HMI drawing | `HmiMain3D`: own 3D engine *Ines* on OpenGL ES 2 (EGL), a Wayland client; layers through GENIVI ILM (`CWal3dEntryEvo`, log tag `[WAL3D]`) |
 | Resolutions the HMI code knows | `TEConstDefinitionType_` 800x480, 1280x480, 1280x720, 1440x540, 1920x720; taken from the unit's coding (`CRbCoding::getDisplaySize`); fallbacks 1440x540 / 800x480 when the coding is invalid |
 | Plugin state area | about 1250 x 470 px of the 1280 x 480 panel |
 
 The video mode is set by the kernel panel driver, not by the HMI: the HMI knowing 1920x720 does not make the unit send
-it. Retrofit test with an MGU CID (APIX3, 1920x720, powered over the APIX cable): coded APIX3 + 1920x720 →
+it.
+
+`panel-entryevo.ko` ("EntryEvo LCD Panel Driver", xse) holds exactly three timing tables (`omap_video_timings`), and no
+1920x720:
+
+| Mode | Pixel clock | H sync / front / back | V sync / front / back |
+|---|---|---|---|
+| 800x480 | 34.0 MHz | 128 / 40 / 88 | 5 / 14 / 26 |
+| 1280x480 | 40.5 MHz | 15 / 70 / 1 | 1 / 11 / 2 |
+| 1440x540 | 59.259 MHz | 15 / 263 / 2 | 1 / 8 / 25 |
+
+The mode is chosen by the module parameter `panel_option` (string `<x>x<y>`, default `"1280x480"`), compared with
+`strcmp` against the table names. On the car:
+
+- `/sys/module/panel_entryevo/parameters/panel_option` = `1280x480`;
+- the device tree node `/connector@0` has only `compatible`, `name` and `video-source` (no timings);
+- `/etc/modprobe.d/blacklist.conf` blacklists `panel-entryevo` (no automatic load by alias), and
+  `/etc/modules-load.d/panel-entryevo.conf` loads it by name at boot;
+- no `options panel-entryevo …` line in `/etc/modprobe.d`.
+
+- the kernel command line has no `panel_entryevo.*` or `video=` argument:
+  `console=ttyO6,115200 consoleblank=0 root=/dev/mmcblk0p3 ro rootwait rootfstype=ext4 loglevel=4 ibcinfo=0xfff00000
+  max_cpu_freq=1500000000 spidev.bufsiz=65536 systemd.setenv=DBUS_SESSION_BUS_ADDRESS=… reboot=c panic=-1
+  omap_wdt.kernelpet=3 omap_wdt.nowayout=1 omap_panic_timeout=10 max_loop=2 printk.always_kmsg_dump`.
+
+So the mode is the built-in default 1280x480, whatever the coding says. **`/etc/modprobe.d` options do not reach it**
+(car-tested): `modprobe --show-depends panel-entryevo` lists the option, but the driver logs `Panel Mode` at 1.4 s,
+before systemd starts (1.6 s, systemd 206). `/sbin/init` is `/usr/bin/earlystarter` (xse, "AEEVO FR21.0 20220718"),
+which loads the module itself with `init_module` and an explicit `panel_option=<size>`:
+
+1. if `/etc/panel-1440x540`, `/etc/panel-1280x480` or `/etc/panel-800x480` exists → that size (`Set CID size = %s by
+   file`);
+2. otherwise the coding `CID_DISPLAY_RES` (read through `/usr/local/lib/libhwinfoperscustom.so`): 1 → 800x480,
+   2 → 1280x480, 3 → 1440x540, any other value → 1280x480 (`Set CID size = %s by coding`).
+
+Coding 1920x720 therefore still gives 1280x480, and a default inside the module never applies (the explicit argument
+wins). Root is `/dev/mmcblk0p3`, ext4, mounted read-only. The probe loops over the three tables, prints each as `"%dx%d"`, `strcmp`s it with `panel_option`
+and falls back to the 1280x480 table. `../HU_Tools/PanelEntryEvo/patch_panel.py` overwrites the unused 800x480 table
+with 1920x720 timings (13 bytes of `.rodata`, code unchanged); with `--slot 1280x480` it overwrites the 1280x480
+table, which is also the fallback (`.rodata+0`), so `panel_option=1280x480` from earlystarter ends at 1920x720. Car-tested
+(`panel-entryevo-1920-v2.ko`): `Set CID size = 1280x480 by coding`, then `Panel Mode: 1920x720`, and the DRM connector
+lists only `1920x720`, with no DSS / DPI errors in dmesg. The MGU display, backlight on, still showed its own "No Signal"
+text, the same as at 1280x480. So the APIX link itself does not come up; the resolution was only a second obstacle.
+
+APIX on the Linux side:
+
+- Linux I2C devices: bus 0 `adv7182` (analog video decoder, camera input); bus 1 `tca6416` (GPIO expander),
+  `tps659038` (PMIC) and two `dummy` PMIC addresses. **No APIX serializer** is visible to Linux, so it is configured
+  outside Linux (most likely by the car communication processor, which also reports the display faults) or fixed in
+  hardware.
+- `SystemManager` holds `/tmp/startup-mgr/APIX2` next to `CVBS1`/`CVBS2`, `Mic_In1`/`Mic_In2` and `USB1`/`USB2`. These are
+  hardware-variant flags, so `APIX2` there most likely means a second APIX port, not the APIX generation.
+- No debugfs `omapdss` folder, so the real pixel clock could not be read.
+
+Fault memory of HU_ENTRYNAV2 with the MGU display (1920x720 module installed):
+
+| DTC | Text | Meaning here |
+|---|---|---|
+| B7F8C3 | Headunit power supply to CID: no communication | the "power" fault: the HU gets no answer from the display over the APIX link; not an over-current |
+| E1C468 | HU-B, K-CAN2 / K-CAN4: communication error | most likely from the many restarts |
+| E1C440 | HU-B reset | the restarts |
+| B7F850 | HU-B: microphone 2, open circuit | unrelated (no second microphone) |
+| B7F8E5 | HU-B: unauthorised access to the control unit activated | the SSH / root access |
+
+B7F8C3 confirms that the HU and the MGU display do not talk over APIX at all (no link, no back channel). The 800x480-slot variant loaded fine but changed nothing (as explained above). Without a patched module the option
+can pick only one of the three built-in modes; a mode the display does not accept means a
+black screen and SSH as the only way back. A 1920x720 output would need a rebuilt module with a fourth table, and it is
+unknown whether the unit's APIX serializer and the MGU display would then work together. Retrofit test with an MGU CID (APIX3, 1920x720, powered over the APIX cable): coded APIX3 + 1920x720 →
 "power supply" fault, "No signal"; coded APIX2 → power supply fault + display controller fault, "No signal". Not solved;
 what decides the panel mode (device tree, boot arguments, coding read by the driver) is still open.
 

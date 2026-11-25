@@ -710,9 +710,6 @@
         </components>
       </hmiState>
       <hmiState id="14" parentId="10" text="Driving" textModel="81">
-        <optionComponents>
-          <button action="7" id="607" model="46" text="Settings"/>
-        </optionComponents>
         <components>
           <image id="1299" model="1099">
             <properties>
@@ -917,9 +914,6 @@
         </components>
       </hmiState>
       <hmiState id="15" parentId="10" text="Fuel and trip" textModel="82">
-        <optionComponents>
-          <button action="7" id="608" model="46" text="Settings"/>
-        </optionComponents>
         <components>
           <image id="2299" model="2099">
             <properties>
@@ -1364,9 +1358,6 @@
         </components>
       </hmiState>
       <hmiState id="16" parentId="10" text="Performance" textModel="83">
-        <optionComponents>
-          <button action="7" id="609" model="46" text="Settings"/>
-        </optionComponents>
         <components>
           <image id="3299" model="3099">
             <properties>
@@ -1481,9 +1472,6 @@
         </components>
       </hmiState>
       <hmiState id="17" parentId="10" text="Warm-up" textModel="84">
-        <optionComponents>
-          <button action="7" id="610" model="46" text="Settings"/>
-        </optionComponents>
         <components>
           <image id="4299" model="4099">
             <properties>
