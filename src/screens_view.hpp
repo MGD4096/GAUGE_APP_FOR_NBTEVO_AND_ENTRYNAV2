@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
-// What every image slot of screens 1..3 (Driving, Fuel and trip, Performance) shows - pure logic, host-tested. Slots and
-// frame ids come from make_db.py (src/gauge_ids.hpp); the engine screen (screen 0) is gauge_view.hpp.
+// What every image slot of screens 1..4 (Driving, Fuel and trip, Performance, Warm-up) shows - pure logic, host-tested.
+// Slots and frame ids come from make_db.py (src/gauge_ids.hpp); the engine screen (screen 0) is gauge_view.hpp.
+// A new screen: its compute* below plus one row in kScreenDescs (and its make_db.py entry); the renderer iterates.
 #ifndef GAUGE_SCREENS_VIEW_HPP
 #define GAUGE_SCREENS_VIEW_HPP
 
+#include "compat.hpp"
 #include "gauge_view.hpp"
 #include "drive_stats.hpp"
 
@@ -16,8 +18,12 @@ const double kStyleFull = 10.0;      // driving.drivingStyle value of a full bar
 const double kBrakeFullMin = 30.0;   // brakeContact of a full bar until a larger one was seen (0..23 seen standing)
 const double kChartFull = 20.0;      // l/100 km of a full history bar
 
-inline unsigned screenBackground(int s, bool polish) {
-    return ids::kImgScreenBg + 2u * (unsigned)(s - 1) + (polish ? 0u : 1u);
+inline unsigned screenBackground(int s, UiLang lang) {
+    return ids::kImgScreenBg + (unsigned)ids::kUiLangCount * (unsigned)(s - 1) + (unsigned)lang;
+}
+// A status line (Performance / Warm-up) in the HMI's language: base + stride * lang + status.
+inline unsigned statusFrame(unsigned base, UiLang lang, int status) {
+    return base + (unsigned)ids::kStatusLangStride * (unsigned)lang + (unsigned)status;
 }
 
 // ---- numbers ----------------------------------------------------------------------------------------------------------
@@ -138,7 +144,7 @@ inline void computePerf(const Metrics& m, const Perf& p, const GMax& gm, long no
     out[kPerfSlotPbrk] = tileNum(p.rBrake >= 0, p.rBrake, comma);
     out[kPerfSlotPq] = tileNum(p.rQuarter >= 0, p.rQuarter / 1000.0, comma);
     PerfStatus s = m.hasSpeed ? p.status() : kPerfNoData;
-    out[kPerfSlotStatus] = kImgStatus + (m.polish() ? 0u : 10u) + (unsigned)s;
+    out[kPerfSlotStatus] = statusFrame(kImgStatus, m.uiLang(), s);
     out[kPerfSlotLive] = s == kPerfRunning ? tileDec(p.elapsed(now) / 1000.0, comma) : (unsigned)kImgBlank;
     double lat = gm.has[kGLeft] ? gm.v[kGLeft] : 0;
     if (gm.has[kGRight] && gm.v[kGRight] > lat) lat = gm.v[kGRight];
@@ -165,7 +171,7 @@ inline void computeWarm(const Metrics& m, const WarmUp& w, const Settings& st, l
     gaugeCard(out + kWarmSlotCoolantArc, m.hasCoolant, showTemp(st, m.coolant), false, 0,
               showTemp(st, kWarmCoolantLo), showTemp(st, kWarmCoolantHi), unit);
     const WarmStatus s = w.status(m);
-    out[kWarmSlotStatus] = kImgWarmStatus + (m.polish() ? 0u : 10u) + (unsigned)s;
+    out[kWarmSlotStatus] = statusFrame(kImgWarmStatus, m.uiLang(), s);
     out[kWarmSlotProgress] = s == kWarmReady ? (unsigned)kImgWarmDone : level(kImgWarmProg, w.progress(m), kWarmSteps);
     long mins = w.runMinutes(now);
     out[kWarmSlotRuntime] = w.running ? kImgTileTime + (unsigned)(mins > 599 ? 599 : mins) : (unsigned)kImgTileNone;
@@ -177,6 +183,49 @@ inline void computeWarm(const Metrics& m, const WarmUp& w, const Settings& st, l
     out[kWarmSlotEvap] = tileSInt(m.hasEvaporator, showTemp(st, m.evaporator));
     out[kWarmSlotExtUnit] = out[kWarmSlotIntUnit] = out[kWarmSlotEvapUnit] = unit;
     out[kWarmSlotBatt] = tileCInt(m.hasBattery, m.battery);
+}
+
+// ---- the screen table ---------------------------------------------------------------------------------------------
+// Everything screens 1..4 read, copied once under the app's data lock; each screen's compute reads what it needs.
+struct ScreenInputs {
+    Metrics m;
+    GMax gmax;
+    TorqueEnv env;
+    FuelCal cal;
+    Trip trip;
+    Perf perf;
+    WarmUp warm;
+    Settings st;
+    double brakeFull;
+    ScreenInputs() : brakeFull(0) {}
+};
+
+typedef void (*ComputeScreen)(const ScreenInputs& in, long now, unsigned* out);
+struct ScreenDesc {
+    int slotCount;
+    ComputeScreen compute;
+};
+
+inline void drivingScreen(const ScreenInputs& in, long, unsigned* out) {
+    computeDriving(in.m, in.gmax, in.env, in.brakeFull, out);
+}
+inline void fuelScreen(const ScreenInputs& in, long now, unsigned* out) { computeFuel(in.m, in.trip, in.cal, now, out); }
+inline void perfScreen(const ScreenInputs& in, long now, unsigned* out) { computePerf(in.m, in.perf, in.gmax, now, out); }
+inline void warmScreen(const ScreenInputs& in, long now, unsigned* out) { computeWarm(in.m, in.warm, in.st, now, out); }
+
+// Screens 1..kScreenCount-1 in Screen order: row s - 1 is screen s.
+const ScreenDesc kScreenDescs[] = {
+    { ids::kDrvSlotCount, &drivingScreen },
+    { ids::kFuelSlotCount, &fuelScreen },
+    { ids::kPerfSlotCount, &perfScreen },
+    { ids::kWarmSlotCount, &warmScreen },
+};
+GA_STATIC_ASSERT((int)GA_COUNT(kScreenDescs) == (int)ids::kScreenCount - 1, one_desc_per_screen);
+GA_STATIC_ASSERT((int)kScreenWarm == (int)ids::kScreenCount - 1, screen_enum_matches_make_db);
+
+// The row of screen s (1..kScreenCount-1), or NULL.
+inline const ScreenDesc* screenDesc(int s) {
+    return s >= 1 && s < ids::kScreenCount ? &kScreenDescs[s - 1] : NULL;
 }
 
 } // namespace eng

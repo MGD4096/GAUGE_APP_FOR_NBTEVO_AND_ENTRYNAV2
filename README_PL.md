@@ -237,8 +237,9 @@ eksportowane funkcje `bmw::PluginApp`), ale zbudowana biblioteka jest sprawdzona
   `qnx650-env.bat`, skompiluje bibliotekę i złoży w `dist\nbt\GaugeApp` wszystko, co trzeba skopiować na jednostkę.
 - **Linux / obraz qnx650-docker:** `make` (`libGaugeApp.so`).
 - **Momentics IDE** (jeśli wolisz projekt): *File → New → QNX C/C++ Project*, typ *Shared Library*, wariant
-  **armle-v7** (so), biblioteka C++ **GNU libstdc++** (nie Dinkum – tak jak HmiMain3D); źródło `src/engine_data.cpp`,
-  ścieżka nagłówków `src`, definicja `_QNX_SOURCE`, do linkowania `libAppFramework.A.so` i `libCoreFramework.A.so`
+  **armle-v7** (so), biblioteka C++ **GNU libstdc++** (nie Dinkum – tak jak HmiMain3D); źródła `src/*.cpp`
+  (`engine_data`, `cds`, `render`, `frames`, `storage`, `log`), ścieżka nagłówków `src`, definicja `_QNX_SOURCE`,
+  opcja `-fvisibility=hidden`, do linkowania `libAppFramework.A.so` i `libCoreFramework.A.so`
   z `lib/NBT_evo_libs` oraz opcja linkera `--allow-shlib-undefined`; nazwa wyniku `libGaugeApp.so`.
 
 Kod jest w C++98 (GCC 4.4.2 z SDP 6.5); na komputerze kompiluje się `g++ -std=gnu++98` bez ostrzeżeń, ale `qcc`
@@ -350,20 +351,30 @@ Prześlij zdjęcie ekranu; pozycję całości można przesunąć `make_db.py --x
 - **Wygląd, układ, kolory, napisy, zakresy płynu i oleju, najmniejsze końce skal:** stałe na górze `make_db.py`,
   potem `python3 make_db.py` i przebudowa.
 - **Jednostka / znak przyspieszenia, przelicznik mocy:** stałe „tuning” w `src/cds_values.hpp`.
-- **Częstotliwość odświeżania i zapisu maksimów:** `kRenderMs`, `kSaveEveryS` w `src/engine_data.cpp`.
+- **Częstotliwość odświeżania i zapisu maksimów:** `kRenderMs`, `kSaveEveryS` w `src/app.hpp`.
 
 ## Układ projektu
 
 ```
 make_db.py                 układ ekranu -> GaugeApp.xml, src/gauge_ids.hpp, oba zipy, res/preview.png
-src/cds_values.hpp         parsowanie CDS, moc, przeciążenie, maksima (czysta logika, testowana)
-src/gauge_view.hpp         która klatka w którym obrazku (czysta logika, testowana)
-src/gauge_ids.hpp          wygenerowane: identyfikatory obrazków i slotów
-src/engine_data.cpp        aplikacja: PluginApp, subskrypcja CDS, przełączanie obrazków, max.txt (obie wersje)
+src/cds_values.hpp         parsowanie CDS, moc, przeciążenie, maksima, język (czysta logika, testowana)
+src/drive_stats.hpp        g w każdym kierunku, obciążenie, kalibracja spalania, trasa, pomiary (czysta logika)
+src/gauge_view.hpp         ekran Silnik: która klatka w którym obrazku, ustawienia (czysta logika, testowana)
+src/screens_view.hpp       ekrany 1..4 i ich tabela kScreenDescs (czysta logika, testowana)
+src/gauge_ids.hpp          wygenerowane: identyfikatory obrazków, slotów i tytuły ekranów
+src/compat.hpp             GA_STATIC_ASSERT, GA_COUNT (C++98)
+src/bmw_framework.hpp      ręczne deklaracje frameworka BMW (nazwy symboli jak w bibliotekach aut)
+src/app.hpp                wewnętrzny interfejs modułów: stałe, AppState, MutexLock, FrameSink
+src/engine_data.cpp        PluginApp: punkt wejścia, vtable, onInit/onFinalize, przyciski, takt rysowania
+src/cds.cpp                wartości CDS -> stan aplikacji (po jednym stubie na właściwość)
+src/render.cpp             które obrazki się zmieniły -> tylko te wysyłane; co jest na ekranie
+src/frames.cpp             paczki klatek (mmap), obrazki jako dane do raImageModel
+src/storage.cpp            max.txt, settings.txt, pliki uczone, crash guard
+src/log.cpp                log (plik, pendrive, slog), czas
 GaugeApp.xml               wygenerowane: wiersz menu + ekran z obrazkami
 GaugeApp.manifest          manifest dla CAppManager
 toolchain/                 obraz Dockera i skrypt do budowy wersji EntryNav2
-tests/                     testy hostowe i atrapa frameworka (obie wersje)
+tests/                     testy hostowe, atrapa frameworka (obie wersje), check_abi.sh (importy vs biblioteki aut)
 lib/NBT_evo_libs, lib/Entry_Evo_libs   kopie bibliotek BMW z aut (nie są częścią projektu)
 ```
 
