@@ -25,6 +25,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "gauge_ids.hpp"   // generated: UiLang and uiLangForVehicle (make_db.py UI_LANG_DEFS)
 
 namespace eng {
 
@@ -49,11 +50,9 @@ enum Prop { kEngineTemp = 0, kRpm, kTorque, kGear, kAccel, kSpeed, kFuel, kLangu
             kPedal, kBrake, kSteer, kConsumption, kAvgConsumption, kAvgSpeed, kStyle, kShift, kGraphic,
             kTempExt, kTempInt, kAcTemps, kBattery, kEngineStatus, kPropCount };
 
-const int kVehicleLangPolish = 18;   // vehicle.language value of a Polish HMI
-
-// The language of the texts drawn into the pictures. The order is the frame order in the packs (make_db.py UI_LANGS):
-// a per-language frame is base + lang (or base + stride * lang). Never pass the language as a bool.
-enum UiLang { kLangPl = 0, kLangEn, kLangCount };
+// The language of the texts drawn into the pictures is eng::UiLang, generated with its vehicle.language mapping from
+// make_db.py (UI_LANG_DEFS, TEXTS): a per-language frame is base + lang (or base + stride * lang), and per-language
+// values are ids tables indexed by it. Never pass the language as a bool, and never write a language's code here.
 
 inline const char* propName(int p) {
     switch (p) {
@@ -174,7 +173,7 @@ struct Metrics {
 
     // Texts in the pictures: Polish until the language is known (the car this was made for), then Polish only for
     // a Polish HMI, English for every other one. The only place that maps vehicle.language to a UiLang.
-    UiLang uiLang() const { return language == 0 || language == kVehicleLangPolish ? kLangPl : kLangEn; }
+    UiLang uiLang() const { return uiLangForVehicle(language); }
 
     bool hasPower() const { return hasTorque && hasRpm; }
     double power() const { return (torque > 0 ? torque : 0) * rpm * kPsPerNmRpm; }   // KM, 0 on overrun

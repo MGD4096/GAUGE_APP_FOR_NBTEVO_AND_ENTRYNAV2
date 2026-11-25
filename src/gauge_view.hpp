@@ -108,21 +108,14 @@ inline double showTorque(const Settings& st, double nm) { return st.torque == kL
 inline double showFuel(const Settings& st, double l) { return st.fuel == kGallon ? l / 3.785411784 : l; }
 
 inline unsigned tempUnitImage(const Settings& st) { return ids::kImgUnit + (st.temp == kFahrenheit ? ids::kUnitF : ids::kUnitC); }
-// The unit picture of PS in each UiLang: "KM" in Polish, "PS" in English.
-inline unsigned psUnit(UiLang lang) {
-    static const unsigned kPs[kLangCount] = { ids::kUnitKm, ids::kUnitPs };
-    return kPs[lang];
-}
+// The unit picture of PS in the HMI's language (make_db.py TEXTS power_unit: "KM" in Polish, "PS" in English).
 inline unsigned powerUnitImage(const Settings& st, UiLang lang) {
     return ids::kImgUnit + (st.power == kKw ? (unsigned)ids::kUnitKw : st.power == kHp ? (unsigned)ids::kUnitHp
-                                                                                        : psUnit(lang));
+                                                                                        : ids::kPsUnit[lang]);
 }
 
 // The background (card titles and labels drawn in it) in the HMI's language.
-inline unsigned backgroundFrame(const Metrics& m) {
-    static const unsigned kBg[kLangCount] = { ids::kImgBackground, ids::kImgBackgroundEn };
-    return kBg[m.uiLang()];
-}
+inline unsigned backgroundFrame(const Metrics& m) { return ids::kEngineBackground[m.uiLang()]; }
 inline unsigned torqueUnitImage(const Settings& st) { return ids::kImgUnit + (st.torque == kLbFt ? ids::kUnitLbFt : ids::kUnitNm); }
 // The fuel unit is its own left-aligned picture: it sits right after the (right-aligned) digits.
 inline unsigned fuelUnitImage(const Settings& st) { return ids::kImgFuelUnit + (st.fuel == kGallon ? 1u : 0u); }

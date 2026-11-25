@@ -29,7 +29,7 @@ języki po angielsku), którą iDrive wybiera sam. Napisy na samym ekranie (tytu
 w obrazkach, więc aplikacja wybiera je według `vehicle.language` z CDS: 18 = polski, każdy inny język = angielski
 („Coolant”, „lat./long.”, „PS”). Dopóki język nie przyjdzie, ekran jest po polsku. Liczby dziesiętne mają zawsze
 **przecinek**, także po angielsku: osobne zestawy z kropką zajmowały ok. 2,4 MB.
-Podgląd angielski: [`res/preview_en.png`](res/preview_en.png).
+Podgląd angielski: [`res/preview_en.png`](res/preview_en.png). Dodanie języka: [Tłumaczenia](#tłumaczenia).
 
 **Ustawienia** (klawisz OPTION na ekranie GAUGE APP → Ustawienia; zapis w `<folder danych>/settings.txt`):
 kolor wskaźników (niebieski, czerwony, pomarańczowy BMW, zielony), temperatura (°C / °F), moc (KM / kW / hp),
@@ -352,6 +352,34 @@ Prześlij zdjęcie ekranu; pozycję całości można przesunąć `make_db.py --x
   potem `python3 make_db.py` i przebudowa.
 - **Jednostka / znak przyspieszenia, przelicznik mocy:** stałe „tuning” w `src/cds_values.hpp`.
 - **Częstotliwość odświeżania i zapisu maksimów:** `kRenderMs`, `kSaveEveryS` w `src/app.hpp`.
+
+### Tłumaczenia
+
+Wszystkie teksty aplikacji są w jednym miejscu: `TEXTS` w `make_db.py`, po jednym kompletnym bloku na język
+(`"pl"`, `"en"`). Nowy język (np. niemiecki) to dwie zmiany w `make_db.py`:
+
+1. **Blok tekstów:** skopiuj blok `"en"` pod nowym kodem (`"de": {...}`) i przetłumacz teksty.
+2. **Definicja języka:** dopisz wiersz w `UI_LANG_DEFS`, np. `UiLangDef("de", (1,), ("de",))`:
+   - `(1,)` to wartości `vehicle.language` z CDS, które go włączają (1 = DE, 2 = EN_UK, 3 = EN_US, …, 18 = PL);
+   - `("de",)` to pliki bazy tekstów (klucze `LANGS`), które dostaną jego teksty menu.
+
+   Języki, których nie ma w żadnym wierszu, dostają `UI_LANG_FALLBACK` (angielski).
+
+Potem `python3 make_db.py` (z Pillow) i `make check`. Reszta generuje się sama:
+- obrazki: tła, linie statusu, podglądy `res/preview*_de.png`;
+- baza tekstów;
+- w `src/gauge_ids.hpp`: enum `UiLang` (`kLangDe`), mapa `vehicle.language → język`, tytuły ekranów, tła ekranu Silnik i jednostka mocy.
+
+W C++ nie trzeba niczego zmieniać.
+
+`make_db.py` nie zapisze niczego, jeśli w nowym bloku brakuje klucza albo ma on inną liczbę pozycji (np.
+`TEXTS: [de].warm.BATT is missing`). Tak samo zatrzyma się, gdy tekst menu nie jest w ASCII albo jednostka mocy
+(`power_unit`) nie należy do `UNITS`.
+
+**Ograniczenia:**
+- **Menu bez znaków spoza ASCII:** teksty menu i ustawień (`settings`, `settings_title`, `screen_titles`) trafiają do bazy tekstów iDrive, która przyjmuje tylko **ASCII**. Umlauty trzeba zapisać jako „ae/oe/ue”, a cyrylicę w transliteracji.
+- **Obrazki bez ograniczeń:** napisy rysowane w obrazkach (`engine`, `screens`, `warm`, `*_status`) mogą mieć dowolne litery z DejaVu Sans, także umlauty i cyrylicę.
+- **Rozmiar paczki:** każdy język dodaje kilkaset KB (tła i linie statusu).
 
 ## Układ projektu
 

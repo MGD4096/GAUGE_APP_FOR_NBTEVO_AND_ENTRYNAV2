@@ -61,30 +61,235 @@ COLORS = [
     ("orange", (255, 122, 0, 255), (255, 185, 120, 255), (125, 58, 0, 255)),      # BMW M / iDrive sport orange
     ("green", (40, 180, 90, 255), (140, 220, 165, 255), (16, 82, 42, 255)),
 ]
-COLOR_NAMES_PL = ["niebieski", "czerwony", "pomaranczowy BMW", "zielony"]
-COLOR_NAMES_EN = ["blue", "red", "BMW orange", "green"]
-
 # Units the OPTION menu offers (order = kUnit* in gauge_ids.hpp)
 UNITS = ["°C", "°F", "KM", "kW", "hp", "Nm", "lb-ft", "l", "gal", "PS"]   # KM = PS in Polish
 
-# Texts drawn into the background, per HMI language (the app picks the picture from vehicle.language: 18 = Polish,
-# anything else English). Menu and settings texts are in the text DB, which the HMI picks itself.
-BG_TEXTS = {
-    "pl": {"COOLANT": "Płyn chłodniczy", "OIL": "Olej silnikowy", "POWER": "Moc", "TORQUE": "Moment obrotowy",
-           "G": "Przeciążenie", "LAT": "bok", "LON": "wzdł."},
-    "en": {"COOLANT": "Coolant", "OIL": "Engine oil", "POWER": "Power", "TORQUE": "Torque",
-           "G": "G-force", "LAT": "lat.", "LON": "long."},
-}
-SETTING_TEXTS = {  # text id = 200 + 10 * setting + value (gauge_view.hpp settingText); (Polish, English)
-    200: [("Kolor wskaznikow: " + p, "Gauge colour: " + e) for p, e in zip(COLOR_NAMES_PL, COLOR_NAMES_EN)],
-    210: [("Temperatura: stopnie Celsjusza", "Temperature: Celsius"),
-          ("Temperatura: stopnie Fahrenheita", "Temperature: Fahrenheit")],
-    220: [("Moc: KM", "Power: PS"), ("Moc: kW", "Power: kW"), ("Moc: hp", "Power: hp")],
-    230: [("Moment: Nm", "Torque: Nm"), ("Moment: lb-ft", "Torque: lb-ft")],
-    240: [("Paliwo: litry", "Fuel: litres"), ("Paliwo: galony (US)", "Fuel: US gallons")],
-}
+# ---- texts and languages ---------------------------------------------------------------------------------------------
+# Every text of the app, one complete block per language. A new language: copy the "en" block under its code, translate
+# it, and add a UiLangDef below (which vehicle.language values and text DB files pick it); check_texts() refuses a block
+# with missing or extra keys, a list of another length, non-ASCII text DB texts or an unknown power unit. Texts drawn
+# into pictures may use any letter DejaVu Sans has; text DB texts must stay ASCII (the HMI's text DB, car-verified).
+
+
+@dataclass(frozen=True)
+class UiLangDef:
+    """A language drawn into the pictures. Its index in UI_LANG_DEFS is its frame offset (base + index) and its value in
+    the generated C++ enum UiLang (kLang<Code>)."""
+    code: str                                      # key in TEXTS
+    vehicle: Tuple[int, ...]                       # CDS vehicle.language values that show it
+    text_db: Tuple[str, ...]                       # text DB files (LANGS keys) written with its texts
+
+
+UI_LANG_DEFS = [
+    UiLangDef("pl", (0, 18), ("pl",)),             # 0: not known yet - the car this was made for; 18: PL
+    UiLangDef("en", (), ()),                       # every other language (UI_LANG_FALLBACK)
+]
+UI_LANG_FALLBACK = "en"                           # vehicle.language values / text DB files not listed above
+XML_LANG = "en"                                   # placeholder texts in GaugeApp.xml (the HMI shows the text DB's)
+SETTING_KEYS = [(200, "color"), (210, "temp"), (220, "power"), (230, "torque"), (240, "fuel")]   # text id base, key
 TEXT_SETTINGS_TITLE = 250
-SETTINGS_TITLE = ("Ustawienia", "Settings")
+
+TEXTS = {
+    "pl": {
+        # engine screen background (pictures)
+        "engine": {
+            "COOLANT": "Płyn chłodniczy", "OIL": "Olej silnikowy", "POWER": "Moc", "TORQUE": "Moment obrotowy",
+            "G": "Przeciążenie", "LAT": "bok", "LON": "wzdł.",
+        },
+        # Driving / Fuel and trip / Performance backgrounds (pictures)
+        "screens": {
+            "GAS": "Gaz", "BRAKE": "Hamulec", "G": "Przeciążenie", "WHEEL": "Kierownica", "LOAD": "Obciążenie",
+            "GEAR": "Bieg", "LEFT": "lewo", "RIGHT": "prawo", "ACC": "przysp.", "BRK": "ham.",
+            "INST": "Spalanie chwilowe", "HIST": "Ostatnie 5 min", "TRIPAVG": "śr. tej trasy",
+            "BCAVG": "Średnio (BC)", "AVGSPD": "Śr. prędkość", "RANGE": "Zasięg", "TANK": "W baku",
+            "TRIP": "Ta trasa", "TIME": "czas", "USED": "Zużyte paliwo", "STYLE": "Styl jazdy", "STA": "Przysp.",
+            "STB": "Hamow.", "STS": "Biegi", "P0100": "0–100 km/h", "BEST": "najlepszy", "P60": "60–100 km/h",
+            "P80": "80–120 km/h", "PBRK": "100–0 km/h", "PQ": "1/4 mili", "STATUS": "Stan", "MAXLAT": "Max boczne",
+            "MAXBRK": "Max hamowanie",
+        },
+        # Warm-up background (pictures)
+        "warm": {
+            "OIL": "Olej silnikowy", "COOLANT": "Płyn chłodniczy", "WARM": "Rozgrzewanie", "TARGET": "cel",
+            "PROG": "postęp (olej)", "RUN": "Czas pracy silnika", "ETA": "Rozgrzany za ok.", "EXT": "Na zewnątrz",
+            "INT": "Wewnątrz", "EVAP": "Parownik klim.", "BATT": "Akumulator",
+        },
+        # Warm-up status line, in WarmStatus order (pictures)
+        "warm_status": ["Brak danych", "Silnik wyłączony", "Silnik się rozgrzewa", "Rozgrzany – pełna moc"],
+        # Performance status line, in PerfStatus order (pictures)
+        "perf_status": [
+            "Brak danych o prędkości", "Gotowy – ruszaj", "Pomiar…", "Zatrzymaj auto, by mierzyć 0–100",
+            "Pomiar hamowania…",
+        ],
+        # how PS is written (one of UNITS)
+        "power_unit": "KM",
+        # text DB, ASCII: one text per value, in the order of the C++ settings
+        "settings": {
+            "color": [
+                "Kolor wskaznikow: niebieski", "Kolor wskaznikow: czerwony", "Kolor wskaznikow: pomaranczowy BMW",
+                "Kolor wskaznikow: zielony",
+            ],
+            "temp": ["Temperatura: stopnie Celsjusza", "Temperatura: stopnie Fahrenheita"],
+            "power": ["Moc: KM", "Moc: kW", "Moc: hp"],
+            "torque": ["Moment: Nm", "Moment: lb-ft"],
+            "fuel": ["Paliwo: litry", "Paliwo: galony (US)"],
+        },
+        # text DB, ASCII: the OPTION entry and the settings page title
+        "settings_title": "Ustawienia",
+        # text DB, ASCII: screen k"s state title (= menuTitle) and its settings page button
+        "screen_titles": ["Silnik", "Jazda", "Spalanie i trasa", "Pomiary", "Rozgrzewanie"],
+    },
+    "en": {
+        # engine screen background (pictures)
+        "engine": {
+            "COOLANT": "Coolant", "OIL": "Engine oil", "POWER": "Power", "TORQUE": "Torque", "G": "G-force",
+            "LAT": "lat.", "LON": "long.",
+        },
+        # Driving / Fuel and trip / Performance backgrounds (pictures)
+        "screens": {
+            "GAS": "Throttle", "BRAKE": "Brake", "G": "G-force", "WHEEL": "Steering", "LOAD": "Engine load",
+            "GEAR": "Gear", "LEFT": "left", "RIGHT": "right", "ACC": "accel.", "BRK": "brake",
+            "INST": "Instant consumption", "HIST": "Last 5 min", "TRIPAVG": "trip average", "BCAVG": "Average (BC)",
+            "AVGSPD": "Avg. speed", "RANGE": "Range", "TANK": "In tank", "TRIP": "This trip", "TIME": "time",
+            "USED": "Fuel used", "STYLE": "Driving style", "STA": "Accel.", "STB": "Braking", "STS": "Shifting",
+            "P0100": "0–100 km/h", "BEST": "best", "P60": "60–100 km/h", "P80": "80–120 km/h", "PBRK": "100–0 km/h",
+            "PQ": "1/4 mile", "STATUS": "Status", "MAXLAT": "Max lateral", "MAXBRK": "Max braking",
+        },
+        # Warm-up background (pictures)
+        "warm": {
+            "OIL": "Engine oil", "COOLANT": "Coolant", "WARM": "Warm-up", "TARGET": "target",
+            "PROG": "progress (oil)", "RUN": "Engine running", "ETA": "Warm in about", "EXT": "Outside",
+            "INT": "Inside", "EVAP": "A/C evaporator", "BATT": "Battery",
+        },
+        # Warm-up status line, in WarmStatus order (pictures)
+        "warm_status": ["No data", "Engine off", "Engine warming up", "Warm – full power"],
+        # Performance status line, in PerfStatus order (pictures)
+        "perf_status": ["No speed data", "Ready – go", "Measuring…", "Stop the car to time 0–100", "Measuring braking…"],
+        # how PS is written (one of UNITS)
+        "power_unit": "PS",
+        # text DB, ASCII: one text per value, in the order of the C++ settings
+        "settings": {
+            "color": ["Gauge colour: blue", "Gauge colour: red", "Gauge colour: BMW orange", "Gauge colour: green"],
+            "temp": ["Temperature: Celsius", "Temperature: Fahrenheit"],
+            "power": ["Power: PS", "Power: kW", "Power: hp"],
+            "torque": ["Torque: Nm", "Torque: lb-ft"],
+            "fuel": ["Fuel: litres", "Fuel: US gallons"],
+        },
+        # text DB, ASCII: the OPTION entry and the settings page title
+        "settings_title": "Settings",
+        # text DB, ASCII: screen k"s state title (= menuTitle) and its settings page button
+        "screen_titles": ["Engine", "Driving", "Fuel and trip", "Performance", "Warm-up"],
+    },
+}
+
+def ui_lang_of_text_db(text_db_lang):
+    """The UI language whose texts a text DB file (a LANGS key) gets."""
+    for d in UI_LANG_DEFS:
+        if text_db_lang in d.text_db:
+            return d.code
+    return UI_LANG_FALLBACK
+
+
+def engine_background(lang_index):
+    """Frame id of the engine screen's background in UI language lang_index (IMG_BG, IMG_BG_EN, then the ids after it)."""
+    return IMG_BG if lang_index == 0 else IMG_BG_EN + lang_index - 1
+
+
+def preview_suffix(lang):
+    """res/preview<suffix>.png: nothing for the first UI language, "_<code>" for the others."""
+    return "" if lang == UI_LANGS[0] else "_" + lang
+
+
+def check_texts():
+    """Every TEXTS block has exactly the keys and list lengths of the first one; text DB texts are ASCII; the power unit
+    is one of UNITS; every UiLangDef has a block; no vehicle.language value or text DB file picks two languages."""
+    codes = [d.code for d in UI_LANG_DEFS]
+    if sorted(codes) != sorted(TEXTS) or len(set(codes)) != len(codes):
+        raise SystemExit("TEXTS blocks %s do not match UI_LANG_DEFS %s" % (sorted(TEXTS), codes))
+    if UI_LANG_FALLBACK not in codes or XML_LANG not in codes:
+        raise SystemExit("UI_LANG_FALLBACK / XML_LANG must be a UI language")
+    for field in ("vehicle", "text_db"):
+        seen = {}
+        for d in UI_LANG_DEFS:
+            for v in getattr(d, field):
+                if v in seen:
+                    raise SystemExit("%s %r picks both %s and %s" % (field, v, seen[v], d.code))
+                seen[v] = d.code
+    for d in UI_LANG_DEFS:
+        for f in d.text_db:
+            if f not in LANGS:
+                raise SystemExit("%s: text DB file %r is not in LANGS" % (d.code, f))
+
+    def shape(v, where):
+        if isinstance(v, dict):
+            return {k: shape(x, where + "." + k) for k, x in v.items()}
+        if isinstance(v, list):
+            return ("list", len(v))
+        if not isinstance(v, str) or not v:
+            raise SystemExit("TEXTS%s: empty or not a text" % where)
+        return "text"
+
+    ref_lang = codes[0]
+    ref = shape(TEXTS[ref_lang], "[%s]" % ref_lang)
+    for lang in codes[1:]:
+        got = shape(TEXTS[lang], "[%s]" % lang)
+        if got != ref:
+            def diff(r, g, path):
+                if isinstance(r, dict) and isinstance(g, dict):
+                    for k in sorted(set(r) | set(g)):
+                        if k not in g:
+                            return "%s.%s is missing" % (path, k)
+                        if k not in r:
+                            return "%s.%s is not in %s" % (path, k, ref_lang)
+                        msg = diff(r[k], g[k], path + "." + k)
+                        if msg:
+                            return msg
+                    return None
+                return None if r == g else "%s should be %s like %s" % (path, r, ref_lang)
+            raise SystemExit("TEXTS: %s" % diff(ref, got, "[%s]" % lang))
+    n_colors = len(COLORS)
+    for lang in codes:
+        tx = TEXTS[lang]
+        if len(tx["settings"]["color"]) != n_colors:
+            raise SystemExit("TEXTS[%s].settings.color: one text per colour (%d)" % (lang, n_colors))
+        if len(tx["screen_titles"]) != len(SCREEN_LIST):
+            raise SystemExit("TEXTS[%s].screen_titles: one title per screen (%d)" % (lang, len(SCREEN_LIST)))
+        db = [tx["settings_title"]] + tx["screen_titles"] + [t for v in tx["settings"].values() for t in v]
+        bad = [t for t in db if not t.isascii()]
+        if bad:
+            raise SystemExit("TEXTS[%s]: text DB texts must stay ASCII: %r" % (lang, bad))
+        if tx["power_unit"] not in UNITS:
+            raise SystemExit("TEXTS[%s].power_unit %r is not one of UNITS" % (lang, tx["power_unit"]))
+
+
+def ui_lang_header():
+    """C++: the UiLang enum (in UI_LANG_DEFS order) and vehicle.language -> UiLang, generated so that the C++ side holds
+    nothing per language."""
+    names = ["kLang" + "".join(ch for ch in d.code.title() if ch.isalnum()) for d in UI_LANG_DEFS]
+    cases = []
+    for name, d in zip(names, UI_LANG_DEFS):
+        if d.vehicle:
+            cases.append("    %s return %s;\n" % (" ".join("case %d:" % v for v in d.vehicle), name))
+    fallback = names[[d.code for d in UI_LANG_DEFS].index(UI_LANG_FALLBACK)]
+    return ("// Languages drawn into the pictures (make_db.py UI_LANG_DEFS); the value is the frame offset of a language.\n"
+            "enum UiLang { %s, kLangCount };\n\n"
+            "// vehicle.language (CDS) -> UiLang; every value not listed: %s.\n"
+            "inline UiLang uiLangForVehicle(int vehicleLanguage) {\n"
+            "    switch (vehicleLanguage) {\n%s"
+            "    default: return %s;\n"
+            "    }\n"
+            "}\n\n" % (", ".join("%s%s" % (n, " = 0" if i == 0 else "") for i, n in enumerate(names)),
+                         fallback, "".join(cases), fallback))
+
+
+def ui_lang_tables():
+    """C++ tables indexed by UiLang (inside eng::ids): exactly one entry per language, so none is ever zero-filled."""
+    bgs = ", ".join("%d" % engine_background(i) for i in range(len(UI_LANGS)))
+    ps = ", ".join("%d" % UNITS.index(TEXTS[lang]["power_unit"]) for lang in UI_LANGS)
+    ps_names = ", ".join(TEXTS[lang]["power_unit"] for lang in UI_LANGS)
+    return ("// per UiLang: the engine screen's background frame, and the unit picture of PS (\"KM\" in Polish)\n"
+            "static const unsigned kEngineBackground[kUiLangCount] = { %s };\n"
+            "static const unsigned kPsUnit[kUiLangCount] = { %s };   // kUnit*: %s\n\n" % (bgs, ps, ps_names))
+
 
 # ---- layout (design pixels; scaled by SCALE on the car and placed at ORIGIN, moved with --x / --y) -----------------
 W, H = 960, 400
@@ -258,8 +463,8 @@ def slots():
 
 
 # ---- images ---------------------------------------------------------------------------------------------------------
-def background(fp, lang="pl"):
-    tx = BG_TEXTS[lang]
+def background(fp, lang):
+    tx = TEXTS[lang]["engine"]
     c = Canvas(W, H)
     f_title, f_unit, f_small = font(fp, TITLE_SIZE), font(fp, UNIT_SIZE), font(fp, SMALL_SIZE)
     for name, (cx, cy), _title, unit, scale, red in GAUGES:
@@ -410,7 +615,9 @@ def make_icon():
 
 def common_images(fp):
     """Frames that look the same in every colour: GaugeApp_frames.bin."""
-    imgs = {IMG_BG: background(fp, "pl"), IMG_BG_EN: background(fp, "en"), IMG_BLANK: Canvas(1, 1, scaled=False).image()}
+    imgs = {IMG_BLANK: Canvas(1, 1, scaled=False).image()}
+    for li, lang in enumerate(UI_LANGS):
+        imgs[engine_background(li)] = background(fp, lang)
     for k in range(ARC_STEPS + 1):
         imgs[IMG_MARK + k] = arc_frame(k / float(ARC_STEPS), ACCENT, marker=True)
     for variant in (0, 1):
@@ -472,7 +679,7 @@ SCREEN_EVENT0 = 90
 # Languages drawn into the pictures (LANGS above is the text DB's list of iDrive language files). The index is the
 # frame offset: a per-language frame is base + index (backgrounds) or base + STATUS_LANG_STRIDE * index (status
 # lines); the C++ side gets the count as kUiLangCount and uses its own UiLang enum in the same order.
-UI_LANGS = ("pl", "en")
+UI_LANGS = tuple(d.code for d in UI_LANG_DEFS)
 STATUS_LANG_STRIDE = 10
 MAX_IMAGES_PER_STATE = 60                         # EntryNav2 car: images beyond about 60 in one state stayed empty
 WARM_OIL, WARM_COOLANT, WARM_TARGET = (0, 140), (0, 120), 80   # deg C: warm-up arcs, oil "warm" from 80
@@ -517,42 +724,9 @@ IMG_WDONE = 72350                                 # full bar, green
 IMG_WSTATUS = 72400                               # + 10 * language + WarmStatus
 WSTATUS_BOX = (322, 32)
 WPROG_BOX = (322, 14)
-WARM_TEXTS = {
-    "pl": {"OIL": "Olej silnikowy", "COOLANT": "Płyn chłodniczy", "WARM": "Rozgrzewanie", "TARGET": "cel",
-           "PROG": "postęp (olej)", "RUN": "Czas pracy silnika", "ETA": "Rozgrzany za ok.", "EXT": "Na zewnątrz",
-           "INT": "Wewnątrz", "EVAP": "Parownik klim.", "BATT": "Akumulator"},
-    "en": {"OIL": "Engine oil", "COOLANT": "Coolant", "WARM": "Warm-up", "TARGET": "target",
-           "PROG": "progress (oil)", "RUN": "Engine running", "ETA": "Warm in about", "EXT": "Outside",
-           "INT": "Inside", "EVAP": "A/C evaporator", "BATT": "Battery"},
-}
-WARM_STATUS_TEXTS = {"pl": ["Brak danych", "Silnik wyłączony", "Silnik się rozgrzewa", "Rozgrzany – pełna moc"],
-                     "en": ["No data", "Engine off", "Engine warming up", "Warm – full power"]}
 WARM_TILES = [("EXT", 670, 0, 140, 192), ("INT", 820, 0, 140, 192), ("EVAP", 670, 208, 140, 192),
               ("BATT", 820, 208, 140, 192)]
 WARM_MID = (305, 0, 350, 400)
-
-S_TEXTS = {
-    "pl": {"GAS": "Gaz", "BRAKE": "Hamulec", "G": "Przeciążenie", "WHEEL": "Kierownica", "LOAD": "Obciążenie",
-           "GEAR": "Bieg", "LEFT": "lewo", "RIGHT": "prawo", "ACC": "przysp.", "BRK": "ham.",
-           "INST": "Spalanie chwilowe", "HIST": "Ostatnie 5 min", "TRIPAVG": "śr. tej trasy", "BCAVG": "Średnio (BC)",
-           "AVGSPD": "Śr. prędkość", "RANGE": "Zasięg", "TANK": "W baku", "TRIP": "Ta trasa", "TIME": "czas",
-           "USED": "Zużyte paliwo", "STYLE": "Styl jazdy", "STA": "Przysp.", "STB": "Hamow.", "STS": "Biegi",
-           "P0100": "0–100 km/h", "BEST": "najlepszy", "P60": "60–100 km/h", "P80": "80–120 km/h",
-           "PBRK": "100–0 km/h", "PQ": "1/4 mili", "STATUS": "Stan", "MAXLAT": "Max boczne",
-           "MAXBRK": "Max hamowanie"},
-    "en": {"GAS": "Throttle", "BRAKE": "Brake", "G": "G-force", "WHEEL": "Steering", "LOAD": "Engine load",
-           "GEAR": "Gear", "LEFT": "left", "RIGHT": "right", "ACC": "accel.", "BRK": "brake",
-           "INST": "Instant consumption", "HIST": "Last 5 min", "TRIPAVG": "trip average", "BCAVG": "Average (BC)",
-           "AVGSPD": "Avg. speed", "RANGE": "Range", "TANK": "In tank", "TRIP": "This trip", "TIME": "time",
-           "USED": "Fuel used", "STYLE": "Driving style", "STA": "Accel.", "STB": "Braking", "STS": "Shifting",
-           "P0100": "0–100 km/h", "BEST": "best", "P60": "60–100 km/h", "P80": "80–120 km/h",
-           "PBRK": "100–0 km/h", "PQ": "1/4 mile", "STATUS": "Status", "MAXLAT": "Max lateral",
-           "MAXBRK": "Max braking"},
-}
-STATUS_TEXTS = {"pl": ["Brak danych o prędkości", "Gotowy – ruszaj", "Pomiar…", "Zatrzymaj auto, by mierzyć 0–100",
-                       "Pomiar hamowania…"],
-                "en": ["No speed data", "Ready – go", "Measuring…", "Stop the car to time 0–100",
-                       "Measuring braking…"]}
 
 # Layouts (design pixels, like the engine screen). Cards: (key, x, y, w, h); slots: (name, x, y, w, h).
 DRV_CARDS = [("GAS", 0, 0, 110, 400), ("BRAKE", 120, 0, 110, 400), ("G", 240, 0, 420, 400),
@@ -655,25 +829,24 @@ def warm_slots():
 @dataclass(frozen=True)
 class Screen:
     """One screen: everything every stage needs about it. A new screen is one more entry in SCREEN_LIST (plus its
-    slot list, drawing and the C++ compute* / kScreenDescs row); the XML, the header, the texts and the checks
-    iterate over the list."""
+    slot list, drawing, its title in every TEXTS block and the C++ compute* / kScreenDescs row); the XML, the
+    header, the texts and the checks iterate over the list."""
     key: str                                       # C++ name prefix in gauge_ids.hpp ("" for the engine screen)
     state: int                                     # hmiState
     action: int                                    # hmiAction that opens it (its settings page button)
     text_model: int                                # textIdModel of its title
     text_id: int                                   # its title in the text DB
-    title: Tuple[str, str]                         # (Polish, English), ASCII: state title = button = menuTitle
     slots: Optional[Callable[[], list]]            # slot list; None: the engine screen (slots())
 
 
 # Screen k = SCREEN_LIST[k], in the order of the C++ eng::Screen enum. The engine screen is state 10, the target of
 # the menu row; its menuTitle is the row's TITLE (see header()).
 SCREEN_LIST = [
-    Screen("", 10, 8, 80, 260, ("Silnik", "Engine"), None),
-    Screen("Drv", 14, 9, 81, 261, ("Jazda", "Driving"), drv_slots),
-    Screen("Fuel", 15, 11, 82, 262, ("Spalanie i trasa", "Fuel and trip"), fuel_slots),
-    Screen("Perf", 16, 13, 83, 263, ("Pomiary", "Performance"), perf_slots),
-    Screen("Warm", 17, 19, 84, 264, ("Rozgrzewanie", "Warm-up"), warm_slots),
+    Screen("", 10, 8, 80, 260, None),
+    Screen("Drv", 14, 9, 81, 261, drv_slots),
+    Screen("Fuel", 15, 11, 82, 262, fuel_slots),
+    Screen("Perf", 16, 13, 83, 263, perf_slots),
+    Screen("Warm", 17, 19, 84, 264, warm_slots),
 ]
 
 
@@ -690,7 +863,7 @@ def card_unit(c, fp, x, y, w, h, unit):
 
 
 def s_background(fp, screen, lang):
-    tx = S_TEXTS[lang]
+    tx = TEXTS[lang]["screens"]
     c = Canvas(W, H)
     f_small, f_unit = font(fp, 13), font(fp, 15)
     if screen == 1:
@@ -732,7 +905,7 @@ def s_background(fp, screen, lang):
             c.text((664, 260 + 55 + i * 28), tx[k], f_small, TEXT2, "lm")
             c.rrect(650 + 100, 260 + 50 + i * 28, STYLE["w"], STYLE["h"], 5, TRACK)
     elif screen == 4:
-        wt = WARM_TEXTS[lang]
+        wt = TEXTS[lang]["warm"]
         f_title = font(fp, 17)
         for key, (cx, cy), scale, target in (("OIL", (0, 0), WARM_OIL, WARM_TARGET), ("COOLANT", (0, 208), WARM_COOLANT, None)):
             c.rrect(cx, cy, CARD_W, CARD_H, 12, CARD)
@@ -823,7 +996,7 @@ def screen_images(fp):
         imgs[IMG_WPROG + lv] = bar_frame(lv, WARM_STEPS, WPROG_BOX[0], WPROG_BOX[1], AMBER, 7, False)
     imgs[IMG_WDONE] = bar_frame(WARM_STEPS, WARM_STEPS, WPROG_BOX[0], WPROG_BOX[1], (99, 153, 34, 255), 7, False)
     for li, lang in enumerate(UI_LANGS):
-        for k, t in enumerate(WARM_STATUS_TEXTS[lang]):
+        for k, t in enumerate(TEXTS[lang]["warm_status"]):
             c = Canvas(*WSTATUS_BOX)
             c.text((0, WSTATUS_BOX[1] / 2.0), t, font(fp, 22), TEXT, "lm")
             imgs[IMG_WSTATUS + STATUS_LANG_STRIDE * li + k] = c.image()
@@ -858,7 +1031,7 @@ def screen_images(fp):
     for i, ch in enumerate(("▲", "▼")):
         imgs[IMG_SHIFT + i] = number_image(fp, ch, 40, 40, 30, AMBER, "m")
     for li, lang in enumerate(UI_LANGS):
-        for k, t in enumerate(STATUS_TEXTS[lang]):
+        for k, t in enumerate(TEXTS[lang]["perf_status"]):
             imgs[IMG_STATUS + STATUS_LANG_STRIDE * li + k] = status_image(fp, t)
     return imgs
 
@@ -880,7 +1053,7 @@ def screen_color_images(fp, color):
     return imgs
 
 
-def screen_preview(imgs, screen, lang="pl"):
+def screen_preview(imgs, screen, lang):
     """Screen 1..3 with sample values, composed like the HMI would."""
     s = UI_LANGS.index(lang)                       # language: texts, statuses, background
     d = 0                                          # decimal comma sets in every language
@@ -959,7 +1132,8 @@ def screen_header():
     out.append("};\n\n")
     # The titles hmi.graphicalContext reports as menuTitle for screen k (the state's text in the text DB, one per
     # UI language): the app finds the screen on display by them. Screen 0 (state 10) has the row's title.
-    titles = [(TITLE,) * len(UI_LANGS)] + [scr.title for scr in SCREEN_LIST[1:]]
+    titles = [tuple(TITLE if k == 0 else TEXTS[lang]["screen_titles"][k] for lang in UI_LANGS)
+              for k in range(len(SCREEN_LIST))]
     for t in titles:
         if len(t) != len(UI_LANGS) or not all(x.isascii() for x in t):
             raise SystemExit("screen titles: one ASCII text per UI language (%r)" % (t,))
@@ -972,6 +1146,7 @@ def screen_header():
         names = ",\n".join("    k%sSlot%s%s" % (key, "".join(p.capitalize() for p in n.split("_")), " = 0" if i == 0 else "")
                            for i, (n, *_r) in enumerate(fn()))
         out.append("enum %sSlot {\n%s,\n    k%sSlotCount\n};\n" % (key, names, key))
+    out.append(ui_lang_tables())
     return "".join(out)
 
 
@@ -997,13 +1172,14 @@ def screen_options(_s, comp_ids):
     """OPTION menu of every screen: only Settings (the screens are chosen on the settings page). The HMI adds entries
     of its own above it ("Wylacz pojazd", ...)."""
     return ["          <button action=\"%d\" id=\"%d\" model=\"%d\" text=\"%s\"/>\n"
-            % (OPTION_ACTION, next(comp_ids), OPTION_TEXTMODEL, SETTINGS_TITLE[1])]
+            % (OPTION_ACTION, next(comp_ids), OPTION_TEXTMODEL, TEXTS[XML_LANG]["settings_title"])]
 
 
 def settings_screen_buttons(comp_ids):
     """The first buttons of the settings page: one per screen, each opening it (hmiAction to its state)."""
     return ["          <button action=\"%d\" id=\"%d\" model=\"%d\" text=\"%s\"/>\n"
-            % (scr.action, next(comp_ids), scr.text_model, scr.title[1]) for scr in SCREEN_LIST]
+            % (scr.action, next(comp_ids), scr.text_model, TEXTS[XML_LANG]["screen_titles"][k])
+            for k, scr in enumerate(SCREEN_LIST)]
 
 
 # ---- outputs --------------------------------------------------------------------------------------------------------
@@ -1050,7 +1226,7 @@ def image_ranges():
     one table that says which ids are taken: check_image_ranges() rejects overlaps, check_frames() ids outside."""
     n_lang = len(UI_LANGS)
     return [
-        ("misc (icon, backgrounds, blank, test)", IMG_ICON, IMG_BG_EN),
+        ("misc (icon, backgrounds, blank, test)", IMG_ICON, engine_background(n_lang - 1)),
         ("arcs", IMG_ARC, IMG_ARC + ARC_STEPS), ("max markers", IMG_MARK, IMG_MARK + ARC_STEPS),
         ("big digits", IMG_BIG, IMG_BIG + 2 * 16 - 1), ("units", IMG_UNIT, IMG_UNIT + len(UNITS) - 1),
         ("fuel unit", IMG_FUEL_UNIT, IMG_FUEL_UNIT + 1), ("gears", IMG_GEAR, IMG_GEAR + 18),
@@ -1136,15 +1312,15 @@ OPTION_ACTION, OPTION_TEXTMODEL, OPTION_COMP = 7, 46, 60
 
 
 def settings_parts():
-    models = [text_model(SETTINGS_TEXTMODEL0 + s, base) for s, base in enumerate(sorted(SETTING_TEXTS))]
+    models = [text_model(SETTINGS_TEXTMODEL0 + s, base) for s, (base, _key) in enumerate(SETTING_KEYS)]
     models.append(text_model(OPTION_TEXTMODEL, TEXT_SETTINGS_TITLE))
-    actions = ["      <raAction id=\"%d\"/>\n" % (SETTINGS_ACTION0 + s) for s in range(len(SETTING_TEXTS))]
+    actions = ["      <raAction id=\"%d\"/>\n" % (SETTINGS_ACTION0 + s) for s in range(len(SETTING_KEYS))]
     actions.append("      <hmiAction id=\"%d\" target=\"%d\"/>\n" % (OPTION_ACTION, SETTINGS_STATE))
     buttons = ["          <button action=\"%d\" id=\"%d\" model=\"%d\" text=\"%s\"/>\n"
-               % (SETTINGS_ACTION0 + s, SETTINGS_COMP0 + s, SETTINGS_TEXTMODEL0 + s, SETTING_TEXTS[base][0][1])
-               for s, base in enumerate(sorted(SETTING_TEXTS))]
+               % (SETTINGS_ACTION0 + s, SETTINGS_COMP0 + s, SETTINGS_TEXTMODEL0 + s, TEXTS[XML_LANG]["settings"][key][0])
+               for s, (_base, key) in enumerate(SETTING_KEYS)]
     option = ["          <button action=\"%d\" id=\"%d\" model=\"%d\" text=\"%s\"/>\n"
-              % (OPTION_ACTION, OPTION_COMP, OPTION_TEXTMODEL, SETTINGS_TITLE[1])]
+              % (OPTION_ACTION, OPTION_COMP, OPTION_TEXTMODEL, TEXTS[XML_LANG]["settings_title"])]
     return models, actions, buttons, option
 
 
@@ -1197,12 +1373,12 @@ def xml(slot_list, ox, oy, diag=False, menu_name=DEFAULT_MENU):
         # The settings page starts with the screens (like the colour, a choice made there), then the settings.
         page = settings_screen_buttons(comp_ids) + ["          <separator id=\"%d\"/>\n" % next(comp_ids)] + sb
         states = [state(10, TITLE, 3, gc, options=screen_options(0, comp_ids)),
-                  state(SETTINGS_STATE, SETTINGS_TITLE[1], OPTION_TEXTMODEL, page, 10)]
+                  state(SETTINGS_STATE, TEXTS[XML_LANG]["settings_title"], OPTION_TEXTMODEL, page, 10)]
         # The other screens are children of 10 (parentId) and the HMI shows the parent's OPTION entries in them too
         # (car-verified: an own Settings entry there appeared twice), so they get none of their own.
         for s, comps in xs:
             scr = SCREEN_LIST[s]
-            states.append(state(scr.state, scr.title[1], scr.text_model, comps, 10))
+            states.append(state(scr.state, TEXTS[XML_LANG]["screen_titles"][s], scr.text_model, comps, 10))
         what = ("hmiState 10 (engine) is one background image and %d image components on top of it. The OPTION menu"
                 " of every screen has one entry, Settings (hmiState 12); the settings page lists the screens - Engine"
                 " 10, Driving 14, Fuel and trip 15, Performance 16, Warm-up 17, each its own background and images -"
@@ -1262,6 +1438,8 @@ def header(slot_list):
 #define GAUGE_IDS_HPP
 
 namespace eng {
+
+%s
 namespace ids {
 
 enum {
@@ -1300,7 +1478,7 @@ enum Slot {
 }  // namespace eng
 
 #endif
-""" % (IMG_ICON, IMG_BG, IMG_BLANK, IMG_ARC, IMG_MARK, ARC_STEPS, IMG_BIG, IMG_GEAR, IMG_DOT, G_STEPS,
+""" % (ui_lang_header(), IMG_ICON, IMG_BG, IMG_BLANK, IMG_ARC, IMG_MARK, ARC_STEPS, IMG_BIG, IMG_GEAR, IMG_DOT, G_STEPS,
        IMG_UNIT, IMG_MAXNUM, MAXNUM_MAX, IMG_SCALENUM, SCALENUM_MAX, IMG_FUELNUM, FUELNUM_MAX, IMG_FUELNUM_NONE,
        IMG_GNUM, IMG_LATNUM, GNUM_MAX, SEP_STRIDE, IMG_GNUM_NONE,
        IMG_BG_EN, IMG_FUEL_UNIT, len(COLORS), SETTINGS_ACTION0, SETTINGS_TEXTMODEL0,
@@ -1336,11 +1514,11 @@ def palette_colors(iid):
     return 32 if text else 256
 
 
-def preview(imgs, slot_list, lang="pl"):
+def preview(imgs, slot_list, lang):
     """The screen with sample values, composed like the HMI would (background, then every slot in XML order)."""
     sample = {  # value, max, arc fraction, max fraction, unit, scale lo, scale hi
         "COOLANT": (92, 98, 0.525, 0.6, 0, "50", "130"), "OIL": (104, 112, 0.54, 0.62, 0, "50", "150"),
-        "POWER": (193, 231, 0.772, 0.924, 2 if lang == "pl" else UNITS.index("PS"), "0", "250"),
+        "POWER": (193, 231, 0.772, 0.924, UNITS.index(TEXTS[lang]["power_unit"]), "0", "250"),
         "TORQUE": (380, 412, 0.844, 0.916, 5, "0", "450")}
 
     def gl(base, ch, v=0):
@@ -1373,7 +1551,7 @@ def preview(imgs, slot_list, lang="pl"):
     pick["G_DOT"] = IMG_DOT + 9 * 21 + 13
     pick["GEAR_D"] = IMG_GEAR + 13
     out = Image.new("RGBA", (sc(W), sc(H)), (11, 13, 16, 255))
-    out.alpha_composite(imgs[IMG_BG if lang == "pl" else IMG_BG_EN])
+    out.alpha_composite(imgs[engine_background(UI_LANGS.index(lang))])
     for name, x, y, _w, _h, img in slot_list:
         im = imgs[pick.get(name, img)]
         if im.size != (1, 1):
@@ -1406,14 +1584,14 @@ def write_images(path, imgs):
 def write_texts(path):
     with zipfile.ZipFile(path, "w") as z:
         for lang, langname in LANGS.items():
-            pl = 0 if lang == "pl" else 1                # settings texts: Polish for pl, English otherwise (ASCII)
+            tx = TEXTS[ui_lang_of_text_db(lang)]       # the UI language this text DB file gets (ASCII)
             texts = dict(DIAG_TEXTS)
-            for base, values in SETTING_TEXTS.items():
-                for v, pair in enumerate(values):
-                    texts[base + v] = pair[pl]
-            texts[TEXT_SETTINGS_TITLE] = SETTINGS_TITLE[pl]
-            for scr in SCREEN_LIST:
-                texts[scr.text_id] = scr.title[pl]
+            for base, key in SETTING_KEYS:
+                for v, text in enumerate(tx["settings"][key]):
+                    texts[base + v] = text
+            texts[TEXT_SETTINGS_TITLE] = tx["settings_title"]
+            for k, scr in enumerate(SCREEN_LIST):
+                texts[scr.text_id] = tx["screen_titles"][k]
             body = "100000=%s\n1=%s\n" % (langname, TITLE)
             body += "".join("%d=%s\n" % (k, v) for k, v in sorted(texts.items()))
             if not body.isascii():
@@ -1539,6 +1717,7 @@ def main():
     slot_list = slots()
     if a.diag_out:
         return diag(a, slot_list)
+    check_texts()
     check_image_ranges()
     doc = xml(slot_list, ox, oy, menu_name=a.menu)
     n_ids = check_xml(doc)                               # before anything is written
@@ -1574,15 +1753,17 @@ def main():
             every.update(scr)
             every.update(colored)
             for s, key in ((1, "driving"), (2, "fuel"), (3, "performance"), (4, "warmup")):
-                screen_preview(every, s).save(os.path.join(HERE, "res", "preview_%s.png" % key))
-                screen_preview(every, s, "en").save(os.path.join(HERE, "res", "preview_%s_en.png" % key))
+                for lang in UI_LANGS:
+                    screen_preview(every, s, lang).save(os.path.join(HERE, "res", "preview_%s%s.png"
+                                                                     % (key, preview_suffix(lang))))
         size += write_frames(os.path.join(HERE, "GaugeApp_frames_c%d.bin" % k), colored)
         both = dict(common)
         both.update(colored)
-        preview(both, slot_list).save(os.path.join(HERE, "res", "preview.png" if k == 0 else
-                                                   "preview_%s.png" % color[0]))
+        preview(both, slot_list, UI_LANGS[0]).save(os.path.join(HERE, "res", "preview.png" if k == 0 else
+                                                               "preview_%s.png" % color[0]))
         if k == 0:
-            preview(both, slot_list, "en").save(os.path.join(HERE, "res", "preview_en.png"))
+            for lang in UI_LANGS[1:]:
+                preview(both, slot_list, lang).save(os.path.join(HERE, "res", "preview%s.png" % preview_suffix(lang)))
     icon = make_icon()
     write_images(os.path.join(HERE, "GaugeApp_ALL_Images.zip"), {IMG_ICON: icon})
     write_texts(os.path.join(HERE, "GaugeApp_ALL_Texts.zip"))
