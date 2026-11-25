@@ -22,7 +22,8 @@ Polish; README_PL.md and docs/*.md are Polish, README.md is the short English ve
 | `src/gauge_view.hpp` | engine screen (screen 0): settings, units, frame id of every slot |
 | `src/screens_view.hpp` | screens 1..4 (Driving, Fuel and trip, Performance, Warm-up): frame id of every slot |
 | `src/gauge_ids.hpp` | **generated** by `make_db.py` – never edit by hand |
-| `make_db.py` | the single source of the look: layout, texts, XML, ids header, frame packs, previews |
+| `make_db.py` | entry point of the generator (arguments, stages in order); the single source of the look |
+| `gaugegen/` | the generator's modules, each importing only earlier ones: `base`, `layout` (geometry, presets: `configure()` before importing the others), `ids`, `texts` (`TEXTS`, `UI_LANG_DEFS`), `canvas`, `engine`, `screens` (`SCREEN_LIST`), `checks`, `xml_out`, `header_out`, `packs`, `preview`, `diag` (`gaugegen/__init__.py`) |
 | `GaugeApp.xml`, `GaugeApp_ALL_*.zip`, `GaugeApp_frames*.bin`, `res/preview*.png` | **generated**, committed so a build needs no Pillow |
 | `GaugeApp.manifest` | plugin manifest (Etch connector id 211) |
 | `tests/` | host tests against a fake framework (`fake_appframework.*`); `check_abi.sh` compares the plugin's `bmw::` imports with `lib/*` |
@@ -64,7 +65,7 @@ temp folder rather than inlining long quoted commands). Docker runs from PowerSh
   (`g_state.settingsDirty`) and the render tick writes (`saveDueFiles`).
 - **The UI language is never a boolean parameter** (`isPolish`, `polish`, `is_polish=`): pass a language value (C++:
   an enum such as `UiLang`, decided once from `vehicle.language`; Python: `lang="pl"`), and pick frames as
-  `base + lang`, or a generated `[kUiLangCount]` table). Everything per language is **generated**: `make_db.py`
+  `base + lang`, or a generated `[kUiLangCount]` table). Everything per language is **generated**: `gaugegen/texts.py`
   `TEXTS` (one complete block per language) and `UI_LANG_DEFS` (vehicle.language values, text DB files) produce the
   enum `UiLang` (`kLangPl`, `kLangEn`, …), `uiLangForVehicle`, `kScreenTitles`, `kEngineBackground` and `kPsUnit` in
   `gauge_ids.hpp`. C++ never names a language. A new language = a `TEXTS` block + a `UiLangDef` (README_PL,
@@ -77,11 +78,12 @@ temp folder rather than inlining long quoted commands). Docker runs from PowerSh
 - **~60 images per HMI state**: images beyond that stay empty. Each screen is its own state with its own budget
   (states: engine 10 = 47, Driving 14 = 19, Fuel 15 = 44, Performance 16 = 11, Warm-up 17 = 30; settings 12).
   Prefer one picture per whole number over digit-by-digit. A new screen: one `Screen(...)` entry in `SCREEN_LIST`
-  (`make_db.py`: ids, title, slot list) plus its drawing, a `compute*` in `screens_view.hpp` and one row in
+  (`gaugegen/screens.py`: ids, slot list; its title in every `TEXTS` block) plus its drawing, a `compute*` in `screens_view.hpp` and one row in
   `kScreenDescs` there; the renderer, the XML, the header and the texts iterate. Its titles come from `SCREEN_LIST`
-  only: `make_db.py` generates `ids::kScreenTitles`, which `screenForTitle` reads.
+  and `TEXTS`: `make_db.py` generates `ids::kScreenTitles`, which `screenForTitle` reads.
 - `make_db.py` refuses to write when the XML has a duplicate id, a dangling reference, more than 60 images in a
-  state or non-ASCII text, or when image id ranges overlap (`image_ranges()`: add a new frame family there first).
+  state or non-ASCII text, or when image id ranges overlap (`gaugegen/checks.py` `image_ranges()`: add a new frame
+  family there first).
 - Visible area ≈ 1250×470 px; the 960×400 design is scaled by `SCALE` 1.15 and placed at `ORIGIN`. ~5 updates/s is fine;
   only changed slots are sent.
 - Texts in the text DB must stay **ASCII** (Polish without diacritics); texts drawn into pictures may use diacritics.
@@ -118,7 +120,8 @@ disable the app), `app.disable` (off switch). A `gauge-app.log` file on a USB st
 
 ## Working rules
 
-- Change the look only in `make_db.py`, then regenerate; keep `src/gauge_ids.hpp` and the generated files in sync in
+- Change the look only in `gaugegen/` (geometry in `layout.py` / `screens.py`, texts in `texts.py`), then
+  regenerate with `make_db.py`; keep `src/gauge_ids.hpp` and the generated files in sync in
   the same change. Look at `res/preview*.png` after regenerating.
 - Keep logic in the pure headers (`cds_values`, `drive_stats`, `*_view`) and cover it in `tests/test_cds_values.cpp`;
   lifecycle behaviour goes in `tests/app_host_test.cpp`. Update the fake framework when declaring new `bmw::` calls.

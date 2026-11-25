@@ -119,7 +119,7 @@ Dlaczego tak, a nie przez bazę obrazków iDrive – diagnostyka na EntryNav2 (F
 - obrazki wysyłane przez aplikację jako dane działają, zachowują pozycję x/y, nakładają się i można je wymieniać ok. 5
   razy na sekundę;
 - widoczny obszar ekranu aplikacji to ok. 1250 × 470 px. Układ 960×400 jest skalowany ×1,15 do 1104×460 i
-  wyśrodkowany (`SCALE`, `ORIGIN` w `make_db.py`).
+  wyśrodkowany (`SCALE`, `ORIGIN` w `gaugegen/layout.py`).
 
 | Właściwość CDS | Przykładowa wartość | Na ekranie |
 |---|---|---|
@@ -348,15 +348,16 @@ Prześlij zdjęcie ekranu; pozycję całości można przesunąć `make_db.py --x
 
 ## Dostosowanie
 
-- **Wygląd, układ, kolory, napisy, zakresy płynu i oleju, najmniejsze końce skal:** stałe na górze `make_db.py`,
-  potem `python3 make_db.py` i przebudowa.
+- **Wygląd, układ, kolory, napisy, zakresy płynu i oleju, najmniejsze końce skal:** stałe w `gaugegen/`
+  (kolory: `base.py`, układ ekranu Silnik: `layout.py`, ekrany 1–4: `screens.py`, napisy: `texts.py`), potem
+  `python3 make_db.py` i przebudowa.
 - **Jednostka / znak przyspieszenia, przelicznik mocy:** stałe „tuning” w `src/cds_values.hpp`.
 - **Częstotliwość odświeżania i zapisu maksimów:** `kRenderMs`, `kSaveEveryS` w `src/app.hpp`.
 
 ### Tłumaczenia
 
-Wszystkie teksty aplikacji są w jednym miejscu: `TEXTS` w `make_db.py`, po jednym kompletnym bloku na język
-(`"pl"`, `"en"`). Nowy język (np. niemiecki) to dwie zmiany w `make_db.py`:
+Wszystkie teksty aplikacji są w jednym miejscu: `TEXTS` w `gaugegen/texts.py`, po jednym kompletnym bloku na
+język (`"pl"`, `"en"`). Nowy język (np. niemiecki) to dwie zmiany w tym pliku:
 
 1. **Blok tekstów:** skopiuj blok `"en"` pod nowym kodem (`"de": {...}`) i przetłumacz teksty.
 2. **Definicja języka:** dopisz wiersz w `UI_LANG_DEFS`, np. `UiLangDef("de", (1,), ("de",))`:
@@ -384,7 +385,8 @@ W C++ nie trzeba niczego zmieniać.
 ## Układ projektu
 
 ```
-make_db.py                 układ ekranu -> GaugeApp.xml, src/gauge_ids.hpp, oba zipy, res/preview.png
+make_db.py                 generator: GaugeApp.xml, src/gauge_ids.hpp, paczki klatek, oba zipy, res/preview*.png
+gaugegen/                  moduły generatora (układ, teksty, id, rysowanie, XML, nagłówek, paczki, podglądy)
 src/cds_values.hpp         parsowanie CDS, moc, przeciążenie, maksima, język (czysta logika, testowana)
 src/drive_stats.hpp        g w każdym kierunku, obciążenie, kalibracja spalania, trasa, pomiary (czysta logika)
 src/gauge_view.hpp         ekran Silnik: która klatka w którym obrazku, ustawienia (czysta logika, testowana)
