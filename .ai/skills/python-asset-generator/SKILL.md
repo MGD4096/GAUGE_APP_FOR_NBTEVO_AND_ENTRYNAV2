@@ -70,12 +70,14 @@ itself refuses to produce bad output.
   escapes attributes (`xml.sax.saxutils.quoteattr`) over hand-built strings.
 - Small functions (≤ ~50 lines); name drawing helpers after what they draw.
 - **The language is a value, never a flag**: pass `lang` (`"pl"`, `"en"`, as `background(fp, lang)` does), never
-  `is_polish=True` / `english=False`. Keep one ordered tuple `UI_LANGS = ("pl", "en")` (the languages drawn into
-  pictures; `LANGS` is the text DB's list of iDrive language files): its index is the frame offset the C++ `UiLang`
-  enum uses; the generator exports `kUiLangCount` and `kStatusLangStride` (`STATUS_LANG_STRIDE`) with it, and C++
-  asserts its enum has the same count. Texts per language live in one mapping
-  (`{"pl": ..., "en": ...}` or a tuple in `UI_LANGS` order), not in `if lang == "pl"` branches spread through
-  drawing code; per-language properties (decimal comma, "KM" vs "PS") are a lookup by language too.
+  `is_polish=True` / `english=False`. `make_db.py` keeps every text in `TEXTS[lang]` (one complete block per
+  language, so a translator copies one block) and the languages in `UI_LANG_DEFS` (code, `vehicle.language` values,
+  text DB files; `LANGS` is the text DB's list of iDrive language files). The index in `UI_LANG_DEFS` is the frame
+  offset; the generator exports the C++ enum `UiLang`, `uiLangForVehicle`, `kUiLangCount`, `kStatusLangStride` and
+  the per-language tables (`kEngineBackground`, `kPsUnit`, `kScreenTitles`), so C++ holds nothing per language.
+  Per-language properties ("KM" vs "PS") are entries of the block too, never `if lang == "pl"` branches.
+- `check_texts()` runs before anything is written: same keys and list lengths in every block, ASCII text DB texts,
+  a known power unit, no `vehicle.language` value or text DB file in two languages.
 - No bytecode in the repo: `__pycache__/` and `*.pyc` are in `.gitignore`.
 - Lint with `python3 -m pyflakes make_db.py` (or ruff) before committing.
 
@@ -93,7 +95,7 @@ itself refuses to produce bad output.
   (`s_background`, `screen_preview`) (O).
 - XML is built with `%` string formatting; attributes are not escaped (safe only because all texts are ASCII
   literals, which `check_xml` enforces).
-- Three language branches remain: `2 if lang == "pl" else UNITS.index("PS")` and `IMG_BG if lang == "pl" else
-  IMG_BG_EN` in `preview()`, `pl = 0 if lang == "pl" else 1` in `write_texts` (text DB language → UI language).
+- The engine screen's background ids are not one `base + lang` range (`IMG_BG`, `IMG_BG_EN`, then the ids after
+  it, `engine_background()`), kept for compatibility with the installed packs.
 - Outputs are written in place, not through a temporary file + `os.replace`.
 - No check for referenced-but-undrawn frames, pack size or layout bounds; no type hints, no unit tests.

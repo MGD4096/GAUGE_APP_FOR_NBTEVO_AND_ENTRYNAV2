@@ -64,8 +64,11 @@ temp folder rather than inlining long quoted commands). Docker runs from PowerSh
   (`g_state.settingsDirty`) and the render tick writes (`saveDueFiles`).
 - **The UI language is never a boolean parameter** (`isPolish`, `polish`, `is_polish=`): pass a language value (C++:
   an enum such as `UiLang`, decided once from `vehicle.language`; Python: `lang="pl"`), and pick frames as
-  `base + lang`, or a `[kLangCount]` table). The enum is `UiLang` (`kLangPl`, `kLangEn`) from `Metrics::uiLang()`;
-  its count must equal the generated `kUiLangCount` (`make_db.py` `UI_LANGS`).
+  `base + lang`, or a generated `[kUiLangCount]` table). Everything per language is **generated**: `make_db.py`
+  `TEXTS` (one complete block per language) and `UI_LANG_DEFS` (vehicle.language values, text DB files) produce the
+  enum `UiLang` (`kLangPl`, `kLangEn`, …), `uiLangForVehicle`, `kScreenTitles`, `kEngineBackground` and `kPsUnit` in
+  `gauge_ids.hpp`. C++ never names a language. A new language = a `TEXTS` block + a `UiLangDef` (README_PL,
+  "Tłumaczenia"); `check_texts()` rejects missing keys, other list lengths and non-ASCII text DB texts.
 - **Pictures are sent as data**, not from the image DB: a large image DB made the EntryNav2 HMI show no images at all
   (onError 9). Frames live in `GaugeApp_frames*.bin` (`"GFR1"`, u32 count, sorted `(id, offset, size)` table, PNGs,
   little endian) and are sent with `PluginApp::updateModel(model, bmw::Image)` into `raImageModel`s. `bmw::Image` has no
@@ -100,7 +103,8 @@ temp folder rather than inlining long quoted commands). Docker runs from PowerSh
 - `engine.temperature` right after a start can be `{"engine":68,"oil":0}`: oil 0 next to coolant > 30 = no data.
 - Frame packs are `mmap`ed read-only (`loadPack`), never copied into memory; `GaugeApp_frames_s.bin` is mapped on first
   use (`loadScreens`). Re-installing the files while the HMI runs needs a reboot.
-- `vehicle.language` 18 = Polish (pictures switch Polish/English by it). Decimal numbers always use the comma
+- `vehicle.language` 18 = Polish, 1 = DE, 2 = EN_UK, 3 = EN_US (pictures switch language by it; 0 = not known yet
+  → Polish). Decimal numbers always use the comma
   (`kDecimalComma`): the decimal-point number sets are not generated (their ids + stride stay reserved).
 - The full registry of the car's CDS names and JSON formats is in `libhmiremoting.so` on the car; the separate
   diagnostic app `../HU_Tools/CdsScan` subscribes to all of them and writes `cds-scan.txt`.

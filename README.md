@@ -89,6 +89,12 @@ needs no Pillow. After changing the look: `python3 make_db.py` (Pillow + DejaVu 
 For 6.5" EntryNav2 units with an 800×480 screen: `python3 make_db.py --screen 800x480` (a separate 760×446
 layout with larger fonts; the image ids and `src/gauge_ids.hpp` stay the same, so `libGaugeApp.so` does not change).
 
+**Translations.** Every text is in `TEXTS` in `make_db.py`, one complete block per language. A new language: copy
+the `"en"` block under its code, translate it, add a `UiLangDef` (which `vehicle.language` values and text DB files
+pick it), then `python3 make_db.py`; the C++ side is generated (`UiLang`, the `vehicle.language` map, per-language
+tables) and needs no change. Menu texts (text DB) must be ASCII; texts drawn into pictures may use any letter. Details:
+[README_PL.md](README_PL.md#tłumaczenia).
+
 **BMW libraries (`lib/`).** Building links against the head unit's `libAppFramework.A.so` and `libCoreFramework.A.so`.
 They are BMW's files and not in the repository (`lib/` is git-ignored): copy them from a unit of the same type.
 

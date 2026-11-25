@@ -5,6 +5,19 @@
 #define GAUGE_IDS_HPP
 
 namespace eng {
+
+// Languages drawn into the pictures (make_db.py UI_LANG_DEFS); the value is the frame offset of a language.
+enum UiLang { kLangPl = 0, kLangEn, kLangCount };
+
+// vehicle.language (CDS) -> UiLang; every value not listed: kLangEn.
+inline UiLang uiLangForVehicle(int vehicleLanguage) {
+    switch (vehicleLanguage) {
+    case 0: case 18: return kLangPl;
+    default: return kLangEn;
+    }
+}
+
+
 namespace ids {
 
 enum {
@@ -256,6 +269,10 @@ enum WarmSlot {
     kWarmSlotBatt,
     kWarmSlotCount
 };
+// per UiLang: the engine screen's background frame, and the unit picture of PS ("KM" in Polish)
+static const unsigned kEngineBackground[kUiLangCount] = { 56010, 56013 };
+static const unsigned kPsUnit[kUiLangCount] = { 2, 9 };   // kUnit*: KM, PS
+
 
 }  // namespace ids
 }  // namespace eng
