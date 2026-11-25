@@ -1,0 +1,13 @@
+# Line endings: LF in the repository and in the working tree (WSL make / python / Docker read these files), whatever
+# core.autocrlf says; only Windows batch files are CRLF (cmd.exe misparses LF ones).
+* text=auto eol=lf
+*.bat text eol=crlf
+
+# Generated or binary: never converted, no text diffs
+*.bin binary
+*.zip binary
+*.png binary
+*.jpg binary
+*.pyc binary
+*.so  binary
+*.tar binary

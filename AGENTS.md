@@ -8,8 +8,16 @@ Polish; README_PL.md and docs/*.md are Polish, README.md is the short English ve
 
 | Path | What |
 |---|---|
-| `src/engine_data.cpp` | the plugin: framework glue (own `PluginApp` vtable, `Runnable` stand-in, `pluginAppInfo`), CDS subscription, frame packs, rendering, settings, logging, crash guard |
-| `src/cds_values.hpp` | CDS property list (`enum Prop`), parsing (`apply`), `Metrics`, run maxima |
+| `src/engine_data.cpp` | the PluginApp: `pluginAppInfo`, own `PluginApp` vtable, `Runnable` stand-in, onInit / onError / onFinalize, button actions, render tick, `AppState g_state` |
+| `src/cds.cpp` | CDS values in: `handleCds` into `g_state`, one stub per property (`kStubs`), `subscribeAll` |
+| `src/render.cpp` | slots → only changed frames out (`renderView`, `renderScreen` via `eng::kScreenDescs`), what is on display (`screenForTitle`), diagnostics |
+| `src/frames.cpp` | frame packs (`mmap`), `bmw::Image` (`sendImageData`), `FrameSink` |
+| `src/storage.cpp` | max.txt, settings.txt, torque-env.txt, fuel-cal.txt (atomic writes), crash guard |
+| `src/log.cpp` | log file / USB stick / slog, monotonic time |
+| `src/app.hpp` | the modules' internal interface: constants, paths, `AppState`, `MutexLock`, `FrameSink`, `RenderMode` |
+| `src/bmw_framework.hpp` | hand-written declarations of BMW's framework classes (mangled names = the cars' exports) |
+| `src/compat.hpp` | `GA_STATIC_ASSERT`, `GA_COUNT` (C++98) |
+| `src/cds_values.hpp` | CDS property list (`enum Prop`), parsing (`apply`), `Metrics`, `UiLang`, run maxima |
 | `src/drive_stats.hpp` | g per direction, torque envelope (engine load), fuel counter calibration, trip, performance timing |
 | `src/gauge_view.hpp` | engine screen (screen 0): settings, units, frame id of every slot |
 | `src/screens_view.hpp` | screens 1..4 (Driving, Fuel and trip, Performance, Warm-up): frame id of every slot |
@@ -17,12 +25,13 @@ Polish; README_PL.md and docs/*.md are Polish, README.md is the short English ve
 | `make_db.py` | the single source of the look: layout, texts, XML, ids header, frame packs, previews |
 | `GaugeApp.xml`, `GaugeApp_ALL_*.zip`, `GaugeApp_frames*.bin`, `res/preview*.png` | **generated**, committed so a build needs no Pillow |
 | `GaugeApp.manifest` | plugin manifest (Etch connector id 211) |
-| `tests/` | host tests against a fake framework (`fake_appframework.*`) |
+| `tests/` | host tests against a fake framework (`fake_appframework.*`); `check_abi.sh` compares the plugin's `bmw::` imports with `lib/*` |
 | `toolchain/` | Docker image for EntryNav2 (Ubuntu 12.04, armhf GCC 4.6, eglibc 2.15) |
 | `build_nbt.bat` | NBT Evo build with QNX SDP 6.5 `qcc` on Windows |
 | `build_entryNav2.bat` | EntryNav2 package on Windows: starts Docker Desktop, builds the toolchain image once, `make entrynav2-dist`, GLIBC check; `test` = `make check` in WSL first |
 | `lib/NBT_evo_libs`, `lib/Entry_Evo_libs` | the cars' `libAppFramework.A.so` / `libCoreFramework.A.so` – BMW files, not ours: git-ignored, never commit or redistribute. How to copy them from a unit: README_PL.md, "Biblioteki BMW (`lib/`)" |
 | `docs/` | installation guides (Polish) |
+| `.ai/skills/` | agent skills with good practices (C++98, PluginApp ABI, the Python generator, host tests) and the project's known gaps against them – read the matching one before changing that area ([`.ai/README.md`](.ai/README.md)) |
 
 ## Commands
 
@@ -38,22 +47,38 @@ temp folder rather than inlining long quoted commands). Docker runs from PowerSh
   (`arm-linux-gnueabihf-objdump -T build/entrynav2/libGaugeApp.so`). Image: `docker build -t gauge-entrynav2-tc toolchain`.
 - Windows shortcut for all of the above: `build_entryNav2.bat test` (tests in WSL, then the package).
 - NBT Evo: `build_nbt.bat [QNX folder]` → `dist\nbt\GaugeApp` (no QNX on the dev PC: untested there).
-- `build/`, `dist/`, `diag/` are git-ignored; Docker may create them as root.
+- `build/`, `dist/`, `diag/`, `__pycache__/` are git-ignored; Docker may create them as root.
+- Line endings come from `.gitattributes`: LF everywhere (also in the working tree), `*.bat` CRLF, packs / zips /
+  PNGs binary.
 
 ## Hard constraints (learned on the car – do not "simplify" them away)
 
 - **C++98 only** (QNX GCC 4.4 / GCC 4.6): no `auto`, lambdas, `nullptr`, `<cstdint>` features beyond C99 headers,
-  range-for. No BMW headers exist: framework classes are declared by hand in `engine_data.cpp` with exact parameter
-  types so the mangled names match the cars' exports. Every new `bmw::` symbol must be checked with `nm -D` in **both**
-  `lib/` folders before use.
+  range-for. No BMW headers exist: framework classes are declared by hand in `bmw_framework.hpp` with exact parameter
+  types so the mangled names match the cars' exports. Every new `bmw::` symbol must be in **both** `lib/` folders:
+  `make check` runs `tests/check_abi.sh` (every import vs `nm -D` of the cars' libraries; skipped without `lib/`).
+  Both builds use `-std=gnu++98 -Wall -Wextra -fvisibility=hidden` (`qcc`: `-Wc,…`): the modules' functions live in
+  `namespace ga` and only `pluginAppInfo` is exported (check with `nm -D`). Tables that must match an enum and
+  hand-sized ABI buffers carry a `GA_STATIC_ASSERT`. Shared state is `g_state` (`AppState`, guarded by `g_dataMutex`,
+  always through `MutexLock`). CDS / action callbacks never write files: they set a dirty flag
+  (`g_state.settingsDirty`) and the render tick writes (`saveDueFiles`).
+- **The UI language is never a boolean parameter** (`isPolish`, `polish`, `is_polish=`): pass a language value (C++:
+  an enum such as `UiLang`, decided once from `vehicle.language`; Python: `lang="pl"`), and pick frames as
+  `base + lang`, or a `[kLangCount]` table). The enum is `UiLang` (`kLangPl`, `kLangEn`) from `Metrics::uiLang()`;
+  its count must equal the generated `kUiLangCount` (`make_db.py` `UI_LANGS`).
 - **Pictures are sent as data**, not from the image DB: a large image DB made the EntryNav2 HMI show no images at all
   (onError 9). Frames live in `GaugeApp_frames*.bin` (`"GFR1"`, u32 count, sorted `(id, offset, size)` table, PNGs,
   little endian) and are sent with `PluginApp::updateModel(model, bmw::Image)` into `raImageModel`s. `bmw::Image` has no
-  exported destructor: its two members are destroyed by hand (see `sendImageData`).
+  exported destructor: its two members are destroyed by hand (see `sendImageData` in `frames.cpp`). Rendering writes
+  through a `FrameSink` (`pluginSink(app)` on the car).
 - **~60 images per HMI state**: images beyond that stay empty. Each screen is its own state with its own budget
   (states: engine 10 = 47, Driving 14 = 19, Fuel 15 = 44, Performance 16 = 11, Warm-up 17 = 30; settings 12).
-  Prefer one picture per whole number over digit-by-digit. A new screen: `SCREEN_*` lists + `SCREENS` in `make_db.py`,
-  a `compute*` in `screens_view.hpp`, a case in `renderScreen` and its titles in `screenForTitle` (`engine_data.cpp`).
+  Prefer one picture per whole number over digit-by-digit. A new screen: one `Screen(...)` entry in `SCREEN_LIST`
+  (`make_db.py`: ids, title, slot list) plus its drawing, a `compute*` in `screens_view.hpp` and one row in
+  `kScreenDescs` there; the renderer, the XML, the header and the texts iterate. Its titles come from `SCREEN_LIST`
+  only: `make_db.py` generates `ids::kScreenTitles`, which `screenForTitle` reads.
+- `make_db.py` refuses to write when the XML has a duplicate id, a dangling reference, more than 60 images in a
+  state or non-ASCII text, or when image id ranges overlap (`image_ranges()`: add a new frame family there first).
 - Visible area ≈ 1250×470 px; the 960×400 design is scaled by `SCALE` 1.15 and placed at `ORIGIN`. ~5 updates/s is fine;
   only changed slots are sent.
 - Texts in the text DB must stay **ASCII** (Polish without diacritics); texts drawn into pictures may use diacritics.
@@ -93,7 +118,10 @@ disable the app), `app.disable` (off switch). A `gauge-app.log` file on a USB st
   the same change. Look at `res/preview*.png` after regenerating.
 - Keep logic in the pure headers (`cds_values`, `drive_stats`, `*_view`) and cover it in `tests/test_cds_values.cpp`;
   lifecycle behaviour goes in `tests/app_host_test.cpp`. Update the fake framework when declaring new `bmw::` calls.
-- New CDS property: add to `enum Prop` + `propName` + `apply` + `propValid`, extend `kStubs` in `engine_data.cpp`.
+- New CDS property: add to `enum Prop` + `propName` + `apply` + `propValid`, extend `kStubs` in `cds.cpp` (a
+  `GA_STATIC_ASSERT` fails the build when the count differs).
+- A module's private state stays in its own anonymous namespace (packs in `frames.cpp`, render caches in
+  `render.cpp`, log in `log.cpp`); only what several modules read or write goes into `AppState`.
 - Nothing in this repo has been confirmed on NBT Evo hardware; EntryNav2 behaviour is what the car showed. Say which
   parts are untested when reporting.
 - Update README_PL.md (full) / README.md (short) and `docs/` when install steps, files or sizes change.

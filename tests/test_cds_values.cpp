@@ -13,6 +13,35 @@ using namespace eng::ids;
 static int g_fail = 0;
 #define CHECK(c) do { if (!(c)) { printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #c); ++g_fail; } } while (0)
 #define NEAR(a, b) (fabs((a) - (b)) < 1e-6)
+// a == b for integers (frame ids, counts): a failure prints both values.
+#define CHECK_EQ(a, b) do { long long ga_ = (long long)(a), gb_ = (long long)(b); if (ga_ != gb_) { \
+    printf("FAIL %s:%d: %s == %s (got %lld, want %lld)\n", __FILE__, __LINE__, #a, #b, ga_, gb_); ++g_fail; } } while (0)
+
+// The screen table drives the renderer: each row computes exactly what its screen's compute* does.
+static void testScreenTable() {
+    CHECK(screenDesc(0) == NULL && screenDesc(kScreenCount) == NULL);
+    CHECK_EQ(screenDesc(kScreenDriving)->slotCount, kDrvSlotCount);
+    CHECK_EQ(screenDesc(kScreenWarm)->slotCount, kWarmSlotCount);
+    ScreenInputs in;
+    in.m.language = 3;
+    in.m.hasPedal = true; in.m.pedal = 40; in.m.hasFuel = true; in.m.fuel = 30;
+    in.st.temp = kFahrenheit;
+    in.brakeFull = 20;
+    const long now = 5000;
+    unsigned a[64], b[64];
+    for (int s = 1; s < kScreenCount; ++s) {
+        const ScreenDesc* d = screenDesc(s);
+        CHECK(d != NULL && d->slotCount <= 64);
+        d->compute(in, now, a);
+        switch (s) {
+        case kScreenDriving: computeDriving(in.m, in.gmax, in.env, in.brakeFull, b); break;
+        case kScreenFuel: computeFuel(in.m, in.trip, in.cal, now, b); break;
+        case kScreenPerf: computePerf(in.m, in.perf, in.gmax, now, b); break;
+        case kScreenWarm: computeWarm(in.m, in.warm, in.st, now, b); break;
+        }
+        for (int i = 0; i < d->slotCount; ++i) CHECK_EQ(a[i], b[i]);
+    }
+}
 
 static void testParse() {
     double v = 0;
@@ -247,9 +276,9 @@ static void testLanguage() {
     Maxima mx;
     Settings st;
     unsigned view[kSlotCount];
-    CHECK(m.language == 0 && m.polish() && backgroundFrame(m) == kImgBackground);   // until it is known: Polish
+    CHECK(m.language == 0 && m.uiLang() == kLangPl && backgroundFrame(m) == kImgBackground);   // until it is known: Polish
     CHECK(apply(m, kLanguage, "{\"language\":3}", 0));            // EN_US
-    CHECK(m.language == 3 && !m.polish() && propValid(m, kLanguage));
+    CHECK(m.language == 3 && m.uiLang() == kLangEn && propValid(m, kLanguage));
     CHECK(backgroundFrame(m) == kImgBackgroundEn);
     apply(m, kAccel, "{\"acceleration\":{\"lateral\":6.0822,\"longitudinal\":0}}", 0);   // 0.62 g
     computeView(m, mx, st, view);
@@ -260,15 +289,22 @@ static void testLanguage() {
     CHECK(std::string(t) == "0.62");
     CHECK(!apply(m, kLanguage, "{\"error\":400}", 0) && m.language == 3);   // bad value: language kept
     apply(m, kLanguage, "{\"language\":18}", 0);                  // PL
-    CHECK(m.polish() && backgroundFrame(m) == kImgBackground);
+    CHECK(m.uiLang() == kLangPl && backgroundFrame(m) == kImgBackground);
     computeView(m, mx, st, view);
     CHECK(view[kSlotPowerUnit] == kImgUnit + kUnitKm);
     CHECK(view[kSlotGBig] == kImgGNum + 62);                    // "0,62"
     apply(m, kLanguage, "{\"language\":1}", 0);                   // DE: English pictures
-    CHECK(!m.polish());
+    CHECK(m.uiLang() == kLangEn);
     st.power = kKw;
     computeView(m, mx, st, view);
     CHECK(view[kSlotPowerUnit] == kImgUnit + kUnitKw);           // kW / hp are the same in every language
+    // per-language frames are base + lang (backgrounds) / base + stride * lang (status lines), in make_db.py's order
+    CHECK((int)kLangCount == (int)kUiLangCount);
+    CHECK(screenBackground(1, kLangPl) == kImgScreenBg && screenBackground(1, kLangEn) == kImgScreenBg + 1);
+    CHECK(screenBackground(4, kLangEn) == kImgScreenBg + 7);
+    CHECK(statusFrame(kImgStatus, kLangEn, 2) == kImgStatus + 12 && statusFrame(kImgWarmStatus, kLangPl, 3) ==
+          kImgWarmStatus + 3);
+    CHECK(std::string(kScreenTitles[3][kLangPl]) == "Pomiary" && std::string(kScreenTitles[0][kLangEn]) == "GAUGE APP");
 }
 
 // ---- screens 1..3 ---------------------------------------------------------------------------------------------------
@@ -497,6 +533,7 @@ int main() {
     testDriveStats();
     testPerf();
     testScreens();
+    testScreenTable();
     if (g_fail) { printf("%d check(s) failed\n", g_fail); return 1; }
     printf("test_cds_values OK\n");
     return 0;

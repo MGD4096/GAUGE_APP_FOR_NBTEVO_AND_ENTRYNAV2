@@ -1,0 +1,182 @@
+---
+name: cpp98-embedded
+description: Good practices for writing C++98 code for GaugeApp (QNX GCC 4.4 / armhf GCC 4.6, running inside BMW's HmiMain3D process). Use when adding or changing anything in src/*.cpp or src/*.hpp, or when reviewing such a change.
+---
+
+# C++98 for a plugin that lives inside someone else's process
+
+GaugeApp is a shared library loaded into the head unit's HMI process. A crash, a leak, a blocked thread or a slow
+call takes the whole iDrive screen down, not just the app. Every rule below serves one of three goals: **never crash
+the host**, **never block the host**, **compile on two old compilers with one source**.
+
+## Language level
+
+- `-std=gnu++98` only. No `auto`, lambdas, `nullptr`, range-for, `override`, `static_assert`, `<cstdint>` types beyond
+  the C99 `<stdint.h>` ones, `std::unique_ptr`, move semantics, brace initialisation of classes.
+- Use `NULL`, not `0`, for pointers. Mark single-argument constructors `explicit`.
+- Compile-time checks without `static_assert`: `GA_STATIC_ASSERT` in `src/compat.hpp` (put it at namespace scope; a
+  local typedef draws `-Wunused-local-typedefs` on newer compilers):
+  ```cpp
+  #define GA_STATIC_ASSERT(cond, name) typedef char ga_static_assert_##name[(cond) ? 1 : -1]
+  GA_STATIC_ASSERT(sizeof(kStubs) / sizeof(kStubs[0]) == eng::kPropCount, one_cds_stub_per_prop);
+  ```
+  Use it for every table that must match an enum and for every hand-sized buffer that must hold an ABI object
+  (`image_storage_fits`, `screen_slots_fit`).
+- Declare tables **without** a size and assert the count. `T table[kCount] = { a, b }` silently fills the rest with
+  zero/`NULL`, which becomes a crash on the car.
+
+## Ownership and resources (RAII without smart pointers)
+
+- Every resource (mutex lock, `FILE*`, file descriptor, `mmap`, `malloc` buffer) gets one owner that releases it on
+  every path. In C++98 write a small non-copyable guard:
+  ```cpp
+  class MutexLock {
+  public:
+      explicit MutexLock(pthread_mutex_t& m) : m_(m) { pthread_mutex_lock(&m_); }
+      ~MutexLock() { pthread_mutex_unlock(&m_); }
+  private:
+      MutexLock(const MutexLock&);            // not copyable (C++98: declared, never defined)
+      MutexLock& operator=(const MutexLock&);
+      pthread_mutex_t& m_;
+  };
+  ```
+  Same pattern for `ScopedFile` (`fclose`), `ScopedFd` (`close`), `ScopedMap` (`munmap`).
+- Rule of three: a class that owns a resource declares the destructor, the copy constructor and the assignment
+  operator together, or makes copying private.
+- No C++ exceptions across the library boundary: the host was not built to unwind through our frames. Do not call
+  anything that throws (`std::string` / `std::vector` growth can throw `bad_alloc`) on paths reached from the
+  framework, or catch everything at the entry point. Prefer fixed buffers and `snprintf` in the plugin.
+- Placement `new` into raw storage needs: enough size (asserted), pointer alignment (`void*` array or a union with
+  `double`), and an explicit destructor call for every constructed member.
+
+## Strings, numbers and buffers
+
+- `snprintf(buf, sizeof(buf), ...)` always; never `sprintf`, `strcpy`, `strcat`. Check truncation where it matters
+  (paths): `if (n < 0 || (size_t)n >= sizeof(buf)) fail`.
+- Pass buffer and size together (`char* out, size_t n`), and make the size the callee's limit, never `strlen` of the
+  destination.
+- Parse with `strtol` / `strtod` and check `end` and the range, as `settingField` does. Never `atoi`.
+- Read external integers byte by byte with explicit endianness (`le32`), never by casting a `char*` to `unsigned*`
+  (alignment faults on ARM, strict aliasing).
+- Prefer C++ casts (`static_cast`, `reinterpret_cast`) over C casts: they are greppable and say which conversion is
+  meant. Keep `reinterpret_cast` confined to the ABI glue.
+- Units in names: `kRenderMs`, `kSaveEveryS`, `kAppLogMaxBytes`. Use `long` milliseconds from a monotonic clock
+  (`clock_gettime(CLOCK_MONOTONIC)`) for durations, never wall time.
+
+## Parameters: no boolean flags, above all not for the language
+
+- **Never pass the UI language as a `bool`** (`isPolish`, `polish`, `english`, `pl`). A language is a value, not a
+  yes/no: a third language turns every such flag into a rewrite, and `f(s, true)` does not say what `true` means.
+  GaugeApp uses one enum (`src/cds_values.hpp`) and passes it everywhere:
+  ```cpp
+  enum UiLang { kLangPl = 0, kLangEn, kLangCount };        // order = frame order in the packs (make_db.py UI_LANGS)
+  UiLang Metrics::uiLang() const;                          // vehicle.language -> UiLang, the only place that decides
+  inline unsigned screenBackground(int s, UiLang lang) {
+      return ids::kImgScreenBg + (unsigned)ids::kUiLangCount * (unsigned)(s - 1) + (unsigned)lang;
+  }
+  inline unsigned statusFrame(unsigned base, UiLang lang, int status);   // base + kStatusLangStride * lang + status
+  ```
+  Frame ids per language are `base + lang` (or `base + stride * lang`), with the count and stride generated by
+  `make_db.py` (`kUiLangCount`, `kStatusLangStride`; `GA_STATIC_ASSERT` keeps the enum in step), so adding a
+  language is one more enum value and one more set of pictures, not new `?:` branches.
+- Decide the language once (`m.uiLang()`) and hand the value down; helpers never re-read `vehicle.language` or
+  compare with `kVehicleLangPolish` themselves.
+- Things that only follow from the language are a table indexed by it (`psUnit(lang)`: "KM" / "PS";
+  `backgroundFrame`: one frame per language), not further booleans. When ids are not `base + lang` (the engine
+  background), use a `[kLangCount]` table rather than `?:`.
+- The same applies to other two-way choices in signatures: prefer a named enum (`Force` / `kOnlyChanged`) over
+  `bool force` when the call site would read `render(app, true)`. A `bool` is fine for a real yes/no state
+  (`valid`, `dirty`).
+
+## Globals, state and threads
+
+- Everything that is not the exported entry point lives in an anonymous namespace (internal linkage) and the library
+  is built with `-fvisibility=hidden`: only `pluginAppInfo` is exported.
+- Avoid non-trivial static constructors: their order across translation units is undefined and they run inside
+  `dlopen`. Plain-old-data globals with constant initialisers are fine.
+- Group related globals into one struct (`AppState g;`) instead of dozens of `g_*` variables; it makes "reset on
+  onInit" one assignment and shows what a mutex protects.
+- Document for each shared variable which mutex guards it, and touch it only with that mutex held (via `MutexLock`).
+  Copy what you need under the lock, then do the slow work (file I/O, `updateModel`) without it.
+- Framework callbacks (CDS, actions, posted Runnables) must return quickly: no `sleep`, no unbounded loops, no
+  network, no `fsync`. Set a dirty flag in the callback and write the file from the render tick (as
+  `g_settingsDirty` / `saveSettingsIfDirty` do), plus once in `onFinalize`.
+
+## Design: SOLID, applied pragmatically
+
+SOLID was written for class hierarchies; here it is applied to modules, tables and function seams. The aim is that
+a typical change (a new screen, a new CDS property, a new language) touches **one place**, and that logic can be tested
+without the framework. Do not add virtual interfaces "for SOLID": an extra indirection in code that runs 5 times a
+second inside the HMI is fine, an abstraction nobody needs makes car logs harder to follow.
+
+- **S – one reason to change per file.** Pure logic (`cds_values`, `drive_stats`, `*_view`) stays free of I/O and of
+  `bmw::`. The plugin side is split by what changes it: framework ABI (`bmw_framework.hpp`, shared with the fake),
+  storage (settings, maxima, kept files, log, crash guard), frame packs (load, map, find), rendering (slots →
+  `updateModel`), CDS dispatch, app lifecycle (`create` / `onInit` / `onFinalize`). A file that needs "and" to
+  describe it is a candidate for a split.
+- **O – extend by adding data, not by editing branches.** Prefer descriptor tables over `switch` chains:
+  ```cpp
+  struct ScreenDesc { int slotCount; void (*compute)(const ComputeIn& in, unsigned* out); };
+  const ScreenDesc kScreens[] = { { ids::kDrvSlotCount, &computeDrivingSlots }, /* ... */ };
+  GA_STATIC_ASSERT(sizeof(kScreens) / sizeof(kScreens[0]) == ids::kScreenCount - 1, one_desc_per_screen);
+  ```
+  Same for CDS properties: one row `{ name, parse, valid }` per property instead of an enum, `propName`, `apply`
+  and `propValid` in four places. Per-language data is a `[kLangCount]` table (already done for `UiLang`). When a
+  table is not possible, a `GA_STATIC_ASSERT` must catch the forgotten edit.
+- **L – honour the base contract.** The only "subclass" is the patched `PluginApp` vtable: an override calls the
+  base implementation (`onInit`, `onFinalize`) and keeps its preconditions (handlers before the base `onInit`,
+  `NULL` app pointer before the base `onFinalize`). A stand-in object (Runnable, Image storage) must be usable
+  wherever the real one is: same layout, same lifetime rules.
+- **I – pass what a function uses, not everything.** `compute*` takes the inputs it reads (`Metrics`, one stats
+  object, `Settings`, `now`), never the app or the globals. A helper that needs one value gets that value, not the
+  struct holding it. Keep the fake framework split along the same lines when it grows.
+- **D – logic depends on values and small seams, not on the framework.** Time is a parameter (`now`), never read
+  inside logic. Rendering and storage reach the outside through narrow seams that tests can replace, e.g.
+  `struct Display { void* ctx; bool (*send)(void* ctx, unsigned model, const unsigned char* png, unsigned size); };`
+  and file helpers taking a directory, instead of calling `bmw::PluginApp` and compile-time paths deep inside.
+  Link-time substitution (the fake framework) stays for the ABI layer only.
+
+## Files on a head unit
+
+- Write data through a temporary file, `fflush` + `fsync`, then `rename` over the old one: power can go at any moment.
+- Every file read has a size cap; every parsed value has a range check and a default (`parseSettings` keeps the default
+  on junk). Old files from a previous version must still load.
+- Bound every log (rotation, `kAppLogMaxBytes`) and never log personal data (positions, VIN, contacts).
+- Check every return value of `open`, `mmap`, `fopen`, `rename`, `mkdir` (ignore `EEXIST` explicitly), and log the
+  failure once rather than on every tick.
+
+## Warnings and style
+
+- Build with `-Wall -Wextra` on **both** targets (for `qcc` pass gcc options as `-Wc,-Wextra -Wc,-std=gnu++98`) and keep the output warning-free; consider `-Werror` in `make check`
+  so a new warning fails the tests on the PC rather than surfacing on the car.
+- `const` everything that does not change: parameters passed by reference, member functions, tables
+  (`const char* const`).
+- Name constants `kCamelCase`, globals `g_camelCase`, members `m_name` or `name_`; one style per file.
+- Comment the *why* (what the car showed, which limit a number comes from), not the *what*.
+
+## Where GaugeApp differs today (known gaps, fix when touching the code)
+
+Done: modules split along S (`app.hpp` lists them), `MutexLock` everywhere, `AppState g_state` instead of loose
+globals, `RenderMode` instead of `bool force`, the screen table `eng::kScreenDescs` instead of a `switch`,
+`FrameSink` as the rendering seam, `-fvisibility=hidden` on both targets. Still open:
+
+
+- Decimal formatting still takes `bool comma` (from the global `kDecimalComma`, not from the language).
+- A new CDS property is still five edits (`enum Prop`, `propName`, `apply`, `propValid`, `kStubs`); no property
+  table yet (O). The counts are asserted, so a forgotten stub fails the build.
+- Storage takes its paths from `GAUGE_DATA_DIR` constants and reads `g_state` directly; only rendering has a seam
+  (`FrameSink`) (D). `AppState` is one struct for all shared data (CDS input, maxima, trip, settings): a candidate for
+  splitting if it grows (I).
+- `AppState` and the `eng::` types have constructors, so `g_state` is a non-trivial static object built at `dlopen`
+  (it only zeroes memory; keep it that way).
+
+## Checklist before finishing
+
+- [ ] Compiles with `-std=gnu++98 -Wall -Wextra` without new warnings (`make check`).
+- [ ] No new table without a count assertion; no new buffer without a size limit.
+- [ ] No new `bool` parameter for the language (or another mode a call site cannot read): an enum instead.
+- [ ] The change touched as few places as its kind allows; a new branch in a `switch` over screens / properties was
+      considered as a table row instead.
+- [ ] Every lock, file, map and allocation released on every path, including early returns.
+- [ ] Nothing slow or blocking inside a framework callback.
+- [ ] Logic that can be pure lives in a header and has a test (see the `host-testing` skill).

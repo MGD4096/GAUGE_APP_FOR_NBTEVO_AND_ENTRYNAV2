@@ -108,14 +108,21 @@ inline double showTorque(const Settings& st, double nm) { return st.torque == kL
 inline double showFuel(const Settings& st, double l) { return st.fuel == kGallon ? l / 3.785411784 : l; }
 
 inline unsigned tempUnitImage(const Settings& st) { return ids::kImgUnit + (st.temp == kFahrenheit ? ids::kUnitF : ids::kUnitC); }
-// PS is "KM" in Polish.
-inline unsigned powerUnitImage(const Settings& st, bool polish) {
-    return ids::kImgUnit + (st.power == kKw ? ids::kUnitKw : st.power == kHp ? ids::kUnitHp
-                            : polish ? ids::kUnitKm : ids::kUnitPs);
+// The unit picture of PS in each UiLang: "KM" in Polish, "PS" in English.
+inline unsigned psUnit(UiLang lang) {
+    static const unsigned kPs[kLangCount] = { ids::kUnitKm, ids::kUnitPs };
+    return kPs[lang];
+}
+inline unsigned powerUnitImage(const Settings& st, UiLang lang) {
+    return ids::kImgUnit + (st.power == kKw ? (unsigned)ids::kUnitKw : st.power == kHp ? (unsigned)ids::kUnitHp
+                                                                                        : psUnit(lang));
 }
 
-// The background (card titles and labels drawn in it) in the HMI's language: Polish or English.
-inline unsigned backgroundFrame(const Metrics& m) { return m.polish() ? ids::kImgBackground : ids::kImgBackgroundEn; }
+// The background (card titles and labels drawn in it) in the HMI's language.
+inline unsigned backgroundFrame(const Metrics& m) {
+    static const unsigned kBg[kLangCount] = { ids::kImgBackground, ids::kImgBackgroundEn };
+    return kBg[m.uiLang()];
+}
 inline unsigned torqueUnitImage(const Settings& st) { return ids::kImgUnit + (st.torque == kLbFt ? ids::kUnitLbFt : ids::kUnitNm); }
 // The fuel unit is its own left-aligned picture: it sits right after the (right-aligned) digits.
 inline unsigned fuelUnitImage(const Settings& st) { return ids::kImgFuelUnit + (st.fuel == kGallon ? 1u : 0u); }
@@ -262,7 +269,7 @@ inline void computeView(const Metrics& m, const Maxima& mx, const Settings& st, 
         const double pmax = showPower(st, mx.v[kGPower]);
         const int end = scaleEnd(mx.has[kGPower], pmax, powerScaleMin(st), kScaleStep);
         gaugeCard(out + kSlotPowerArc, m.hasPower(), showPower(st, m.power()), mx.has[kGPower], pmax, 0, end,
-                  powerUnitImage(st, m.polish()));
+                  powerUnitImage(st, m.uiLang()));
     }
     {
         const double tmax = showTorque(st, mx.v[kGTorque]);

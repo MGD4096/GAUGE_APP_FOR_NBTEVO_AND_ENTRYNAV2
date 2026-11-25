@@ -17,7 +17,12 @@
 using namespace eng::ids;
 
 static int g_fail = 0;
-#define CHECK(c) do { if (!(c)) { printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #c); ++g_fail; } } while (0)
+static const char* g_phase = "start";       // printed with every failure
+#define CHECK(c) do { if (!(c)) { printf("FAIL [%s] %s:%d: %s\n", g_phase, __FILE__, __LINE__, #c); ++g_fail; } } while (0)
+// a == b for integers (frame ids, counts): a failure prints both values.
+#define CHECK_EQ(a, b) do { long long ga_ = (long long)(a), gb_ = (long long)(b); if (ga_ != gb_) { \
+    printf("FAIL [%s] %s:%d: %s == %s (got %lld, want %lld)\n", g_phase, __FILE__, __LINE__, #a, #b, ga_, gb_); \
+    ++g_fail; } } while (0)
 
 struct Info {
     uint16_t a, b;
@@ -100,53 +105,47 @@ static std::string readFile(const std::string& p) {
     return out;
 }
 
-int main(int argc, char** argv) {
-    if (argc < 3) { printf("usage: %s libGaugeApp.so data-dir\n", argv[0]); return 2; }
-    const std::string maxFile = std::string(argv[2]) + "/max.txt";
-    void* h = dlopen(argv[1], RTLD_NOW | RTLD_GLOBAL);
-    if (!h) { printf("dlopen: %s\n", dlerror()); return 1; }
-    Info* info = (Info*)dlsym(h, "pluginAppInfo");
-    if (!info) { printf("no pluginAppInfo\n"); return 1; }
-    printf("pluginAppInfo: %u.%u name=%s vendor=%s rhmi=%u\n", info->a, info->b, info->name, info->vendor, info->rhmi);
-    CHECK(info->a == 1 && info->b == 0 && info->rhmi == 1);
+// What every phase works on. There is one app per process (create() appends to the EntryNav2 crash guard), so the
+// phases run in order on it: each one starts from the state the previous ones left, as on the car.
+struct Ctx {
+    Info* info;
+    bmw::PluginApp* app;
+    std::string dir;                        // data folder = plugin folder of the test build
+};
 
-    char dummy[16];
-    bmw::PluginApp* app = info->create(*(bmw::IDispatcher*)dummy, "GaugeApp", *(bmw::Bundle*)dummy, *(bmw::Bundle*)dummy);
-    if (!app) { printf("create returned NULL\n"); return 1; }
-    CHECK(strcmp(app->name, "GaugeApp") == 0);
-    CHECK(info->create(*(bmw::IDispatcher*)dummy, "GaugeApp", *(bmw::Bundle*)dummy, *(bmw::Bundle*)dummy) == NULL);
-
-    // ---- onInit: the frame pack loaded, background + every slot sent once, nothing known yet; test.png (diagnostics)
-    // sent as picture data too ----
-    const std::string png = std::string(argv[2]) + "/test.png";   // the tests build the plugin folder = data folder
+// the frame packs written, onInit: background + every slot sent once, nothing known yet; test.png (diagnostics) sent as picture data too
+static void phaseOninit(Ctx& c) {
+    const std::string png = c.dir + "/test.png";   // the tests build the plugin folder = data folder
     FILE* pf = fopen(png.c_str(), "wb");
     if (pf) { fputs("\x89PNG fake picture data", pf); fclose(pf); }
-    writeFramePack(std::string(argv[2]) + "/GaugeApp_frames.bin");
-    writeFramePack(std::string(argv[2]) + "/GaugeApp_frames_s.bin", 62000, 72799);   // screens 1..4
-    unlink((std::string(argv[2]) + "/torque-env.txt").c_str());
-    unlink((std::string(argv[2]) + "/fuel-cal.txt").c_str());
+    writeFramePack(c.dir + "/GaugeApp_frames.bin");
+    writeFramePack(c.dir + "/GaugeApp_frames_s.bin", 62000, 72799);   // screens 1..4
+    unlink((c.dir + "/torque-env.txt").c_str());
+    unlink((c.dir + "/fuel-cal.txt").c_str());
     // colour 1: the arc frames again, marked +100000 (no pack for colour 0: everything from the common pack)
-    writeFramePack(std::string(argv[2]) + "/GaugeApp_frames_c1.bin", kImgArc, kImgArc + kArcSteps, 100000);
-    unlink((std::string(argv[2]) + "/GaugeApp_frames_c0.bin").c_str());
-    unlink((std::string(argv[2]) + "/settings.txt").c_str());
-    CHECK(app->onInit());
+    writeFramePack(c.dir + "/GaugeApp_frames_c1.bin", kImgArc, kImgArc + kArcSteps, 100000);
+    unlink((c.dir + "/GaugeApp_frames_c0.bin").c_str());
+    unlink((c.dir + "/settings.txt").c_str());
+    CHECK(c.app->onInit());
     CHECK(g_fake.actions.size() == 6 && g_fake.actions.count(kEntryAction) && g_fake.actions.count(kSettingsAction) && g_fake.actions.count(kSettingsAction + 4));
     CHECK(g_fake.modelText[kSettingsTextModel] == 200 && g_fake.modelText[kSettingsTextModel + 1] == 210 &&
           g_fake.modelText[kSettingsTextModel + 4] == 240);
-    CHECK(g_fake.baseOnInit == 1);
-    CHECK((int)g_fake.modelImage.size() == kSlotCount + 1);
-    CHECK(g_fake.modelImage[kBackgroundModel] == kImgBackground);
+    CHECK_EQ(g_fake.baseOnInit, 1);
+    CHECK_EQ((int)g_fake.modelImage.size(), kSlotCount + 1);
+    CHECK_EQ(g_fake.modelImage[kBackgroundModel], kImgBackground);
     CHECK(g_fake.modelImageBytes[560] == 22 && g_fake.modelImageBytes[561] == 22);
-    CHECK(g_fake.bufferStreamsDestroyed == kSlotCount + 1 + 2);  // every picture sent destroys its bmw::Image by hand
+    CHECK_EQ(g_fake.bufferStreamsDestroyed, kSlotCount + 1 + 2);  // every picture sent destroys its bmw::Image by hand
     unlink(png.c_str());
     CHECK(slot(kSlotCoolantArc) == kImgBlank && slot(kSlotCoolantMark) == kImgBlank);
-    CHECK(slot(kSlotCoolantBig0) == eng::bigGlyph('-', 1));
+    CHECK_EQ(slot(kSlotCoolantBig0), eng::bigGlyph('-', 1));
     CHECK(slot(kSlotGearP) == kImgGear && slot(kSlotGearD) == kImgGear + 6);
     CHECK(g_fake.posted.size() == 1 && g_fake.posted[0].second == 1500);
+}
 
-    // ---- the subscription: six handlers, then the render loop ----
+// one CDS handler per property, then the render loop
+static void phaseSubscription(Ctx& /*c*/) {
     runPosted();
-    CHECK(g_fake.cds.size() == eng::kPropCount);
+    CHECK_EQ(g_fake.cds.size(), eng::kPropCount);
     CHECK(g_fake.cds.count("hmi.graphicalContext") && g_fake.cds.count("engine.consumption") &&
           g_fake.cds.count("driving.steeringWheel"));
     CHECK(g_fake.cds.count("engine.temperature") && g_fake.cds.count("engine.RPMSpeed") &&
@@ -154,16 +153,18 @@ int main(int argc, char** argv) {
           g_fake.cds.count("driving.acceleration") && g_fake.cds.count("driving.speedActual") &&
           g_fake.cds.count("sensors.fuel") && g_fake.cds.count("vehicle.language"));
     CHECK(g_fake.posted.size() == 1 && g_fake.posted[0].second == 200);
+}
 
-    // ---- values arrive, the next tick shows them ----
+// values arrive, the maxima need two samples, only changed slots are written, bad values go back to "--"
+static void phaseEngineValues(Ctx& /*c*/) {
     feed("engine.temperature", "{\"temperature\":{\"engine\":90,\"oil\":104}}");
     feed("engine.RPMSpeed", "{\"RPMSpeed\":3600}");
     feed("engine.torque", "{\"torque\":380}");
     feed("driving.gear", "{\"gear\":6}");
     feed("driving.acceleration", "{\"acceleration\":{\"lateral\":9.81,\"longitudinal\":65535.00}}");
-    CHECK(slot(kSlotCoolantArc) == kImgBlank);                  // nothing before the tick
+    CHECK_EQ(slot(kSlotCoolantArc), kImgBlank);                  // nothing before the tick
     runPosted();
-    CHECK(slot(kSlotCoolantArc) == kImgArc + 30);               // 90 of 50..130
+    CHECK_EQ(slot(kSlotCoolantArc), kImgArc + 30);               // 90 of 50..130
     CHECK(slot(kSlotCoolantBig0) == eng::bigGlyph('9', 1) && slot(kSlotCoolantBig1) == eng::bigGlyph('0', 1));
     CHECK(slot(kSlotOilBig0) == eng::bigGlyph('1', 0) && slot(kSlotOilBig2) == eng::bigGlyph('4', 0));
     CHECK(slot(kSlotTorqueBig0) == eng::bigGlyph('3', 0) && slot(kSlotTorqueBig1) == eng::bigGlyph('8', 0));
@@ -171,62 +172,68 @@ int main(int argc, char** argv) {
           slot(kSlotPowerBig2) == eng::bigGlyph('5', 0));      // 380 Nm * 3600 / 7023.5 = 194.8 KM
     CHECK(slot(kSlotGearD) == kImgGear + 12 && slot(kSlotGearP) == kImgGear);   // 6 = D2
     CHECK(slot(kSlotGBig) == kImgGNum + 100 && slot(kSlotGLat) == kImgLatNum + 100);   // "1,00"
-    CHECK(slot(kSlotGLon) == kImgBlank);                        // 65535 = not available, no speed yet
-    CHECK(slot(kSlotCoolantMark) == kImgBlank);                 // one sample: no maximum yet
-    CHECK(g_fake.posted.size() == 1);
+    CHECK_EQ(slot(kSlotGLon), kImgBlank);                        // 65535 = not available, no speed yet
+    CHECK_EQ(slot(kSlotCoolantMark), kImgBlank);                 // one sample: no maximum yet
+    CHECK_EQ(g_fake.posted.size(), 1);
 
     // ---- a second sample makes the maxima; only changed slots are written ----
     int oilW = writes(kSlotOilBig0);
     feed("engine.temperature", "{\"temperature\":{\"engine\":98,\"oil\":104}}");
     feed("engine.torque", "{\"torque\":400}");
     runPosted();
-    CHECK(slot(kSlotCoolantMark) == kImgMark + 30);             // max = min(90, 98)
+    CHECK_EQ(slot(kSlotCoolantMark), kImgMark + 30);             // max = min(90, 98)
     CHECK(slot(kSlotCoolantMax) == kImgMaxNum + 90 && slot(kSlotOilMax) == kImgMaxNum + 104);
     CHECK(slot(kSlotTorqueMax) == kImgMaxNum + 380 && slot(kSlotTorqueHi) == kImgScaleNum + 400);
-    CHECK(writes(kSlotOilBig0) == oilW);                        // oil unchanged: not rewritten
+    CHECK_EQ(writes(kSlotOilBig0), oilW);                        // oil unchanged: not rewritten
     int w = writes(kSlotCoolantArc);
     runPosted();                                                // nothing new: no writes
-    CHECK(writes(kSlotCoolantArc) == w);
+    CHECK_EQ(writes(kSlotCoolantArc), w);
 
     // ---- bad values go back to "--", the maxima stay ----
     feed("engine.temperature", "{\"error\":400}");
     runPosted();
     CHECK(slot(kSlotCoolantArc) == kImgBlank && slot(kSlotCoolantBig0) == eng::bigGlyph('-', 1));
-    CHECK(slot(kSlotCoolantMark) == kImgMark + 30);
+    CHECK_EQ(slot(kSlotCoolantMark), kImgMark + 30);
+}
 
-    // ---- HMI language: English pictures for EN_US, Polish again for PL ----
+// English pictures for EN_US, Polish again for PL
+static void phaseLanguage(Ctx& /*c*/) {
     int bgWrites = writes(-1);                                  // slot -1 = model 99, the background
     feed("vehicle.language", "{\"language\":3}");
     runPosted();
     CHECK(g_fake.modelImage[kBackgroundModel] == kImgBackgroundEn && writes(-1) == bgWrites + 1);
-    CHECK(slot(kSlotPowerUnit) == kImgUnit + kUnitPs);
+    CHECK_EQ(slot(kSlotPowerUnit), kImgUnit + kUnitPs);
     runPosted();
-    CHECK(writes(-1) == bgWrites + 1);                          // not sent again while it stays English
+    CHECK_EQ(writes(-1), bgWrites + 1);                          // not sent again while it stays English
     feed("vehicle.language", "{\"language\":18}");
     runPosted();
     CHECK(g_fake.modelImage[kBackgroundModel] == kImgBackground && slot(kSlotPowerUnit) == kImgUnit + kUnitKm);
+}
 
-    // ---- fuel next to the gears ----
+// fuel next to the gears
+static void phaseFuel(Ctx& /*c*/) {
     feed("sensors.fuel", "{\"fuel\":{\"range\":522,\"reserve\":0,\"tanklevel\":39}}");
     runPosted();
-    CHECK(slot(kSlotFuel) == kImgFuelNum + 39);
-    CHECK(slot(kSlotFuelUnit) == kImgFuelUnit);
+    CHECK_EQ(slot(kSlotFuel), kImgFuelNum + 39);
+    CHECK_EQ(slot(kSlotFuelUnit), kImgFuelUnit);
+}
 
-    // ---- screens 1..3: written every tick until the car names the screen on display ----
+// screens 1..4 are written every tick until the car names the screen on display; then only that one; the screen on display is remembered
+static void phaseScreens(Ctx& c) {
     CHECK(sslot(1, -1) == kImgScreenBg + 0 && sslot(2, -1) == kImgScreenBg + 2 && sslot(3, -1) == kImgScreenBg + 4);
     feed("driving.acceleratorPedal", "{\"acceleratorPedal\":{\"position\":50,\"ecoPosition\":0}}");
     feed("sensors.fuel", "{\"fuel\":{\"range\":498,\"reserve\":0,\"tanklevel\":39}}");
     runPosted();
     CHECK(sslot(1, kDrvSlotGasPct) == kImgPct + 50 && sslot(1, kDrvSlotGear) == kImgGear2 + 5);   // D2
     CHECK(sslot(2, kFuelSlotRange) == kImgTileInt + 498 && sslot(2, kFuelSlotTank) == kImgTileInt + 39);
-    CHECK(sslot(3, kPerfSlotStatus) == kImgStatus + eng::kPerfNoData);
+    CHECK_EQ(sslot(3, kPerfSlotStatus), kImgStatus + eng::kPerfNoData);
     CHECK(sslot(4, -1) == kImgScreenBg + 6 && sslot(4, kWarmSlotStatus) == kImgWarmStatus + eng::kWarmNoData);
-    CHECK(sslot(4, kWarmSlotRuntime) == kImgTileTime + 0);       // running by the engine speed (3600 above)
+    CHECK_EQ(sslot(4, kWarmSlotRuntime), kImgTileTime + 0);       // running by the engine speed (3600 above)
     feed("engine.status", "{\"status\":2}");
     feed("engine.temperature", "{\"temperature\":{\"engine\":60,\"oil\":50}}");
     feed("sensors.temperatureExterior", "{\"temperatureExterior\":5.0}");
     runPosted();
-    CHECK(sslot(4, kWarmSlotStatus) == kImgWarmStatus + eng::kWarmWarming);
+    CHECK_EQ(sslot(4, kWarmSlotStatus), kImgWarmStatus + eng::kWarmWarming);
     feed("engine.temperature", "{\"temperature\":{\"engine\":90,\"oil\":104}}");
     runPosted();
     CHECK(sslot(4, kWarmSlotStatus) == kImgWarmStatus + eng::kWarmReady && sslot(4, kWarmSlotProgress) == kImgWarmDone);
@@ -236,24 +243,24 @@ int main(int argc, char** argv) {
     feed("driving.speedActual", "{\"speedActual\":0}");
     feed("driving.acceleratorPedal", "{\"acceleratorPedal\":{\"position\":80,\"ecoPosition\":0}}");
     runPosted();
-    CHECK(sslot(1, kDrvSlotGasPct) == kImgPct + 50);              // Driving not on display: not written
+    CHECK_EQ(sslot(1, kDrvSlotGasPct), kImgPct + 50);              // Driving not on display: not written
     feed("driving.speedActual", "{\"speedActual\":0}");
     runPosted();
-    CHECK(sslot(3, kPerfSlotStatus) == kImgStatus + eng::kPerfReady);
+    CHECK_EQ(sslot(3, kPerfSlotStatus), kImgStatus + eng::kPerfReady);
     feed("hmi.graphicalContext", "{\"graphicalContext\":{\"visibleContext\":50,\"menuTitle\":\"Driving\"}}");
     runPosted();
-    CHECK(sslot(1, kDrvSlotGasPct) == kImgPct + 80);              // on display again: brought up to date
+    CHECK_EQ(sslot(1, kDrvSlotGasPct), kImgPct + 80);              // on display again: brought up to date
     // the screen on display is remembered: the entry button opens it (focusEvent 90 + screen)
-    CHECK(readFile(std::string(argv[2]) + "/settings.txt").find("screen=1\n") != std::string::npos);
+    CHECK(readFile(c.dir + "/settings.txt").find("screen=1\n") != std::string::npos);
     entry();
     CHECK(!g_fake.events.empty() && g_fake.events.back() == kScreenEvent0 + 1);
     int engW = writes(kSlotFuel);
     feed("sensors.fuel", "{\"fuel\":{\"range\":498,\"reserve\":0,\"tanklevel\":38}}");
     runPosted();
-    CHECK(writes(kSlotFuel) == engW);                           // the engine screen is not on display
+    CHECK_EQ(writes(kSlotFuel), engW);                           // the engine screen is not on display
     feed("hmi.graphicalContext", "{\"graphicalContext\":{\"visibleContext\":50,\"menuTitle\":\"GAUGE APP\"}}");
     runPosted();
-    CHECK(slot(kSlotFuel) == kImgFuelNum + 38);
+    CHECK_EQ(slot(kSlotFuel), kImgFuelNum + 38);
     // something else on display (radio): nothing is written; an unknown plugin app's state (appType 4): everything
     feed("hmi.graphicalContext", "{\"graphicalContext\":{\"menuTitle\":\"Radio\",\"appType\":\"7\"}}");
     feed("sensors.fuel", "{\"fuel\":{\"range\":498,\"reserve\":0,\"tanklevel\":37}}");
@@ -267,46 +274,55 @@ int main(int argc, char** argv) {
     // engine load needs the envelope: two torque samples in one rpm bin
     feed("engine.torque", "{\"torque\":300}");
     feed("engine.torque", "{\"torque\":320}");
+}
 
-    // ---- settings buttons (OPTION menu): temperature -> Fahrenheit, colour -> 1 ----
+// settings buttons: temperature -> Fahrenheit, colour -> 1; settings.txt on the render tick
+static void phaseSettings(Ctx& c) {
     feed("engine.temperature", "{\"temperature\":{\"engine\":90,\"oil\":100}}");
     runPosted();
     bmw::Parcel parcel;
     bmw::ActionDelegate a = g_fake.actions[kSettingsAction + eng::kSetTemp];
     a.stub(a.object, parcel);
-    CHECK(g_fake.modelText[kSettingsTextModel + eng::kSetTemp] == 211);
-    CHECK(slot(kSlotCoolantUnit) == kImgUnit + kUnitF);
+    CHECK_EQ(g_fake.modelText[kSettingsTextModel + eng::kSetTemp], 211);
+    CHECK_EQ(slot(kSlotCoolantUnit), kImgUnit + kUnitF);
     CHECK(slot(kSlotCoolantBig0) == eng::bigGlyph('1', 0) && slot(kSlotCoolantBig2) == eng::bigGlyph('4', 0));   // 194 F
-    CHECK(slot(kSlotCoolantArc) == kImgArc + 30);
+    CHECK_EQ(slot(kSlotCoolantArc), kImgArc + 30);
     a = g_fake.actions[kSettingsAction + eng::kSetColor];
     a.stub(a.object, parcel);
-    CHECK(g_fake.modelText[kSettingsTextModel] == 201);
-    CHECK(slot(kSlotCoolantArc) == kImgArc + 30 + 100000);     // the arc now comes from the colour-1 pack
-    CHECK(slot(kSlotCoolantBig0) == eng::bigGlyph('1', 0));     // the rest from the common one
-    CHECK(readFile(std::string(argv[2]) + "/settings.txt") == "color=1\ntemp=1\npower=0\ntorque=0\nfuel=0\nscreen=0\n");
+    CHECK_EQ(g_fake.modelText[kSettingsTextModel], 201);
+    CHECK_EQ(slot(kSlotCoolantArc), kImgArc + 30 + 100000);     // the arc now comes from the colour-1 pack
+    CHECK_EQ(slot(kSlotCoolantBig0), eng::bigGlyph('1', 0));     // the rest from the common one
+    // settings.txt is written on the render tick, not inside the action callback (fsync is slow on the unit's flash)
+    CHECK(readFile(c.dir + "/settings.txt").find("color=1") == std::string::npos);
+    runPosted();
+    CHECK(readFile(c.dir + "/settings.txt") == "color=1\ntemp=1\npower=0\ntorque=0\nfuel=0\nscreen=0\n");
+}
 
-    // something else on display (our settings page, the radio): the screen shown last stays remembered
+// the screen shown last stays remembered while something else is on display
+static void phaseEntryButton(Ctx& /*c*/) {
     feed("hmi.graphicalContext", "{\"graphicalContext\":{\"visibleContext\":50,\"menuTitle\":\"Rozgrzewanie\"}}");
     feed("hmi.graphicalContext", "{\"graphicalContext\":{\"visibleContext\":50,\"menuTitle\":\"Ustawienia\"}}");
     entry();
-    CHECK(g_fake.events.back() == kScreenEvent0 + 4);
+    CHECK_EQ(g_fake.events.back(), kScreenEvent0 + 4);
+}
 
-    // ---- finalize writes max.txt (the last run's maxima); a new onInit starts from no maxima, keeps the settings ----
+// finalize writes max.txt and the kept files; a new onInit starts from no maxima and keeps the settings and the last screen
+static void phaseRestart(Ctx& c) {
     bmw::BasicString<char> msg("integration error");
-    app->onError(7, msg);
-    app->onFinalize();
-    CHECK(g_fake.baseOnFinalize == 1);
+    c.app->onError(7, msg);
+    c.app->onFinalize();
+    CHECK_EQ(g_fake.baseOnFinalize, 1);
     runPosted();
     CHECK(g_fake.posted.empty());                               // the render loop stopped
-    std::string saved = readFile(maxFile);
+    std::string saved = readFile(c.dir + "/max.txt");
     printf("max.txt: %s", saved.c_str());
     CHECK(saved.find("coolant=90.0\n") != std::string::npos && saved.find("torque=380.0\n") != std::string::npos);
-    std::string env = readFile(std::string(argv[2]) + "/torque-env.txt");
+    std::string env = readFile(c.dir + "/torque-env.txt");
     CHECK(env.find("env=") == 0 && env.find(",380,") != std::string::npos);   // 3600 rpm bin: min(380, 400) and later
-    CHECK(readFile(std::string(argv[2]) + "/fuel-cal.txt").find("factor=") == 0);
-    CHECK(app->onInit());
+    CHECK(readFile(c.dir + "/fuel-cal.txt").find("factor=") == 0);
+    CHECK(c.app->onInit());
     entry();                                                    // kept over a restart
-    CHECK(g_fake.events.back() == kScreenEvent0 + 4);
+    CHECK_EQ(g_fake.events.back(), kScreenEvent0 + 4);
     CHECK(slot(kSlotCoolantMark) == kImgBlank && slot(kSlotCoolantMax) == kImgBlank);   // maxima reset at start
     // the engine screen is on display from the start: screens 1..4 are not written at all
     int drvBg = g_fake.modelWrites[1099];
@@ -314,12 +330,50 @@ int main(int argc, char** argv) {
     feed("hmi.graphicalContext", "{\"graphicalContext\":{\"visibleContext\":50,\"menuTitle\":\"GAUGE APP\"}}");
     runPosted();
     runPosted();
-    CHECK(g_fake.modelWrites[1099] == drvBg);
+    CHECK_EQ(g_fake.modelWrites[1099], drvBg);
     CHECK(slot(kSlotTorqueMax) == kImgBlank && slot(kSlotTorqueHi) == kImgScaleNum + 250);   // scale back to its minimum
-    CHECK(slot(kSlotCoolantUnit) == kImgUnit + kUnitF);         // settings kept (Fahrenheit)
-    app->onFinalize();
+    CHECK_EQ(slot(kSlotCoolantUnit), kImgUnit + kUnitF);         // settings kept (Fahrenheit)
+}
+
+int main(int argc, char** argv) {
+    if (argc < 3) { printf("usage: %s libGaugeApp.so data-dir\n", argv[0]); return 2; }
+    void* h = dlopen(argv[1], RTLD_NOW | RTLD_GLOBAL);      // RTLD_NOW: every bmw:: import must be in the fake
+    if (!h) { printf("dlopen: %s\n", dlerror()); return 1; }
+    Ctx c;
+    c.dir = argv[2];
+    c.info = (Info*)dlsym(h, "pluginAppInfo");
+    if (!c.info) { printf("no pluginAppInfo\n"); return 1; }
+    printf("pluginAppInfo: %u.%u name=%s vendor=%s rhmi=%u\n", c.info->a, c.info->b, c.info->name, c.info->vendor,
+           c.info->rhmi);
+    CHECK(c.info->a == 1 && c.info->b == 0 && c.info->rhmi == 1);
+    char dummy[16];
+    c.app = c.info->create(*(bmw::IDispatcher*)dummy, "GaugeApp", *(bmw::Bundle*)dummy, *(bmw::Bundle*)dummy);
+    if (!c.app) { printf("create returned NULL\n"); return 1; }
+    CHECK(strcmp(c.app->name, "GaugeApp") == 0);
+    CHECK(c.info->create(*(bmw::IDispatcher*)dummy, "GaugeApp", *(bmw::Bundle*)dummy, *(bmw::Bundle*)dummy) == NULL);
+
+    struct Phase { const char* name; void (*run)(Ctx&); };
+    const Phase phases[] = {
+        { "onInit", &phaseOninit },
+        { "subscription", &phaseSubscription },
+        { "engine values", &phaseEngineValues },
+        { "language", &phaseLanguage },
+        { "fuel", &phaseFuel },
+        { "screens", &phaseScreens },
+        { "settings", &phaseSettings },
+        { "entry button", &phaseEntryButton },
+        { "restart", &phaseRestart },
+    };
+    for (size_t i = 0; i < sizeof(phases) / sizeof(phases[0]); ++i) {
+        g_phase = phases[i].name;
+        int before = g_fail;
+        phases[i].run(c);
+        printf("phase %-14s %s\n", phases[i].name, g_fail == before ? "ok" : "FAILED");
+    }
+    g_phase = "end";
+    c.app->onFinalize();
     runPosted();
-    info->destroy(app);
+    c.info->destroy(c.app);
 
     if (g_fail) { printf("%d check(s) failed\n", g_fail); return 1; }
     printf("app_host_test OK\n");

@@ -4,5 +4,9 @@ tests/build/
 dist/
 diag/
 
+# Python bytecode (make_db.py)
+__pycache__/
+*.pyc
+
 # BMW's framework libraries, copied from the head units (not ours, not redistributable): see README, "Biblioteki BMW"
 lib/
