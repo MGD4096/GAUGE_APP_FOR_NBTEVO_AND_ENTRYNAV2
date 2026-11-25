@@ -51,8 +51,7 @@ copy /y GaugeApp.manifest "%OUT%\" >nul
 copy /y GaugeApp.xml "%OUT%\" >nul
 copy /y GaugeApp_ALL_Texts.zip "%OUT%\" >nul
 copy /y GaugeApp_ALL_Images.zip "%OUT%\" >nul
-copy /y GaugeApp_frames.bin "%OUT%\" >nul
-copy /y GaugeApp_frames_c*.bin "%OUT%\" >nul
+copy /y GaugeApp_frames*.bin "%OUT%\" >nul
 
 echo.
 echo BMW functions the library needs (all must exist in lib\NBT_evo_libs):

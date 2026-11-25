@@ -25,9 +25,10 @@ gotowymi obrazkami całych liczb – jeden element na liczbę. Ekran ma 47 obraz
 Obok biegów jest **ilość paliwa** w zbiorniku (`sensors.fuel`, `tanklevel`).
 
 **Język** dopasowuje się do języka iDrive. Teksty menu i ustawień są w bazie tekstów (`pl.txt` po polsku, pozostałe
-języki po angielsku), którą iDrive wybiera sam. Napisy na samym ekranie (tytuły kart, „bok/wzdł.”, „KM”, przecinek
-dziesiętny) są w obrazkach, więc aplikacja wybiera je według `vehicle.language` z CDS: 18 = polski, każdy inny język
-= angielski („Coolant”, „lat./long.”, „PS”, kropka dziesiętna). Dopóki język nie przyjdzie, ekran jest po polsku.
+języki po angielsku), którą iDrive wybiera sam. Napisy na samym ekranie (tytuły kart, „bok/wzdł.”, „KM”) są
+w obrazkach, więc aplikacja wybiera je według `vehicle.language` z CDS: 18 = polski, każdy inny język = angielski
+(„Coolant”, „lat./long.”, „PS”). Dopóki język nie przyjdzie, ekran jest po polsku. Liczby dziesiętne mają zawsze
+**przecinek**, także po angielsku: osobne zestawy z kropką zajmowały ok. 2,4 MB.
 Podgląd angielski: [`res/preview_en.png`](res/preview_en.png).
 
 **Ustawienia** (klawisz OPTION na ekranie GAUGE APP → Ustawienia; zapis w `<folder danych>/settings.txt`):
@@ -44,6 +45,53 @@ wierszu Bluetooth audio, tam gdzie NbtAad i entry-aad umieszczają „Android Au
 nich, więc obie aplikacje mogą być zainstalowane razem.
 
 **Biegi:** w D auto wysyła w `driving.gear` bieg skrzyni + 4 (sprawdzone na EntryNav2 F40: 5 = D1). 4 to samo „D”.
+
+**Wiedza o jednostce EntryNav2** (system, framework aplikacji, pełna lista CDS z formatami i wynikami skanu):
+[docs/EntryNav2](docs/EntryNav2/README.md).
+
+### Więcej ekranów (OPTION)
+
+Ekran wybiera się w Ustawieniach, tak jak kolor wskaźników: klawisz OPTION na dowolnym ekranie → Ustawienia, na
+górze listy są ekrany (Silnik, Jazda, Spalanie i trasa, Pomiary, Rozgrzewanie), pod kreską ustawienia. Menu OPTION
+ma tylko jedną pozycję aplikacji, „Ustawienia”; pozycje nad nią (np. „Wyłącz pojazd”) dodaje iDrive. Każdy ekran to
+osobny stan HMI z własnym limitem ok. 60 obrazków:
+
+| Ekran | Co pokazuje | Dane CDS |
+|---|---|---|
+| **Silnik** (stan 10) | jak wyżej | |
+| **Jazda** (stan 14), [podgląd](res/preview_driving.png) | gaz i hamulec (paski), przeciążenie z maksimami w 4 kierunkach, kierownica i kąt, obciążenie silnika w %, bieg, podpowiedź zmiany biegu | `acceleratorPedal`, `brakeContact`, `steeringWheel`, `acceleration`, `torque` + `RPMSpeed`, `gear`, `shiftIndicator` |
+| **Spalanie i trasa** (stan 15), [podgląd](res/preview_fuel.png) | spalanie chwilowe (l/100 km i l/h), wykres ostatnich 5 min, średnia tej trasy, średnie z komputera, zasięg, bak, km i czas od startu, zużyte paliwo, styl jazdy | `engine.consumption`, `speedActual`, `averageConsumption`, `averageSpeed`, `sensors.fuel`, `drivingStyle` |
+| **Pomiary** (stan 16), [podgląd](res/preview_performance.png) | 0–100 (ostatni i najlepszy), 60–100, 80–120, 100–0 (m), 1/4 mili, stan, max przeciążenie boczne i hamowania | `speedActual`, `acceleration` |
+| **Rozgrzewanie** (stan 17), [podgląd](res/preview_warmup.png) | olej i płyn na łukach od 0 °C (olej z celem 80 °C i zieloną strefą), stan, pasek postępu, czas pracy silnika, szacowany czas do rozgrzania, temperatura na zewnątrz, wewnątrz i parownika klimatyzacji, akumulator w % | `engine.temperature`, `engine.status`, `RPMSpeed`, `temperatureExterior`, `temperatureInterior`, `ACSystemTemperatures`, `sensors.battery` |
+
+- **Obciążenie silnika** = moment / największy moment widziany przy tych obrotach. Krzywa uczy się w czasie jazdy
+  i zostaje w `<folder danych>/torque-env.txt`. Dopóki przy danych obrotach nie ma co najmniej 60 Nm, karta pokazuje
+  „--”. To zamiennik wskaźnika doładowania: CDS nie podaje ciśnienia doładowania.
+- **Spalanie chwilowe** liczy się z licznika `engine.consumption`. Ten licznik tylko rośnie i przekręca się przy 65536.
+  Jego jednostka nie jest opisana; na start przyjęte jest 1 µl na krok. Prawdziwy współczynnik aplikacja ustala sama
+  z ubytku paliwa w baku: po każdych 8 l bez tankowania, zapis w `<folder danych>/fuel-cal.txt`, w logu „fuel counter
+  calibrated”. Do pierwszej kalibracji spalanie chwilowe i zużyte paliwo mogą się różnić od komputera pokładowego.
+- **Pomiary** korzystają z `driving.speedActual`, czyli całych km/h. Momenty przekroczenia progu są interpolowane
+  między odczytami. 0–100 i 1/4 mili startują od ostatniego odczytu na postoju („Gotowy – ruszaj”), a 60–100 i 80–120
+  mierzą się same przy każdym przyspieszaniu. Dokładność zależy od tego, jak często auto wysyła prędkość.
+- **Odświeżanie tylko widocznego ekranu:** aplikacja czyta tytuł stanu na ekranie (`hmi.graphicalContext`,
+  `menuTitle`, `appType`) i wysyła obrazki tylko do niego. Gdy na ekranie jest coś innego (radio, menu, ustawienia),
+  nie wysyła nic. Wszystkie ekrany odświeża tylko wtedy, gdy tytuł jeszcze nie przyszedł albo gdy widać stan jakiejś
+  wtyczki (`appType` „4”) z nieznanym tytułem. W logu: linie `on screen: '…'`.
+- **Paczki klatek są mapowane (`mmap`), a nie wczytywane do pamięci.** System ładuje tylko strony z wysyłanymi
+  klatkami i może je zwolnić, gdy brakuje pamięci. Paczka ekranów 1–4 (`GaugeApp_frames_s.bin`) jest mapowana
+  dopiero przy pierwszym rysowaniu któregoś z nich; kto używa tylko ekranu Silnik, w ogóle jej nie otwiera.
+- **Olej 0 °C w pierwszym odczycie po starcie** (`{"engine":68,"oil":0}`, czujnik jeszcze nieodczytany) jest
+  traktowany jak brak danych, gdy płyn ma ponad 30 °C.
+- **Rozgrzewanie:** silnik pracuje, gdy `engine.status` = 2 (albo obroty > 400, jeśli auto nie wysyła stanu). Silnik
+  jest rozgrzany, gdy olej osiągnie 80 °C (`kWarmOilTarget`, typowa zasada dla silników BMW). Pasek postępu liczy się
+  od temperatury oleju przy starcie. Czas do rozgrzania jest szacowany z tempa wzrostu temperatury oleju w ostatnich
+  1–5 minutach, więc przez pierwszą minutę pokazuje „--”. Temperatury idą za ustawieniem °C / °F.
+- Nowe ekrany pokazują paliwo w litrach, niezależnie od ustawienia jednostki paliwa.
+- Wszystkie klatki są zapisane jako PNG z paletą (32 kolory dla napisów i liczb, 256 dla reszty), bo są 4–6 razy
+  mniejsze niż RGBA; sprawdzone w aucie. Paczka ma ok. 12 MB: `GaugeApp_frames.bin` ok. 1,4 MB, każda paczka
+  koloru ok. 1 MB, `GaugeApp_frames_s.bin` ok. 6 MB.
+- Na ekranie Rozgrzewanie temperatury i akumulator są na środku kafelków.
 
 ## Jak to działa
 
@@ -138,6 +186,48 @@ python3 make_db.py --screen 800x480   # ekran 6,5" 800x480: osobny układ 760x44
 make check                      # testy hostowe obu wersji (zwykły g++)
 ```
 
+### Biblioteki BMW (`lib/`)
+
+Do zbudowania biblioteki potrzebne są dwa pliki frameworka iDrive: `libAppFramework.A.so` i `libCoreFramework.A.so`.
+To pliki BMW, więc **nie ma ich w repozytorium** (`lib/` jest w `.gitignore`). Trzeba je skopiować z jednostki tego
+samego typu, najlepiej z auta, do którego budujesz (ta sama wersja oprogramowania). Są potrzebne tylko do linkowania;
+do auta trafia wyłącznie `libGaugeApp.so`.
+
+| Jednostka | Ścieżka w jednostce | Folder w projekcie | Rozmiary (F40 / NBT Evo ID5) |
+|---|---|---|---|
+| EntryNav2 | `/opt/hmi/lib/` | `lib\Entry_Evo_libs\` | ok. 40 KB / 72 KB |
+| NBT Evo | `/opt/hmi/ID5/lib/` (na `hu-omap`) | `lib\NBT_evo_libs\` | ok. 52 KB / 95 KB |
+
+**EntryNav2 przez SSH** (to samo połączenie co przy instalacji), w PowerShellu, w folderze projektu:
+
+```powershell
+New-Item -ItemType Directory -Force lib\Entry_Evo_libs
+scp root@169.254.1.0:/opt/hmi/lib/libAppFramework.A.so root@169.254.1.0:/opt/hmi/lib/libCoreFramework.A.so lib\Entry_Evo_libs\
+```
+
+Albo przez pendrive, na jednostce: `cp /opt/hmi/lib/libAppFramework.A.so /opt/hmi/lib/libCoreFramework.A.so
+/media/<pendrive>/` i `sync`.
+
+**NBT Evo** nie ma `scp`. Przez pendrive, na jednostce (logowanie jak w
+[docs/NbtEvo_Installation.md](docs/NbtEvo_Installation.md), potem `on -f /net/hu-omap/ /bin/sh`):
+
+```sh
+cp /opt/hmi/ID5/lib/libAppFramework.A.so /opt/hmi/ID5/lib/libCoreFramework.A.so /fs/usb0/
+```
+
+Albo przez SSH z komputera (Git Bash / WSL, w folderze projektu; `root@CAR` i opcje SSH jak w instrukcji NBT):
+
+```sh
+mkdir -p lib/NBT_evo_libs
+for f in libAppFramework.A.so libCoreFramework.A.so; do
+  ssh root@CAR "cat /net/hu-omap/opt/hmi/ID5/lib/$f" > lib/NBT_evo_libs/$f
+done
+```
+
+Sprawdzenie: oba pliki mają rozmiar podobny do tabeli wyżej (nie 0 bajtów). `make` i `build_entryNav2.bat` same
+przerywają z komunikatem, jeśli plików brakuje. Pliki z innej wersji oprogramowania zwykle też działają (te same
+eksportowane funkcje `bmw::PluginApp`), ale zbudowana biblioteka jest sprawdzona tylko z plikami z F40 (EntryNav2).
+
 **NBT Evo:** QNX SDP 6.5.0 (`qcc`; instaluje się razem z QNX Momentics IDE 4.7) i kopie bibliotek BMW z
 `/opt/hmi/ID5/lib` w `lib/NBT_evo_libs`.
 
@@ -157,12 +247,18 @@ a obiekt `bmw::Image` ma na NBT tę samą budowę co na EntryNav2 (sprawdzone w 
 obraz Dockera z `toolchain/Dockerfile` (Ubuntu 12.04: armhf GCC 4.6 i eglibc 2.15, ta sama wersja co w aucie).
 Nowszy kompilator podlinkowałby funkcje, których auto nie ma (np. `clock_gettime@GLIBC_2.17`).
 
+**Windows:** `build_entryNav2.bat` robi wszystko sam: w razie potrzeby uruchamia Docker Desktop, za pierwszym razem
+buduje obraz kompilatora, buduje paczkę i sprawdza, że biblioteka wymaga tylko `GLIBC_2.4`.
+`build_entryNav2.bat test` najpierw uruchamia testy w WSL (`make check`) i buduje paczkę tylko wtedy, gdy przejdą.
+
+Ręcznie (Linux / WSL):
+
 ```
 docker build -t gauge-entrynav2-tc toolchain        # raz
-bash toolchain/tc-entrynav2.sh make entrynav2-dist  # Windows: docker run --rm -v "%CD%:/work" -w /work gauge-entrynav2-tc make entrynav2-dist
+bash toolchain/tc-entrynav2.sh make entrynav2-dist
 ```
 
-Wynik: `dist/gauge-app-entrynav2.tar` (biblioteka, manifest, XML, dwa zipy, `MD5SUMS`).
+Wynik: `dist/gauge-app-entrynav2.tar` (biblioteka, manifest, XML, dwa zipy, paczki klatek, `MD5SUMS`).
 
 ## Instalacja
 

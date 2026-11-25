@@ -125,6 +125,10 @@ inline int scaleEnd(bool hasMax, double shownMax, int minimum, double step) {
     return e > minimum ? e : minimum;
 }
 
+// Decimal separator of every number picture: the comma, in every HMI language. make_db.py only draws the comma sets
+// (the decimal-point sets, ids + kSepStride / kDecStride / kBigDecStride, were dropped to keep the packs small).
+const bool kDecimalComma = true;
+
 // ---- glyphs -----------------------------------------------------------------------------------------------------------
 inline unsigned glyphIndex(char c) {
     if (c >= '0' && c <= '9') return (unsigned)(c - '0');
@@ -261,7 +265,7 @@ inline void computeView(const Metrics& m, const Maxima& mx, const Settings& st, 
     }
 
     const double lat = m.hasLatG() ? m.latG() : 0, lon = m.hasLonG() ? m.lonG() : 0;
-    const bool comma = m.polish();                       // decimal separator of the HMI language
+    const bool comma = kDecimalComma;
     out[kSlotGBig] = (m.hasLatG() || m.hasLonG()) ? gImage(kImgGNum, sqrt(lat * lat + lon * lon), comma)
                                                   : (unsigned)kImgGNumNone;
     out[kSlotGLat] = m.hasLatG() ? gImage(kImgLatNum, lat, comma) : (unsigned)kImgBlank;

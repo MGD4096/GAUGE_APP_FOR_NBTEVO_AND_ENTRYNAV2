@@ -28,8 +28,26 @@
 
 namespace eng {
 
-// CDS properties the app subscribes to (index = Prop).
-enum Prop { kEngineTemp = 0, kRpm, kTorque, kGear, kAccel, kSpeed, kFuel, kLanguage, kPropCount };
+// CDS properties the app subscribes to (index = Prop). The second row feeds the Driving / Fuel / Performance screens
+// (value layouts from the car's own libhmiremoting.so and a CdsScan run on an EntryNav2 F40):
+//   driving.acceleratorPedal  {"acceleratorPedal":{"position":0,"ecoPosition":0}}   %hu, probably %
+//   driving.brakeContact      {"brakeContact":0}                       0..23 seen standing: brake pressure-like
+//   driving.steeringWheel     {"steeringWheel":{"angle":-3.9,"speed":65535.0,"error":0}}   deg
+//   engine.consumption        {"consumption":30119}   a counter (%hu, wraps at 65536) that only grows: fuel injected
+//   driving.averageConsumption {"averageConsumption":{"averageConsumption1":18.9,...,"unit":1}}   l/100 km (BC)
+//   driving.averageSpeed      {"averageSpeed":{"averageSpeed1":13.8,...}}   km/h (BC)
+//   driving.drivingStyle      {"drivingStyle":{"accelerate":7.5,"brake":7.5,"shift":7.5}}
+//   driving.shiftIndicator    {"shiftIndicator":0}
+//   hmi.graphicalContext      {"graphicalContext":{...,"menuTitle":"CDS SCAN",...}}   title of the state on screen
+// and the Warm-up screen:
+//   sensors.temperatureExterior {"temperatureExterior":5.0}      deg C
+//   sensors.temperatureInterior {"temperatureInterior":10.3}     deg C
+//   climate.ACSystemTemperatures {"ACSystemTemperatures":{"evaporator":6,"heatExchanger":5}}   deg C
+//   sensors.battery           {"battery":97}                     255 first = none; probably % of the 12 V battery
+//   engine.status             {"status":2}                       0 -> 1 -> 2 while starting (2 = running)
+enum Prop { kEngineTemp = 0, kRpm, kTorque, kGear, kAccel, kSpeed, kFuel, kLanguage,
+            kPedal, kBrake, kSteer, kConsumption, kAvgConsumption, kAvgSpeed, kStyle, kShift, kGraphic,
+            kTempExt, kTempInt, kAcTemps, kBattery, kEngineStatus, kPropCount };
 
 const int kLangPolish = 18;          // vehicle.language: the texts drawn into the pictures are Polish for it, else English
 
@@ -43,8 +61,36 @@ inline const char* propName(int p) {
     case kSpeed:      return "driving.speedActual";
     case kFuel:       return "sensors.fuel";
     case kLanguage:   return "vehicle.language";
+    case kPedal:      return "driving.acceleratorPedal";
+    case kBrake:      return "driving.brakeContact";
+    case kSteer:      return "driving.steeringWheel";
+    case kConsumption: return "engine.consumption";
+    case kAvgConsumption: return "driving.averageConsumption";
+    case kAvgSpeed:   return "driving.averageSpeed";
+    case kStyle:      return "driving.drivingStyle";
+    case kShift:      return "driving.shiftIndicator";
+    case kGraphic:    return "hmi.graphicalContext";
+    case kTempExt:    return "sensors.temperatureExterior";
+    case kTempInt:    return "sensors.temperatureInterior";
+    case kAcTemps:    return "climate.ACSystemTemperatures";
+    case kBattery:    return "sensors.battery";
+    case kEngineStatus: return "engine.status";
     }
     return "";
+}
+
+// Text of a string field ("<key>":"text") into out; false when it is missing.
+inline bool strField(const char* text, const char* key, char* out, size_t n) {
+    if (!text || !key || !out || n == 0) return false;
+    char pat[48];
+    snprintf(pat, sizeof(pat), "\"%s\":\"", key);
+    const char* p = strstr(text, pat);
+    if (!p) return false;
+    p += strlen(pat);
+    size_t k = 0;
+    while (*p && *p != '"' && k + 1 < n) out[k++] = *p++;
+    out[k] = 0;
+    return true;
 }
 
 // ---- tuning ---------------------------------------------------------------------------------------------------------
@@ -99,10 +145,28 @@ struct Metrics {
     int    gear;
     int    language;                                 // vehicle.language, 0 = not known yet
     long   speedAtMs;                                // when speed was received
+    // Driving / Fuel / Performance screens
+    bool   hasPedal, hasBrake, hasSteer, hasConsumption, hasAvgConsumption, hasAvgSpeed, hasRange, hasStyle, hasShift;
+    double pedal, brake, steer, avgConsumption, avgSpeed, range, styleAccelerate, styleBrake, styleShift;
+    unsigned consumption;                            // the raw counter (0..65535)
+    int    shift;
+    bool   hasTitle;
+    char   title[48];                                // hmi.graphicalContext menuTitle: which state is on screen
+    char   appType[8];                               // and its appType ("4" seen for plugin apps' states)
+    // Warm-up screen
+    bool   hasTempExt, hasTempInt, hasEvaporator, hasBattery, hasEngineStatus;
+    double tempExt, tempInt, evaporator, battery;
+    int    engineStatus;
     Metrics()
         : hasCoolant(false), hasOil(false), hasRpm(false), hasTorque(false), hasGear(false), hasLat(false),
           hasLon(false), hasSpeed(false), hasLonFromSpeed(false), hasFuel(false), coolant(0), oil(0), rpm(0),
-          torque(0), lat(0), lon(0), speed(0), lonFromSpeed(0), fuel(0), gear(0), language(0), speedAtMs(0) {}
+          torque(0), lat(0), lon(0), speed(0), lonFromSpeed(0), fuel(0), gear(0), language(0), speedAtMs(0),
+          hasPedal(false), hasBrake(false), hasSteer(false), hasConsumption(false), hasAvgConsumption(false),
+          hasAvgSpeed(false), hasRange(false), hasStyle(false), hasShift(false), pedal(0), brake(0), steer(0),
+          avgConsumption(0), avgSpeed(0), range(0), styleAccelerate(0), styleBrake(0), styleShift(0),
+          consumption(0), shift(0), hasTitle(false), hasTempExt(false), hasTempInt(false), hasEvaporator(false),
+          hasBattery(false), hasEngineStatus(false), tempExt(0), tempInt(0), evaporator(0), battery(0),
+          engineStatus(0) { title[0] = 0; appType[0] = 0; }
 
     // Texts in the pictures: Polish until the language is known (the car this was made for), then Polish only for
     // a Polish HMI.
@@ -135,8 +199,13 @@ inline bool apply(Metrics& m, int prop, const char* text, long nowMs) {
     case kEngineTemp: {
         bool a = numField(text, "engine", &v) && inRange(v, -40, 200);
         ch = setValue(m.hasCoolant, m.coolant, a, v) || ch;
+        const double coolant = v;
         v = 0;
         bool b = numField(text, "oil", &v) && inRange(v, -40, 250);
+        // Oil 0 is what the car sends while the oil sensor is not read (EntryNav2 F40: {"engine":68,"oil":0} right
+        // after a start, {"engine":6,"oil":0} with the engine off). Oil and coolant are close when cold and the oil
+        // is warmer when running, so an exact 0 more than 3 deg away from the coolant is that placeholder.
+        if (b && v == 0 && a && fabs(coolant) > 3) b = false;
         ch = setValue(m.hasOil, m.oil, b, v) || ch;
         break;
     }
@@ -191,6 +260,101 @@ inline bool apply(Metrics& m, int prop, const char* text, long nowMs) {
     case kFuel: {
         bool ok = numField(text, "tanklevel", &v) && inRange(v, 0, 200);
         ch = setValue(m.hasFuel, m.fuel, ok, v);
+        v = 0;
+        bool r = numField(text, "range", &v) && inRange(v, 0, 3000);
+        ch = setValue(m.hasRange, m.range, r, v) || ch;
+        break;
+    }
+    case kPedal: {
+        bool ok = numField(text, "position", &v) && inRange(v, 0, 1000);
+        ch = setValue(m.hasPedal, m.pedal, ok, v);
+        break;
+    }
+    case kBrake: {
+        bool ok = numField(text, "brakeContact", &v) && inRange(v, 0, 1000);
+        ch = setValue(m.hasBrake, m.brake, ok, v);
+        break;
+    }
+    case kSteer: {
+        double e = 0;
+        bool err = numField(text, "error", &e) && e != 0;
+        bool ok = !err && numField(text, "angle", &v) && inRange(v, -1000, 1000);
+        ch = setValue(m.hasSteer, m.steer, ok, v);
+        break;
+    }
+    case kConsumption: {
+        bool ok = numField(text, "consumption", &v) && inRange(v, 0, 65535);
+        unsigned c = ok ? (unsigned)v : 0;
+        ch = ok != m.hasConsumption || c != m.consumption;
+        m.hasConsumption = ok;
+        if (ok) m.consumption = c;
+        break;
+    }
+    case kAvgConsumption: {
+        bool ok = numField(text, "averageConsumption1", &v) && inRange(v, 0, 99.9);
+        ch = setValue(m.hasAvgConsumption, m.avgConsumption, ok, v);
+        break;
+    }
+    case kAvgSpeed: {
+        bool ok = numField(text, "averageSpeed1", &v) && inRange(v, 0, 300);
+        ch = setValue(m.hasAvgSpeed, m.avgSpeed, ok, v);
+        break;
+    }
+    case kStyle: {
+        double a = 0, b = 0, s = 0;
+        bool ok = numField(text, "accelerate", &a) && numField(text, "brake", &b) && numField(text, "shift", &s) &&
+                  inRange(a, 0, 100) && inRange(b, 0, 100) && inRange(s, 0, 100);
+        ch = ok != m.hasStyle || (ok && (a != m.styleAccelerate || b != m.styleBrake || s != m.styleShift));
+        m.hasStyle = ok;
+        if (ok) { m.styleAccelerate = a; m.styleBrake = b; m.styleShift = s; }
+        break;
+    }
+    case kShift: {
+        bool ok = numField(text, "shiftIndicator", &v) && inRange(v, 0, 255);
+        int s = ok ? (int)v : 0;
+        ch = ok != m.hasShift || s != m.shift;
+        m.hasShift = ok;
+        m.shift = s;
+        break;
+    }
+    case kGraphic: {
+        char t[sizeof(m.title)];
+        bool ok = strField(text, "menuTitle", t, sizeof(t));
+        if (!ok) break;                              // a context without a title keeps the last one
+        char a[sizeof(m.appType)];
+        if (!strField(text, "appType", a, sizeof(a))) a[0] = 0;
+        ch = !m.hasTitle || strcmp(t, m.title) != 0 || strcmp(a, m.appType) != 0;
+        m.hasTitle = true;
+        memcpy(m.title, t, sizeof(t));
+        memcpy(m.appType, a, sizeof(a));
+        break;
+    }
+    case kTempExt: {
+        bool ok = numField(text, "temperatureExterior", &v) && inRange(v, -60, 90);
+        ch = setValue(m.hasTempExt, m.tempExt, ok, v);
+        break;
+    }
+    case kTempInt: {
+        bool ok = numField(text, "temperatureInterior", &v) && inRange(v, -60, 90);
+        ch = setValue(m.hasTempInt, m.tempInt, ok, v);
+        break;
+    }
+    case kAcTemps: {
+        bool ok = numField(text, "evaporator", &v) && inRange(v, -60, 90);
+        ch = setValue(m.hasEvaporator, m.evaporator, ok, v);
+        break;
+    }
+    case kBattery: {
+        bool ok = numField(text, "battery", &v) && inRange(v, 0, 100);   // 255 = none
+        ch = setValue(m.hasBattery, m.battery, ok, v);
+        break;
+    }
+    case kEngineStatus: {
+        bool ok = numField(text, "status", &v) && inRange(v, 0, 20);
+        int s = ok ? (int)v : 0;
+        ch = ok != m.hasEngineStatus || s != m.engineStatus;
+        m.hasEngineStatus = ok;
+        m.engineStatus = s;
         break;
     }
     case kLanguage: {
@@ -215,6 +379,20 @@ inline bool propValid(const Metrics& m, int prop) {
     case kSpeed:      return m.hasSpeed;
     case kFuel:       return m.hasFuel;
     case kLanguage:   return m.language != 0;
+    case kPedal:      return m.hasPedal;
+    case kBrake:      return m.hasBrake;
+    case kSteer:      return m.hasSteer;
+    case kConsumption: return m.hasConsumption;
+    case kAvgConsumption: return m.hasAvgConsumption;
+    case kAvgSpeed:   return m.hasAvgSpeed;
+    case kStyle:      return m.hasStyle;
+    case kShift:      return m.hasShift;
+    case kGraphic:    return m.hasTitle;
+    case kTempExt:    return m.hasTempExt;
+    case kTempInt:    return m.hasTempInt;
+    case kAcTemps:    return m.hasEvaporator;
+    case kBattery:    return m.hasBattery;
+    case kEngineStatus: return m.hasEngineStatus;
     }
     return false;
 }
