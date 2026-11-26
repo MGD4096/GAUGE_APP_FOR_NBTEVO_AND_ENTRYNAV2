@@ -1,9 +1,9 @@
 @echo off
 rem SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 rem Builds the EntryNav2 packages on Windows, one per screen resolution:
-rem   dist\EntryNav2\800x480\gauge-app-entrynav2.tar
-rem   dist\EntryNav2\1280x480\gauge-app-entrynav2.tar   (EntryNav2 F40: car-verified)
-rem   dist\EntryNav2\1440x540\gauge-app-entrynav2.tar
+rem   dist\EntryNav2\800x480\GaugeApp.tar
+rem   dist\EntryNav2\1280x480\GaugeApp.tar   (EntryNav2 F40: car-verified)
+rem   dist\EntryNav2\1440x540\GaugeApp.tar
 rem ready for the car (install: docs\EntryEvo_Installation.md; pick the folder of the unit's screen). The compiler is
 rem the image of toolchain\Dockerfile (Ubuntu 12.04, armhf GCC 4.6, eglibc 2.15 - the car's C library); it is built
 rem the first time.
@@ -79,9 +79,9 @@ echo.
 echo C library versions the library needs (the car has 2.15; only GLIBC_2.4 expected):
 docker run --rm -v "%CD%:/work" -w /work %IMAGE% sh -c "arm-linux-gnueabihf-objdump -T build/entrynav2/libGaugeApp.so | grep -o 'GLIBC_[0-9.]*' | sort -u"
 echo.
-for /d %%d in (dist\EntryNav2\*) do if exist "%%d\gauge-app-entrynav2.tar" for %%f in ("%%d\gauge-app-entrynav2.tar") do echo [DONE] %%~ff (%%~zf bytes)
+for /d %%d in (dist\EntryNav2\*) do if exist "%%d\GaugeApp.tar" for %%f in ("%%d\GaugeApp.tar") do echo [DONE] %%~ff (%%~zf bytes)
 echo Copy the package of the unit's screen to the car, e.g.:
-echo   scp dist\EntryNav2\1280x480\gauge-app-entrynav2.tar root@169.254.1.0:/tmp/   (then docs\EntryEvo_Installation.md)
+echo   scp dist\EntryNav2\1280x480\GaugeApp.tar root@169.254.1.0:/tmp/   (then docs\EntryEvo_Installation.md)
 exit /b 0
 
 :nolibs

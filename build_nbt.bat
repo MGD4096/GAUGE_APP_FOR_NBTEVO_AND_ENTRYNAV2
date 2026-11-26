@@ -4,8 +4,10 @@ rem Builds the NBT Evo version with the QNX SDP 6.5.0 compiler (installed with Q
 rem puts everything the head unit needs into one folder per screen resolution:
 rem   dist\NBT\1280x480\GaugeApp, dist\NBT\1440x540\GaugeApp   (no 800x480: NBT Evo has no 6.5" screens)
 rem each with libGaugeApp.so (the same for all), GaugeApp.manifest, GaugeApp.xml, the two zips, the frame packs,
-rem install.sh, uninstall.sh and FILES (the same package folder as EntryNav2's). On the unit, on hu-omap:
-rem   cd /tmp/GaugeApp && sh install.sh      (docs\NbtEvo_Installation.md; it does not restart the unit)
+rem install.sh, uninstall.sh and FILES (the same package folder as EntryNav2's), and the same folder as
+rem dist\NBT\<resolution>\GaugeApp.tar (Windows' own tar, ustar format). On the unit, on hu-omap:
+rem   cd /tmp && tar -xf GaugeApp.tar && cd GaugeApp && sh install.sh
+rem (docs\NbtEvo_Installation.md; it does not restart the unit)
 rem
 rem   build_nbt.bat                     (QNX found in C:\QNX650 or already on the PATH)
 rem   build_nbt.bat D:\QNX650           (another QNX folder)
@@ -65,7 +67,8 @@ for %%r in (1440x540) do (
         echo [SKIPPED] %%r - gen\%%r is missing: run python3 make_db.py --all ^(or make gen^) in WSL
     )
 )
-echo Copy the GaugeApp folder of the unit's screen to /tmp on hu-omap and run: cd /tmp/GaugeApp ^&^& sh install.sh
+echo Copy GaugeApp.tar of the unit's screen to /tmp on hu-omap, then there:
+echo   cd /tmp ^&^& rm -rf GaugeApp ^&^& tar -xf GaugeApp.tar ^&^& cd GaugeApp ^&^& sh install.sh
 exit /b 0
 
 rem :pack <resolution> <folder with its XML, zips and frame packs> - like toolchain\pack.sh
@@ -85,7 +88,15 @@ for %%f in ("%OUT%\*") do >>"%OUT%\..\FILES.new" echo %%~zf %%~nxf
 move /y "%OUT%\..\FILES.new" "%OUT%\FILES" >nul
 copy /y package\install.sh "%OUT%\" >nul
 copy /y package\uninstall.sh "%OUT%\" >nul
-echo [DONE] %OUT%
+rem the same folder as a tar that unpacks to GaugeApp\ (like toolchain\pack.sh)
+set TAR=dist\NBT\%~1\GaugeApp.tar
+if exist "%TAR%" del "%TAR%"
+if not exist "%SystemRoot%\System32\tar.exe" (
+    echo [DONE] %OUT% - no tar.exe ^(Windows 10 1803 or later^): copy the folder instead of the tar
+    exit /b 0
+)
+"%SystemRoot%\System32\tar.exe" --format ustar -cf "%TAR%" -C "dist\NBT\%~1" GaugeApp || (echo tar failed & exit /b 1)
+for %%f in ("%TAR%") do echo [DONE] %OUT% and %%~ff (%%~zf bytes)
 exit /b 0
 
 :nolibs

@@ -27,7 +27,7 @@ files=$(cd "$dir" && ls)                            # the plugin files only (bef
 cp package/install.sh package/uninstall.sh "$dir/"
 chmod 755 "$dir/install.sh" "$dir/uninstall.sh"
 if [ -n "$tarname" ]; then
-    tar -cf "$out/$tarname" -C "$out" "$app"
+    tar --format=ustar -cf "$out/$tarname" -C "$out" "$app"      # ustar: read by BusyBox tar and QNX tar / pax
     echo "[DONE] $dir/ and $out/$tarname ($(wc -c < "$out/$tarname") bytes, $(wc -l < "$dir/FILES") plugin files)"
 else
     echo "[DONE] $dir/ ($(wc -l < "$dir/FILES") plugin files)"

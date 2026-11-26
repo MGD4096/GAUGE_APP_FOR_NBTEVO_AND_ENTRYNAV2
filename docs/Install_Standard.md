@@ -12,7 +12,7 @@ The reference implementation is in this repository:
 | [`package/install.sh`](../package/install.sh) | the installer (POSIX `sh`, QNX or Linux by `uname`) |
 | [`package/uninstall.sh`](../package/uninstall.sh) | the uninstaller |
 | [`toolchain/pack.sh`](../toolchain/pack.sh) | builds the package folder and its tar (Linux / Docker) |
-| [`build_nbt.bat`](../build_nbt.bat) (`:pack`) | the same package folder on Windows |
+| [`build_nbt.bat`](../build_nbt.bat) (`:pack`) | the same package folder and tar on Windows |
 | [`tests/install_test.sh`](../tests/install_test.sh) | host test: both scripts on a fake root, as QNX and as Linux |
 
 ## Rules
@@ -51,8 +51,10 @@ The reference implementation is in this repository:
 - `FILES` lists **exactly the files copied into the plugin folder** – not itself, not the scripts. It may have CRLF
   line ends (written on Windows); `install.sh` accepts both. Sizes rather than MD5 sums: the QNX shell may have no
   `md5sum`, while `wc -c` exists everywhere.
-- For EntryNav2 the folder is also shipped as a tar that unpacks to `<App>/`
-  (`tar -cf <app>.tar -C <out> <App>`), so one `scp` and one `tar -xf` in `/tmp` give `/tmp/<App>`.
+- **The package is shipped as `<App>.tar`**, on both units, which unpacks to `<App>/`
+  (`tar --format=ustar -cf <App>.tar -C <out> <App>`; on Windows `tar.exe --format ustar`, built in since
+  Windows 10 1803). One file to copy, one `tar -xf` in `/tmp` gives `/tmp/<App>`. ustar, because BusyBox tar and
+  QNX's tar / `pax` read it. The folder itself is kept beside the tar (`dist/<Unit>/<resolution>/<App>/`).
 - Per screen resolution (if the app has resolution-specific files): one package folder each, in
   `dist/<Unit>/<resolution>/<App>/` (GaugeApp: `dist/EntryNav2/1280x480/GaugeApp/`, `dist/NBT/1440x540/GaugeApp/`).
 
@@ -74,35 +76,44 @@ The reference implementation is in this repository:
 The scripts recognise a wrong place by the HMI's `lib` folder (`/opt/hmi/ID5/lib` / `/opt/hmi/lib`): on NBT Evo's
 `hu-jacinto` it is missing, and `install.sh` says to switch to `hu-omap`.
 
-## Getting the package to `/tmp/<App>` (the only part that differs)
+## Getting `<App>.tar` to `/tmp` (the only part that differs)
 
 **EntryNav2** (SSH over the ENET cable; the unit is `169.254.1.0` in the car this was tested on):
 
 ```sh
-scp <app>.tar root@169.254.1.0:/tmp/          # or: scp -r <App> root@169.254.1.0:/tmp/
+scp <App>.tar root@169.254.1.0:/tmp/
 ssh root@169.254.1.0
-cd /tmp && rm -rf <App> && tar -xf <app>.tar
 ```
 
-**NBT Evo**, USB stick (copy the `<App>` folder to the stick's root; on the unit it is `/fs/usb0/<App>`, or under
-`/mnt/umass…`), in the shell on `hu-omap`:
+**NBT Evo**, USB stick (copy `<App>.tar` to the stick's root; on the unit it is `/fs/usb0/<App>.tar`, or under
+`/mnt/umass…`), in the shell on `hu-omap` (`on -f /net/hu-omap/ /bin/sh`):
 
 ```sh
-rm -rf /tmp/<App> && cp -R /fs/usb0/<App> /tmp/
+cp /fs/usb0/<App>.tar /tmp/
 ```
 
-**NBT Evo** over SSH (no `scp`: one `cat` per file; `/net/hu-omap/fs/ram5` is `/tmp` of `hu-omap`). Many logins in a
-short time shut SSH off for about 10 minutes:
+**NBT Evo** over SSH (no `scp`, so `cat`: one login for the whole tar; `/net/hu-omap/fs/ram5` is `/tmp` of
+`hu-omap`), then log in and switch to `hu-omap`:
 
 ```sh
-ssh root@CAR 'mkdir -p /net/hu-omap/fs/ram5/<App>'
-for f in <App>/*; do ssh root@CAR "cat > /net/hu-omap/fs/ram5/$f" < "$f"; done
+ssh root@CAR 'cat > /net/hu-omap/fs/ram5/<App>.tar' < <App>.tar
+ssh root@CAR
+on -f /net/hu-omap/ /bin/sh
 ```
+
+Then, the same on both units:
+
+```sh
+cd /tmp && rm -rf <App> && tar -xf <App>.tar
+```
+
+If a QNX unit has no `tar`: `pax -r -f <App>.tar` does the same. Without the tar the folder itself works too
+(`scp -r`, `cp -R` from a stick): `install.sh` only needs the folder.
 
 ## Installing, then one restart
 
 ```sh
-cd /tmp/<App> && sh install.sh
+cd /tmp && rm -rf <App> && tar -xf <App>.tar && cd <App> && sh install.sh
 # ... the same for every other app ...
 reboot                                        # EntryNav2; NBT Evo: hold the power button ~30 s
 ```
@@ -149,14 +160,14 @@ folder (after a restart `/tmp` is empty, so copy the folder there again first).
    GUARD=                                        # crash guard file in the data folder, "" = none
    ```
 
-2. Build the package folder: copy and adapt `toolchain/pack.sh` (the list of plugin files), or on Windows the `:pack`
-   routine of `build_nbt.bat`. `FILES` must be written **after** the plugin files are in the folder and **before** the
+2. Build the package folder and its `<App>.tar`: copy and adapt `toolchain/pack.sh` (the list of plugin files), or
+   on Windows the `:pack` routine of `build_nbt.bat`. `FILES` must be written **after** the plugin files are in the folder and **before** the
    scripts are copied in, so it lists only the plugin files.
 3. Copy `tests/install_test.sh` and its line in `tests/Makefile`; adjust the paths and the number of files. It runs
    both scripts against a fake root (`GA_ROOT`) as QNX and as Linux (`GA_SYSTEM`): refusal on the wrong unit, a
    damaged package changing nothing, old files removed, the library executable, the data folder kept, CRLF `FILES`,
    uninstall with and without `--purge`, and that nothing restarts.
-4. Write the app's install guide as: get the folder to `/tmp/<App>` (the unit's way), `sh install.sh`, restart.
+4. Write the app's install guide as: get `<App>.tar` to `/tmp` (the unit's way), `tar -xf`, `sh install.sh`, restart.
 
 Keep the scripts to POSIX `sh` and the tools both units have (`uname`, `dirname`, `wc`, `tr`, `cp`, `rm`, `mkdir`,
 `chmod`, `mount`): NBT Evo runs QNX's `ksh`, EntryNav2 BusyBox `ash`. No `local`, arrays, `[[ ]]`, `md5sum` or

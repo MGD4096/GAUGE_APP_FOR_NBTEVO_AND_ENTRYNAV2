@@ -5,7 +5,7 @@
 #
 #   make                 NBT Evo: libGaugeApp.so and the text/image DBs          (needs qcc, see below)
 #   make entrynav2       EntryNav2: build/entrynav2/libGaugeApp.so               (needs the armhf GCC 4.7, see below)
-#   make entrynav2-dist  EntryNav2: dist/EntryNav2/$(RES)/gauge-app-entrynav2.tar (RES=1280x480 by default)
+#   make entrynav2-dist  EntryNav2: dist/EntryNav2/$(RES)/GaugeApp.tar (RES=1280x480 by default)
 #   make entrynav2-dist-all  the same for every resolution (800x480, 1280x480, 1440x540)
 #   make db              plugin/GaugeApp.xml, src/gauge_ids.hpp and the image / text DBs (python3 + Pillow, make_db.py) for
 #                        1280x480; the same files serve both head units. They are kept in git, so a build needs no
@@ -79,16 +79,16 @@ $(EN2_OUT)/libGaugeApp.so: $(SRC)
 	@echo [DONE] $@ - make entrynav2-dist packs it with the manifest, the XML and the two zips
 
 # dist/EntryNav2/<resolution>/: the package folder GaugeApp/ (plugin, install.sh, uninstall.sh, FILES) and the same as
-# gauge-app-entrynav2.tar (toolchain/pack.sh). On the car: tar -xf in /tmp, then cd /tmp/GaugeApp && sh install.sh
+# GaugeApp.tar (toolchain/pack.sh). On the car: tar -xf in /tmp, then cd /tmp/GaugeApp && sh install.sh
 # (docs/EntryEvo_Installation.md). 1280x480 comes from plugin/, the others from gen/<resolution>.
 res_data = $(if $(filter 1280x480,$(1)),plugin,gen/$(1))
 entrynav2-dist: $(EN2_OUT)/libGaugeApp.so
-	sh toolchain/pack.sh $(EN2_OUT)/libGaugeApp.so $(call res_data,$(RES)) dist/EntryNav2/$(RES) gauge-app-entrynav2.tar
+	sh toolchain/pack.sh $(EN2_OUT)/libGaugeApp.so $(call res_data,$(RES)) dist/EntryNav2/$(RES) GaugeApp.tar
 
 entrynav2-dist-all: $(EN2_OUT)/libGaugeApp.so
 	set -e; for r in $(RESOLUTIONS); do \
 	    if [ $$r = 1280x480 ]; then d=plugin; else d=gen/$$r; fi; \
-	    sh toolchain/pack.sh $(EN2_OUT)/libGaugeApp.so $$d dist/EntryNav2/$$r gauge-app-entrynav2.tar; \
+	    sh toolchain/pack.sh $(EN2_OUT)/libGaugeApp.so $$d dist/EntryNav2/$$r GaugeApp.tar; \
 	done
 
 # Diagnostic package: the same library with the test pages of `python3 make_db.py --diag-out diag` (run that first,
@@ -96,7 +96,7 @@ entrynav2-dist-all: $(EN2_OUT)/libGaugeApp.so
 EN2_DIAG = diag
 entrynav2-diag-dist: $(EN2_OUT)/libGaugeApp.so
 	@test -f $(EN2_DIAG)/GaugeApp.xml || { echo "run python3 make_db.py --diag-out $(EN2_DIAG) first"; exit 1; }
-	sh toolchain/pack.sh $(EN2_OUT)/libGaugeApp.so $(EN2_DIAG) dist/EntryNav2/diag gauge-app-entrynav2-diag.tar
+	sh toolchain/pack.sh $(EN2_OUT)/libGaugeApp.so $(EN2_DIAG) dist/EntryNav2/diag GaugeApp-diag.tar
 
 db:
 	python3 make_db.py
