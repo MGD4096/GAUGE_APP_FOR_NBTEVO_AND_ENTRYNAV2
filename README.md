@@ -1,3 +1,5 @@
+The application is currently in a maintenance phase; I have no ideas for improvements or new features.
+
 # IDRIVE GAUGE APP – iDrive-7-style gauge screens
 
 A native iDrive app for **NBT Evo** (ID5/ID6, QNX) and **EntryNav2** (EntryEVO, Linux). Five screens; the main one,
