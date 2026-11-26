@@ -249,7 +249,8 @@ QNX SDP 6.5.0 (`qcc`; installed with QNX Momentics IDE 4.7) and the BMW librarie
 `lib/NBT_evo_libs`.
 
 - **Windows:** `build_nbt.bat` (or `build_nbt.bat D:\QNX650` if QNX is not in `C:\QNX650`). It calls
-  `qnx650-env.bat`, compiles the library and puts everything the unit needs into `dist\NBT\<resolution>\GaugeApp`:
+  `qnx650-env.bat`, compiles the library and puts the package folder (the app, `install.sh`, `uninstall.sh`,
+  `FILES`) into `dist\NBT\<resolution>\GaugeApp`:
   1280x480, and 1440x540 when it is in `gen/` (`make gen` in WSL).
 - **Linux / the qnx650-docker image:** `make` (`libGaugeApp.so`).
 - **Momentics IDE** (if you prefer a project): *File → New → QNX C/C++ Project*, type *Shared Library*, variant
@@ -281,9 +282,9 @@ make gen                                            # 800x480 and 1440x540 (Pill
 bash toolchain/tc-entrynav2.sh make entrynav2-dist-all
 ```
 
-Result: `dist/EntryNav2/<resolution>/gauge-app-entrynav2.tar` for `800x480`, `1280x480` and `1440x540` (the library –
-the same in all of them, the manifest, the XML, both zips, the frame packs, `MD5SUMS`). One resolution:
-`make entrynav2-dist RES=1440x540`.
+Result: for `800x480`, `1280x480` and `1440x540`, `dist/EntryNav2/<resolution>/GaugeApp/` (the library – the same
+in all of them, the manifest, the XML, both zips, the frame packs, `install.sh`, `uninstall.sh`, `FILES`) and the
+same folder as `gauge-app-entrynav2.tar` (`toolchain/pack.sh`). One resolution: `make entrynav2-dist RES=1440x540`.
 
 ## Install
 
@@ -292,46 +293,23 @@ Step-by-step guides:
 - **EntryNav2:** [docs/EntryEvo_Installation.md](docs/EntryEvo_Installation.md)
 - **NBT Evo:** [docs/NbtEvo_Installation.md](docs/NbtEvo_Installation.md)
 
-### NBT Evo
+Both units get the same package folder `GaugeApp/` (the app, `install.sh`, `uninstall.sh`, `FILES`) and install it
+the same way; only getting the folder to `/tmp/GaugeApp` on the unit differs:
 
-In short – on `hu-omap` (`on -f /net/hu-omap/ /bin/sh`), with the files of `dist\NBT\<resolution>\GaugeApp` on a USB
-stick (`/fs/usb0` or `/mnt/umass…`):
+| | NBT Evo | EntryNav2 |
+|---|---|---|
+| Package | `dist\NBT\<resolution>\GaugeApp` | `dist/EntryNav2/<resolution>/gauge-app-entrynav2.tar` (or the `GaugeApp` folder beside it) |
+| To `/tmp/GaugeApp` | USB stick, then on `hu-omap` (`on -f /net/hu-omap/ /bin/sh`): `cp -R /fs/usb0/GaugeApp /tmp/`; or `ssh … cat` per file | `scp` the tar to `/tmp`, then on the unit: `cd /tmp && tar -xf gauge-app-entrynav2.tar` |
+| Install | `cd /tmp/GaugeApp && sh install.sh` | `cd /tmp/GaugeApp && sh install.sh` |
+| Restart | yourself, when everything is installed: hold the power button about 30 s | yourself, when everything is installed: `reboot` |
 
-```
-/bin/mount -u -o rw /fs/sda0
-mkdir -p /opt/hmi/ID5/data/ro/Plugins/GaugeApp
-cp /fs/usb0/GaugeApp/* /opt/hmi/ID5/data/ro/Plugins/GaugeApp/
-/bin/mount -u -o ro /fs/sda0
-```
-
-Then hold the power button for about 30 s (restart).
-
-### EntryNav2
-
-Over SSH, with the ENET cable, like entry-aad (car standing, ignition on, do not switch off while writing):
-
-```
-scp dist/EntryNav2/1280x480/gauge-app-entrynav2.tar root@169.254.1.0:/tmp/   # the folder of the screen's resolution
-ssh root@169.254.1.0
-cd /tmp && mkdir -p gauge && tar -xf gauge-app-entrynav2.tar -C gauge && cd gauge && md5sum -c MD5SUMS
-LD_TRACE_LOADED_OBJECTS=1 LD_WARN=yes LD_BIND_NOW=yes LD_LIBRARY_PATH=/usr/local/lib:/opt/hmi/lib:/usr/lib:/lib \
-    /lib/ld-linux-armhf.so.3 ./opt/hmi/data/ro/Plugins/GaugeApp/libGaugeApp.so 2>&1 | grep -E 'not found|undefined symbol'
-mount -o remount,rw /
-mkdir -p /opt/hmi/data/ro/Plugins/GaugeApp
-rm -f /opt/hmi/data/ro/Plugins/GaugeApp/*
-cp opt/hmi/data/ro/Plugins/GaugeApp/* /opt/hmi/data/ro/Plugins/GaugeApp/
-chmod 755 /opt/hmi/data/ro/Plugins/GaugeApp/libGaugeApp.so
-sync
-mount -o remount,ro /
-cd / && md5sum -c /tmp/gauge/MD5SUMS && rm -rf /tmp/gauge /tmp/gauge-app-entrynav2.tar
-reboot
-```
-
-- The `LD_TRACE_LOADED_OBJECTS` command must print nothing (each line = a missing library or function).
-- `/var/local/data` is mounted `noexec`, so the library must be on the system partition.
-- `rm -f` before copying: iDrive keeps the old library in memory until the restart.
-
-A **GAUGE APP** row should appear in **ConnectedDrive**.
+`install.sh` (`package/install.sh`, POSIX `sh`, QNX or Linux by `uname`) checks every file against `FILES`, on
+EntryNav2 also every library the app needs, then makes the system partition writable, replaces the old version,
+checks the copy and makes the partition read-only again. It **never restarts anything**, so several apps can be
+installed in a row before one restart. `sh uninstall.sh [--purge]` removes the app (and with `--purge` its data).
+The packaging and install rules are written up for other projects to follow:
+[docs/Install_Standard.md](docs/Install_Standard.md).
+A **GAUGE APP** row appears in **ConnectedDrive** after the restart.
 
 ### Both versions
 
@@ -426,10 +404,12 @@ src/storage.cpp            max.txt, settings.txt, learned files, crash guard
 src/log.cpp                log (file, USB stick, slog), time
 GaugeApp.xml               generated: the menu row and the screens with their pictures
 GaugeApp.manifest          the manifest for CAppManager
-toolchain/                 the Docker image and scripts for the EntryNav2 build and packages
+toolchain/                 the Docker image for the EntryNav2 build, pack.sh (the package folder and tar)
+package/                   install.sh and uninstall.sh: the same for NBT Evo and EntryNav2, put into every package
 tests/                     host tests, the framework mock (both versions), check_abi.sh (imports vs the cars' libraries)
 lib/NBT_evo_libs, lib/Entry_Evo_libs   copies of BMW's libraries from the cars (not part of the project)
-docs/                      install guides; docs/EntryNav2: what we know about the EntryNav2 head unit
+docs/                      install guides, Install_Standard.md (the shared install standard); docs/EntryNav2:
+                           what we know about the EntryNav2 head unit
 ```
 
 ## License and origin

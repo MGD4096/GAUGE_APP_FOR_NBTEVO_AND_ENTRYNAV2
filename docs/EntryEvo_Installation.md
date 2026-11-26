@@ -6,7 +6,7 @@ The system partition is writable only while the files are copied.
 
 > [!CAUTION]
 > Keep the car parked with the ignition on for the whole installation. Do not switch the ignition off while the
-> system is writable (step 3). When in doubt, restarting the head unit makes the system read-only again.
+> system is writable (step 2, while install.sh runs). When in doubt, restarting the head unit makes the system read-only again.
 >
 > Any change to the head unit is at your own risk. The app patches nothing and writes only into its own folders.
 
@@ -16,85 +16,71 @@ The system partition is writable only while the files are copied.
 - A computer with an SSH client (Windows 10/11 has OpenSSH built in, Linux, macOS).
 - An **ENET cable** between the car's OBD socket and the computer. The computer's network card stays on automatic
   addressing.
-- One of the packages from this project's `dist/` folder:
+- One of the packages from this project's `dist/EntryNav2/<resolution>/` folder (`build_entryNav2.bat`). Each
+  holds the package folder `GaugeApp/` (the app, `install.sh`, `uninstall.sh` and `FILES`) and the same folder as a
+  tar:
 
 | Package | When |
 |---|---|
 | `gauge-app-entrynav2.tar` | **The normal version** – GAUGE APP shows the gauge screen at once. |
-| `gauge-app-entrynav2-diag.tar` | Diagnostics only: a menu of test pages (see [below](#diagnostic-version)). |
+| `gauge-app-entrynav2-diag.tar` | Diagnostics only (`dist/EntryNav2/diag/`): a menu of test pages (see [below](#diagnostic-version)). |
 
 **Screen resolution.** There are three packages, one per resolution: `800x480` (6.5" screens), `1280x480`
 (8.8", e.g. F40 – car-verified) and `1440x540` (10.25"). On an EntryNav2, `cat /sys/class/drm/card0-*/modes`
 (over SSH) shows it. 800x480 and 1440x540 are the same look at another scale; not yet tried in a car.
 
-Both packages install the same way. In the commands below the package name is in the variable `P` – use the one you
-install (the examples use the normal version).
+Both packages install the same way, and the same way as on NBT Evo: the package folder goes to `/tmp/GaugeApp` and
+`install.sh` runs there ([the install standard](Install_Standard.md), shared with other apps).
 
 `169.254.1.0` is the head unit's address on the ENET cable in the car this was tested on. If yours differs, change
 it in the commands.
 
 ## 1. Copy the package to the car
 
-On the computer, in the project folder:
+On the computer, in the project folder (the folder of the screen's resolution):
 
 ```sh
-scp dist/EntryNav2/1280x480/gauge-app-entrynav2.tar root@169.254.1.0:/tmp/   # the folder of the screen's resolution
+scp dist/EntryNav2/1280x480/gauge-app-entrynav2.tar root@169.254.1.0:/tmp/
 ssh root@169.254.1.0
 ```
 
-Type all the following commands in this SSH session, on the head unit. `/tmp` is in RAM: nothing is written to
-flash yet.
-
-## 2. Check the package and the head unit
-
-Nothing is changed in this step.
+Type the following commands in this SSH session, on the head unit:
 
 ```sh
-P=gauge-app-entrynav2.tar
-cd /tmp && rm -rf gauge && mkdir gauge && tar -xf $P -C gauge && cd gauge
-md5sum -c MD5SUMS
-df -k /
+cd /tmp && rm -rf GaugeApp && tar -xf gauge-app-entrynav2.tar
 ```
 
-- Every file must answer `OK`.
-- The `Available` column must show at least about 16000 (KB) of free space (the package is about 12.5 MB: the
-  screen frames in four colours and ready-made pictures of numbers).
+(Or copy the folder itself: `scp -r dist/EntryNav2/1280x480/GaugeApp root@169.254.1.0:/tmp/`.) `/tmp` is in RAM:
+nothing is written to flash yet, and it is emptied at the next restart.
 
-Now the system's loader checks that the head unit has every library and function the app needs, without running
-anything:
+## 2. Install
 
 ```sh
-LD_TRACE_LOADED_OBJECTS=1 LD_WARN=yes LD_BIND_NOW=yes LD_LIBRARY_PATH=/usr/local/lib:/opt/hmi/lib:/usr/lib:/lib \
-    /lib/ld-linux-armhf.so.3 ./opt/hmi/data/ro/Plugins/GaugeApp/libGaugeApp.so 2>&1 | grep -E 'not found|undefined symbol'
+cd /tmp/GaugeApp && sh install.sh
 ```
 
-**This command must print nothing.** Every line is a library or function this head unit lacks – in that case do
-not install, and send that line.
+`install.sh` is the same on NBT Evo and EntryNav2. It:
 
-## 3. Install
+1. checks the package: every file listed in `FILES` must be there with its size;
+2. on EntryNav2, asks the system's loader whether the unit has every library and function the app needs (nothing
+   is installed if not);
+3. makes the system partition writable, removes the old version, copies the plugin, makes the library executable,
+   checks the copied files and makes the partition read-only again;
+4. resets the crash guard after an earlier failed version, and keeps the data folder (settings, maxima).
 
-```sh
-mount -o remount,rw /
-mkdir -p /opt/hmi/data/ro/Plugins/GaugeApp
-rm -f /opt/hmi/data/ro/Plugins/GaugeApp/*
-cp opt/hmi/data/ro/Plugins/GaugeApp/* /opt/hmi/data/ro/Plugins/GaugeApp/
-chmod 755 /opt/hmi/data/ro/Plugins/GaugeApp/libGaugeApp.so
-sync
-mount -o remount,ro /
-cd / && md5sum -c /tmp/gauge/MD5SUMS
-```
+It **does not restart anything** – install every app you want first, then restart the head unit yourself. iDrive
+loads its apps only when it starts, so until then the old version (or none) runs. Any error stops it with an
+`install: ERROR:` line and the partition goes back to read-only.
 
-- The `rm -f` before copying is on purpose: iDrive keeps the old library in memory until it restarts, and a file
-  that is deleted and copied anew is never overwritten under a running program.
-- The last `md5sum -c` reads the installed files: each must answer `OK`.
-- If `mount -o remount,ro /` fails, the restart in the next step makes the system read-only anyway.
-- The library must be on the system partition: `/var/local/data` is mounted `noexec`, so iDrive could not load it
-  from there. The app creates its data folder itself when it first starts.
+It ends with `install: installed 11 files into /opt/hmi/data/ro/Plugins/GaugeApp`. The system partition needs about
+16 MB free (`df -k /`); a full partition stops the copy with an error. The library goes to the system partition
+because `/var/local/data` is mounted `noexec`; the app creates its data folder itself when it first starts.
 
-Clean up and restart the head unit:
+## 3. Restart
+
+When everything you install is in place:
 
 ```sh
-rm -rf /tmp/gauge /tmp/gauge-app-entrynav2*.tar
 reboot
 ```
 
@@ -207,8 +193,8 @@ and plug it into the car. The app looks for that file in the folders under `/med
 
 ## Updating and switching versions
 
-Repeat steps 1–3 with the new package (e.g. `gauge-app-entrynav2.tar` after the diagnostics). The data folder stays,
-so the settings are kept.
+Repeat steps 1–3 with the new package (e.g. `gauge-app-entrynav2.tar` after the diagnostics): `install.sh` replaces
+the old version. The data folder stays, so the settings are kept.
 
 ## Maxima
 
@@ -235,7 +221,14 @@ reboot
 
 To switch it on again: `rm -f /var/local/data/GaugeApp/app.disable` and restart.
 
-**Uninstall:**
+**Uninstall:** from the package folder (copied to `/tmp/GaugeApp` as in step 1):
+
+```sh
+cd /tmp/GaugeApp && sh uninstall.sh --purge
+reboot
+```
+
+Without `--purge` the data folder (settings) stays for a later installation. By hand, without the package:
 
 ```sh
 mount -o remount,rw /
@@ -246,15 +239,13 @@ rm -rf /var/local/data/GaugeApp
 reboot
 ```
 
-Without the last `rm -rf /var/local/data/GaugeApp` the settings stay for a later installation.
-
 ## Troubleshooting
 
 | What you see | What to do |
 |---|---|
-| No GAUGE APP row in ConnectedDrive | Check step 3 (`md5sum -c`) and restart the head unit. Then look at the log: if it is empty, iDrive did not load the library. |
+| No GAUGE APP row in ConnectedDrive | Check that `install.sh` ended with `installed 11 files` and that the head unit was restarted afterwards. Then look at the log: if it is empty, iDrive did not load the library. |
 | iDrive restarts several times right after starting | The crash-loop guard switches the app off after 3 iDrive restarts within 2 minutes of loading it, and iDrive carries on without it. After checking the log: `rm -f /var/local/data/GaugeApp/app-guard`, restart. |
-| The GAUGE APP screen is empty | Look for the line `GaugeApp_frames.bin: … frames` in the log – `cannot read …GaugeApp_frames.bin` means the file was not copied (step 3). Then send the log and a photo. |
+| The GAUGE APP screen is empty | Look for the line `GaugeApp_frames.bin: … frames` in the log – `cannot read …GaugeApp_frames.bin` means the file was not copied (run `install.sh` again). Then send the log and a photo. |
 | Part of the screen is empty, the rest works | iDrive shows at most about 60 images in a state. Send a photo – it shows from which element on they are missing. |
 | `--` everywhere | The car sends no data to the app: after 25 s the log shows `no CDS value arrived…`. Send the log. |
 | The system was left writable | `mount -o remount,ro /` or restart the head unit. |

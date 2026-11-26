@@ -47,7 +47,6 @@ EN2_CXXFLAGS  = -std=gnu++98 -O2 -Wall -Wextra -march=armv7-a -mfpu=neon -mfloat
 EN2_LDFLAGS   = -Wl,--allow-shlib-undefined -L$(EN2_LIBDIR) -Wl,-rpath-link,$(EN2_LIBDIR) \
                 -Wl,-rpath-link,$(SYSROOT)/usr/lib:$(SYSROOT)/lib:$(SYSROOT)/usr/local/lib
 EN2_OUT       = build/entrynav2
-EN2_PLUGIN    = opt/hmi/data/ro/Plugins/GaugeApp
 # Screen resolutions (gaugegen/layout.py SCREEN_PRESETS). 1280x480 uses the committed files in the project folder,
 # the others gen/<resolution>. The library is the same for all of them.
 RESOLUTIONS   = 800x480 1280x480 1440x540
@@ -79,27 +78,25 @@ $(EN2_OUT)/libGaugeApp.so: $(SRC)
 	    $(EN2_LDFLAGS) -l:libAppFramework.A.so -l:libCoreFramework.A.so -lpthread -ldl
 	@echo [DONE] $@ - make entrynav2-dist packs it with the manifest, the XML and the two zips
 
-# dist/EntryNav2/<resolution>/gauge-app-entrynav2.tar (toolchain/pack-entrynav2.sh). The archive mirrors the car's file
-# system: unpack it in /tmp on the car and copy opt/ over / (docs/EntryEvo_Installation.md).
+# dist/EntryNav2/<resolution>/: the package folder GaugeApp/ (plugin, install.sh, uninstall.sh, FILES) and the same as
+# gauge-app-entrynav2.tar (toolchain/pack.sh). On the car: tar -xf in /tmp, then cd /tmp/GaugeApp && sh install.sh
+# (docs/EntryEvo_Installation.md). 1280x480 comes from the project folder, the others from gen/<resolution>.
+res_data = $(if $(filter 1280x480,$(1)),.,gen/$(1))
 entrynav2-dist: $(EN2_OUT)/libGaugeApp.so
-	sh toolchain/pack-entrynav2.sh $(EN2_OUT)/libGaugeApp.so $(RES)
+	sh toolchain/pack.sh $(EN2_OUT)/libGaugeApp.so $(call res_data,$(RES)) dist/EntryNav2/$(RES) gauge-app-entrynav2.tar
 
 entrynav2-dist-all: $(EN2_OUT)/libGaugeApp.so
-	for r in $(RESOLUTIONS); do sh toolchain/pack-entrynav2.sh $(EN2_OUT)/libGaugeApp.so $$r || exit 1; done
+	set -e; for r in $(RESOLUTIONS); do \
+	    if [ $$r = 1280x480 ]; then d=.; else d=gen/$$r; fi; \
+	    sh toolchain/pack.sh $(EN2_OUT)/libGaugeApp.so $$d dist/EntryNav2/$$r gauge-app-entrynav2.tar; \
+	done
 
 # Diagnostic package: the same library with the test pages of `python3 make_db.py --diag-out diag` (run that first,
-# it needs Pillow): XML, a 3-image DB, the texts and test.png.
+# it needs Pillow): XML, a 3-image DB, the texts and the test pictures. Installed the same way (install.sh).
 EN2_DIAG = diag
 entrynav2-diag-dist: $(EN2_OUT)/libGaugeApp.so
 	@test -f $(EN2_DIAG)/GaugeApp.xml || { echo "run python3 make_db.py --diag-out $(EN2_DIAG) first"; exit 1; }
-	rm -rf dist/entrynav2-diag
-	mkdir -p dist/entrynav2-diag/$(EN2_PLUGIN)
-	cp $(EN2_OUT)/libGaugeApp.so GaugeApp.manifest $(EN2_DIAG)/GaugeApp.xml $(EN2_DIAG)/GaugeApp_ALL_Texts.zip \
-	    $(EN2_DIAG)/GaugeApp_ALL_Images.zip $(EN2_DIAG)/*.png dist/entrynav2-diag/$(EN2_PLUGIN)/
-	chmod 755 dist/entrynav2-diag/$(EN2_PLUGIN)/libGaugeApp.so
-	cd dist/entrynav2-diag && md5sum $(EN2_PLUGIN)/* > MD5SUMS
-	tar -cf $(CURDIR)/dist/gauge-app-entrynav2-diag.tar -C dist/entrynav2-diag MD5SUMS opt
-	@echo [DONE] dist/gauge-app-entrynav2-diag.tar
+	sh toolchain/pack.sh $(EN2_OUT)/libGaugeApp.so $(EN2_DIAG) dist/EntryNav2/diag gauge-app-entrynav2-diag.tar
 
 db:
 	python3 make_db.py
