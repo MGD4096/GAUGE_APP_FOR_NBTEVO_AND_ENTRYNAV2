@@ -12,7 +12,7 @@ check() { if eval "$2"; then :; else echo "FAIL install_test: $1"; fail=1; fi; }
 rm -rf "$work"
 mkdir -p "$work/lib"
 printf 'fake library' > "$work/lib/libGaugeApp.so"
-sh toolchain/pack.sh "$work/lib/libGaugeApp.so" . "$work/out" test.tar > /dev/null || { echo "FAIL: pack.sh"; exit 1; }
+sh toolchain/pack.sh "$work/lib/libGaugeApp.so" plugin "$work/out" test.tar > /dev/null || { echo "FAIL: pack.sh"; exit 1; }
 pkg=$work/out/GaugeApp
 check "the package has FILES, install.sh, uninstall.sh" '[ -f $pkg/FILES ] && [ -x $pkg/install.sh ] && [ -x $pkg/uninstall.sh ]'
 check "FILES lists the 11 plugin files" '[ $(wc -l < $pkg/FILES) -eq 11 ]'

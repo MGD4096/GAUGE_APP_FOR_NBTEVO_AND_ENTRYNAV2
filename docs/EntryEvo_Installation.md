@@ -37,7 +37,7 @@ it in the commands.
 
 ## 1. Copy the package to the car
 
-On the computer, in the project folder (the folder of the screen's resolution):
+On the computer, in the project folder (pick the folder of the screen's resolution):
 
 ```sh
 scp dist/EntryNav2/1280x480/gauge-app-entrynav2.tar root@169.254.1.0:/tmp/

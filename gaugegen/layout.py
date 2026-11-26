@@ -17,7 +17,7 @@ SCREEN_PRESETS = {
     "1280x480": (1.15, 73, 4, True),               # 1104 x 460 of ~1250 x 470 (EntryNav2 F40, car-verified)
     "1440x540": (1.30, 81, 5, False),              # 1248 x 520 of ~1410 x 530 (10.25" screens)
 }
-DEFAULT_SCREEN = "1280x480"                       # its files are the ones in the project folder (committed)
+DEFAULT_SCREEN = "1280x480"                       # its files are the ones in plugin/ (committed)
 SCALE = SCREEN_PRESETS[DEFAULT_SCREEN][0]
 
 

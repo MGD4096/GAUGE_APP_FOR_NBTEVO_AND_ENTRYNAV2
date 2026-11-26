@@ -182,7 +182,7 @@ The same look (the 960×400 design) is scaled to every resolution the units run 
 The plugin state area at 800x480 and 1440x540 is estimated (as at 1280x480: about 30×10 px less than the panel). If
 the picture is shifted or cut in the car, fix the scale or position in `SCREEN_PRESETS` (or once with `--scale`,
 `--x`, `--y`). The library and the image ids are the same for every resolution; only the XML, the frame packs and the
-zips differ. 1280x480 is in the repository; `python3 make_db.py --all` (or `make gen`) writes the others to
+zips differ. 1280x480 is in the repository (`plugin/`); `python3 make_db.py --all` (or `make gen`) writes the others to
 `gen/<resolution>/`. The HMI also knows 1280x720 and 1920x720, but no unit drives them, so there are no packages for
 them. NBT Evo has no 6.5" screens, so it gets no 800x480 package.
 
@@ -190,12 +190,12 @@ On an EntryNav2, `cat /sys/class/drm/card0-*/modes` (over SSH) shows the resolut
 
 ## Build
 
-The generated files (`GaugeApp.xml`, `src/gauge_ids.hpp`, the frame packs, both zips, `res/preview*.png`) are in the
-repository, so building needs no Pillow. After changing the look:
+The generated files (`plugin/`: `GaugeApp.xml`, the frame packs, both zips; `src/gauge_ids.hpp`, `res/preview*.png`)
+are in the repository, so building needs no Pillow. After changing the look:
 
 ```
 python3 make_db.py              # Pillow + DejaVu Sans (--font file.ttf; --x / --y move the screen)
-python3 make_db.py --all        # every resolution: 1280x480 here, 800x480 and 1440x540 in gen/<resolution>
+python3 make_db.py --all        # every resolution: 1280x480 in plugin/, 800x480 and 1440x540 in gen/<resolution>
 make gen                        # only 800x480 and 1440x540, and only when the generator changed
 make check                      # host tests of both versions (plain g++)
 ```
@@ -386,7 +386,7 @@ not one of `UNITS`.
 ## Project layout
 
 ```
-make_db.py                 generator: GaugeApp.xml, src/gauge_ids.hpp, frame packs, both zips, res/preview*.png
+make_db.py                 generator: plugin/GaugeApp.xml, src/gauge_ids.hpp, frame packs, both zips, res/preview*.png
 gaugegen/                  the generator's modules (layout, texts, ids, drawing, XML, header, packs, previews)
 src/cds_values.hpp         CDS parsing, power, g, maxima, language (pure logic, tested)
 src/drive_stats.hpp        g per direction, engine load, fuel calibration, trip, performance (pure logic)
@@ -402,8 +402,9 @@ src/render.cpp             which pictures changed -> only those are sent; what i
 src/frames.cpp             frame packs (mmap), pictures as data into raImageModels
 src/storage.cpp            max.txt, settings.txt, learned files, crash guard
 src/log.cpp                log (file, USB stick, slog), time
-GaugeApp.xml               generated: the menu row and the screens with their pictures
-GaugeApp.manifest          the manifest for CAppManager
+plugin/                    the plugin's files for 1280x480: GaugeApp.manifest (the manifest for CAppManager) and,
+                           generated, GaugeApp.xml (menu row, screens), both zips, the frame packs
+gen/<resolution>/          generated, git-ignored: the same for 800x480 and 1440x540 (make gen)
 toolchain/                 the Docker image for the EntryNav2 build, pack.sh (the package folder and tar)
 package/                   install.sh and uninstall.sh: the same for NBT Evo and EntryNav2, put into every package
 tests/                     host tests, the framework mock (both versions), check_abi.sh (imports vs the cars' libraries)
