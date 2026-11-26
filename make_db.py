@@ -12,7 +12,7 @@ __init__.py for the modules), for one screen resolution or all of them:
   res/preview*.png           every screen composed with sample values (to check the look on a PC)
 
 Resolutions (gaugegen/layout.py SCREEN_PRESETS): 800x480, 1280x480 (car-verified), 1440x540. The 1280x480 files are
-the ones in the project folder (committed); the others go to gen/<resolution>/ unless --out says otherwise.
+the ones in plugin/ (committed); the others go to gen/<resolution>/ unless --out says otherwise.
 
 Found on an EntryNav2 car (diagnostics 1-3): with all 635 frames in the image DB the HMI showed no image at all (and
 reported onError 9); with a few images every path works. Pictures sent by the app as data (PluginApp::updateModel(model,
@@ -44,9 +44,9 @@ from gaugegen.diag import diag
 
 
 def default_out(screen):
-    """Where a resolution's files go: the project folder for the default one, gen/<resolution> otherwise (git-ignored;
+    """Where a resolution's files go: plugin/ for the default one, gen/<resolution> otherwise (git-ignored;
     not build/, which the Docker toolchain creates as root)."""
-    return HERE if screen == layout.DEFAULT_SCREEN else os.path.join(HERE, "gen", screen)
+    return os.path.join(HERE, "plugin") if screen == layout.DEFAULT_SCREEN else os.path.join(HERE, "gen", screen)
 
 
 def parse_args():
@@ -55,7 +55,7 @@ def parse_args():
     ap.add_argument("--screen", choices=sorted(layout.SCREEN_PRESETS), default=layout.DEFAULT_SCREEN,
                     help="screen resolution (default %s)" % layout.DEFAULT_SCREEN)
     ap.add_argument("--all", action="store_true", help="every resolution, each into its default folder")
-    ap.add_argument("--out", metavar="DIR", help="output folder (default: project folder for %s, gen/<screen> "
+    ap.add_argument("--out", metavar="DIR", help="output folder (default: plugin/ for %s, gen/<screen> "
                                                  "for the others)" % layout.DEFAULT_SCREEN)
     ap.add_argument("--scale", type=float, default=None, help="override the resolution's scale factor")
     ap.add_argument("--x", type=int, default=None)

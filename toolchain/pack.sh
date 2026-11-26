@@ -4,7 +4,7 @@
 # diagnostic pictures), package/install.sh, package/uninstall.sh and FILES (size and name of every plugin file, which
 # install.sh checks), and optionally the same folder as <out>/<tar> (tar -xf in /tmp gives /tmp/GaugeApp).
 #   pack.sh <libGaugeApp.so> <data folder> <out folder> [<tar name>]
-# The data folder is the project folder (1280x480), gen/<resolution> or diag (make_db.py --diag-out).
+# The data folder is plugin/ (1280x480), gen/<resolution> or diag (make_db.py --diag-out).
 set -eu
 lib=$1
 data=$2
@@ -19,7 +19,7 @@ pictures=$(ls "$data"/GaugeApp_frames*.bin "$data"/*.png 2>/dev/null || true)
 dir=$out/$app
 rm -rf "$dir"
 mkdir -p "$dir"
-cp "$lib" GaugeApp.manifest "$data/GaugeApp.xml" "$data/GaugeApp_ALL_Texts.zip" "$data/GaugeApp_ALL_Images.zip" \
+cp "$lib" plugin/GaugeApp.manifest "$data/GaugeApp.xml" "$data/GaugeApp_ALL_Texts.zip" "$data/GaugeApp_ALL_Images.zip" \
     $pictures "$dir/"
 chmod 755 "$dir/libGaugeApp.so"
 files=$(cd "$dir" && ls)                            # the plugin files only (before FILES and the scripts exist)

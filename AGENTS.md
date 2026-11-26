@@ -25,8 +25,7 @@ docs/EntryEvo_Installation.md, docs/NbtEvo_Installation.md (install guides) and 
 | `src/gauge_ids.hpp` | **generated** by `make_db.py` – never edit by hand |
 | `make_db.py` | entry point of the generator (arguments, stages in order); the single source of the look |
 | `gaugegen/` | the generator's modules, each importing only earlier ones: `base`, `layout` (geometry, `SCREEN_PRESETS`: scale and position per resolution, `configure()`), `ids`, `texts` (`TEXTS`, `UI_LANG_DEFS`), `canvas`, `engine`, `screens` (`SCREEN_LIST`), `checks`, `xml_out`, `header_out`, `packs`, `preview`, `diag` (`gaugegen/__init__.py`) |
-| `GaugeApp.xml`, `GaugeApp_ALL_*.zip`, `GaugeApp_frames*.bin`, `res/preview*.png` | **generated**, committed so a build needs no Pillow |
-| `GaugeApp.manifest` | plugin manifest (Etch connector id 211) |
+| `plugin/` | the plugin's files for 1280x480: `GaugeApp.manifest` (Etch connector id 211, hand-written) and the **generated** `GaugeApp.xml`, `GaugeApp_ALL_*.zip`, `GaugeApp_frames*.bin`, committed so a build needs no Pillow (also generated: `res/preview*.png`) |
 | `tests/` | host tests against a fake framework (`fake_appframework.*`); `check_abi.sh` compares the plugin's `bmw::` imports with `lib/*` |
 | `toolchain/` | Docker image for EntryNav2 (Ubuntu 12.04, armhf GCC 4.6, eglibc 2.15) |
 | `package/` | `install.sh` / `uninstall.sh`: one POSIX `sh` installer for both units (QNX or Linux by `uname`); checks `FILES`, installs with the partition writable only meanwhile, **never restarts** (the user installs several apps, then restarts). `toolchain/pack.sh` (EntryNav2) and `build_nbt.bat` build the same `GaugeApp/` package folder; `tests/install_test.sh` runs both scripts on a fake root as QNX and Linux. The rules other projects follow: `docs/Install_Standard.md` – keep it in step when the scripts change; app-specific values only in the block at the top of both scripts |
@@ -42,11 +41,11 @@ Environment: Windows + PowerShell; Linux tools run in WSL (`wsl -e bash script.s
 temp folder rather than inlining long quoted commands). Docker runs from PowerShell (no WSL integration).
 
 - Regenerate after any look / layout / text / id change (needs Pillow + DejaVu Sans, takes a few minutes):
-  `python3 make_db.py` (in WSL). `--layout-only` writes only `GaugeApp.xml` and `src/gauge_ids.hpp` (fast, no Pillow).
+  `python3 make_db.py` (in WSL). `--layout-only` writes only `plugin/GaugeApp.xml` and `src/gauge_ids.hpp` (fast, no Pillow).
 - Host tests (always run before finishing): `make check` (in WSL). Builds both variants with `-std=gnu++98` and runs
   `test_cds_values`, `app_host_test` (NBT + EntryNav2) and the EntryNav2 crash-guard check.
 - Screen resolutions (`gaugegen/layout.py` `SCREEN_PRESETS`: 800x480, 1280x480, 1440x540): one design scaled.
-  1280x480 files are committed in the project folder; `python3 make_db.py --all` / `make gen` (in WSL, Pillow)
+  1280x480 files are committed in `plugin/`; `python3 make_db.py --all` / `make gen` (in WSL, Pillow)
   writes the others to `gen/<resolution>/` (git-ignored; not `build/`, which Docker owns).
 - EntryNav2 packages: `docker run --rm -v "<project>:/work" -w /work gauge-entrynav2-tc make entrynav2-dist-all`
   → `dist/EntryNav2/<resolution>/GaugeApp/` + `gauge-app-entrynav2.tar` (`make entrynav2-dist RES=…` for one;

@@ -7,7 +7,7 @@
 #   make entrynav2       EntryNav2: build/entrynav2/libGaugeApp.so               (needs the armhf GCC 4.7, see below)
 #   make entrynav2-dist  EntryNav2: dist/EntryNav2/$(RES)/gauge-app-entrynav2.tar (RES=1280x480 by default)
 #   make entrynav2-dist-all  the same for every resolution (800x480, 1280x480, 1440x540)
-#   make db              GaugeApp.xml, src/gauge_ids.hpp and the image / text DBs (python3 + Pillow, make_db.py) for
+#   make db              plugin/GaugeApp.xml, src/gauge_ids.hpp and the image / text DBs (python3 + Pillow, make_db.py) for
 #                        1280x480; the same files serve both head units. They are kept in git, so a build needs no
 #                        Pillow.
 #   make gen             the other resolutions into gen/<resolution> (python3 + Pillow; only when make_db.py or
@@ -66,7 +66,7 @@ libGaugeApp.so: $(SRC)
 	@test -n "$(RHMI_LIBS)" || { echo "put libAppFramework.A.so and libCoreFramework.A.so from the car into $(RHMI_LIBDIR) (or set RHMI_LIBDIR)"; exit 1; }
 	@echo [BUILD] $@
 	$(PLUGIN_CXX) $(PLUGIN_CXXFLAGS) -shared -Wl,-soname,libGaugeApp.so -o $@ $(PLUGIN_SRC) $(RHMI_LIBS) -Wl,--allow-shlib-undefined -lang-c++
-	@echo [DONE] $@ - install with GaugeApp.manifest, GaugeApp.xml and the two zips into Plugins/GaugeApp
+	@echo [DONE] $@ - install with plugin/ (manifest, XML, zips, frame packs) into Plugins/GaugeApp
 
 entrynav2: $(EN2_OUT)/libGaugeApp.so
 
@@ -80,14 +80,14 @@ $(EN2_OUT)/libGaugeApp.so: $(SRC)
 
 # dist/EntryNav2/<resolution>/: the package folder GaugeApp/ (plugin, install.sh, uninstall.sh, FILES) and the same as
 # gauge-app-entrynav2.tar (toolchain/pack.sh). On the car: tar -xf in /tmp, then cd /tmp/GaugeApp && sh install.sh
-# (docs/EntryEvo_Installation.md). 1280x480 comes from the project folder, the others from gen/<resolution>.
-res_data = $(if $(filter 1280x480,$(1)),.,gen/$(1))
+# (docs/EntryEvo_Installation.md). 1280x480 comes from plugin/, the others from gen/<resolution>.
+res_data = $(if $(filter 1280x480,$(1)),plugin,gen/$(1))
 entrynav2-dist: $(EN2_OUT)/libGaugeApp.so
 	sh toolchain/pack.sh $(EN2_OUT)/libGaugeApp.so $(call res_data,$(RES)) dist/EntryNav2/$(RES) gauge-app-entrynav2.tar
 
 entrynav2-dist-all: $(EN2_OUT)/libGaugeApp.so
 	set -e; for r in $(RESOLUTIONS); do \
-	    if [ $$r = 1280x480 ]; then d=.; else d=gen/$$r; fi; \
+	    if [ $$r = 1280x480 ]; then d=plugin; else d=gen/$$r; fi; \
 	    sh toolchain/pack.sh $(EN2_OUT)/libGaugeApp.so $$d dist/EntryNav2/$$r gauge-app-entrynav2.tar; \
 	done
 

@@ -57,7 +57,7 @@ echo BMW functions the library needs (all must exist in lib\NBT_evo_libs):
 where ntoarmv7-nm >nul 2>nul && ntoarmv7-nm -D --undefined-only "%LIB%" | findstr bmw
 echo.
 
-call :pack 1280x480 .
+call :pack 1280x480 plugin
 for %%r in (1440x540) do (
     if exist "gen\%%r\GaugeApp_frames.bin" (
         call :pack %%r gen\%%r
@@ -74,7 +74,7 @@ set OUT=dist\NBT\%~1\GaugeApp
 if exist "%OUT%" rmdir /s /q "%OUT%"
 mkdir "%OUT%"
 copy /y "%LIB%" "%OUT%\" >nul
-copy /y GaugeApp.manifest "%OUT%\" >nul
+copy /y plugin\GaugeApp.manifest "%OUT%\" >nul
 copy /y "%~2\GaugeApp.xml" "%OUT%\" >nul
 copy /y "%~2\GaugeApp_ALL_Texts.zip" "%OUT%\" >nul
 copy /y "%~2\GaugeApp_ALL_Images.zip" "%OUT%\" >nul
