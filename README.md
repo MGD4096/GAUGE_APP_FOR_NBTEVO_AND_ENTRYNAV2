@@ -1,8 +1,3 @@
-NBTEVO
-![NBTEvo with running app](/images/20261121_185721.jpg)
-EntryNav2
-![EntryNav2 with running app](/images/20261121_181430.jpg)
-
 # IDRIVE GAUGE APP – iDrive-7-style gauge screens
 
 A native iDrive app for **NBT Evo** (ID5/ID6, QNX) and **EntryNav2** (EntryEVO, Linux). Five screens; the main one,
