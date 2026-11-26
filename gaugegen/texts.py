@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Every text of the app and the UI languages: TEXTS (one complete block per language), UI_LANG_DEFS, the text
-DB's language files. A new language = a TEXTS block + a UiLangDef (README_PL.md, Tlumaczenia)."""
+DB's language files. A new language = a TEXTS block + a UiLangDef (README.md, Translations)."""
 
 from dataclasses import dataclass
 from typing import Tuple

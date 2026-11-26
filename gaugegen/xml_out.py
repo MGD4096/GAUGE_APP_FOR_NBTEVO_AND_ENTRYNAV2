@@ -6,9 +6,6 @@ from .layout import H, W, sc
 from .ids import IMG_ICON, IMG_TEST
 from .texts import SETTING_KEYS, TEXTS, TEXT_SETTINGS_TITLE, TITLE, XML_LANG
 from .screens import SCREEN_LIST
-from . import layout as _layout
-
-_layout.require_configured(__name__)
 
 # ---- more screens: Driving, Fuel and trip, Performance (OPTION menu) ---------------------------------------------------
 # Each is a state of its own (states 14..16): its own background frame (model base + 99) and image slots (model base +

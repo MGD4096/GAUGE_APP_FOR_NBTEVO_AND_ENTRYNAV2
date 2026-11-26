@@ -11,9 +11,6 @@ from .ids import (BDEC_STRIDE, DEC_STRIDE, GLYPHS, IMG_ADEC, IMG_ANGLE, IMG_ARC,
     SEP_STRIDE, STATUS_LANG_STRIDE, TSINT_MIN, engine_background)
 from .texts import TEXTS, UI_LANGS
 from .screens import CHART, WHEEL_STEPS, drv_slots, fuel_slots, perf_slots, warm_slots
-from . import layout as _layout
-
-_layout.require_configured(__name__)
 
 
 def screen_preview(imgs, screen, lang):

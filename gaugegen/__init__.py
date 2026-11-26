@@ -3,7 +3,7 @@
 from the ones before it:
 
   base        Pillow, the project folder, colours, gauge colours, units, menu placement
-  layout      engine screen geometry and the screen presets (configure() first: see there)
+  layout      geometry (design pixels) and the screen resolutions (SCREEN_PRESETS, configure())
   ids         frame ids
   texts       TEXTS (every text, one block per language), UI_LANG_DEFS, the text DB's language files
   canvas      fonts and the supersampled canvas

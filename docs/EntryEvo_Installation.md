@@ -1,51 +1,53 @@
-# GAUGE APP – instalacja na EntryNav2 (EntryEVO)
+# GAUGE APP – installing on EntryNav2 (EntryEVO)
 
-[English version](EntryEvo_Installation_EN.md)
-
-Instalacja odbywa się ręcznie, przez SSH, kilkoma poleceniami. Nic w systemie nie jest zastępowane: dochodzi jeden
-folder z aplikacją (`/opt/hmi/data/ro/Plugins/GaugeApp`) i jeden folder z danymi (`/var/local/data/GaugeApp`).
-Partycja systemowa jest w trybie zapisu tylko na czas kopiowania.
+The installation is done by hand, over SSH, with a few commands. Nothing in the system is replaced: one folder with
+the app is added (`/opt/hmi/data/ro/Plugins/GaugeApp`) and one folder with its data (`/var/local/data/GaugeApp`).
+The system partition is writable only while the files are copied.
 
 > [!CAUTION]
-> Przez całą instalację auto stoi, zapłon jest włączony. Nie wyłączaj zapłonu, gdy system jest w trybie zapisu
-> (krok 3). W razie wątpliwości restart jednostki przywraca system tylko do odczytu.
+> Keep the car parked with the ignition on for the whole installation. Do not switch the ignition off while the
+> system is writable (step 3). When in doubt, restarting the head unit makes the system read-only again.
 >
-> Ingerencja w jednostkę odbywa się na Twoją odpowiedzialność. Aplikacja niczego nie patchuje i zapisuje tylko we
-> własnych folderach.
+> Any change to the head unit is at your own risk. The app patches nothing and writes only into its own folders.
 
-## Potrzebne
+## What you need
 
-- Jednostka **EntryNav2** z dostępem **root przez SSH**.
-- Komputer z klientem SSH (Windows 10/11 ma wbudowany OpenSSH, Linux, macOS).
-- **Kabel ENET** między gniazdem OBD auta a komputerem. Karta sieciowa komputera zostaje na adresie automatycznym.
-- Jedna z paczek z folderu `dist/` tego projektu:
+- An **EntryNav2** head unit with **root access over SSH**.
+- A computer with an SSH client (Windows 10/11 has OpenSSH built in, Linux, macOS).
+- An **ENET cable** between the car's OBD socket and the computer. The computer's network card stays on automatic
+  addressing.
+- One of the packages from this project's `dist/` folder:
 
-| Paczka | Kiedy |
+| Package | When |
 |---|---|
-| `gauge-app-entrynav2.tar` | **Zwykła wersja** – GAUGE APP od razu pokazuje ekran z zegarami. |
-| `gauge-app-entrynav2-diag.tar` | Tylko do diagnostyki: menu ze stronami testowymi (patrz [niżej](#wersja-diagnostyczna)). |
+| `gauge-app-entrynav2.tar` | **The normal version** – GAUGE APP shows the gauge screen at once. |
+| `gauge-app-entrynav2-diag.tar` | Diagnostics only: a menu of test pages (see [below](#diagnostic-version)). |
 
-Obie paczki instaluje się tak samo. W poleceniach niżej nazwa paczki jest w zmiennej `P` – wpisz tę, którą
-instalujesz (przykłady używają zwykłej wersji).
+**Screen resolution.** There are three packages, one per resolution: `800x480` (6.5" screens), `1280x480`
+(8.8", e.g. F40 – car-verified) and `1440x540` (10.25"). On an EntryNav2, `cat /sys/class/drm/card0-*/modes`
+(over SSH) shows it. 800x480 and 1440x540 are the same look at another scale; not yet tried in a car.
 
-`169.254.1.0` to adres jednostki na kablu ENET w aucie, na którym to sprawdzano. Jeśli Twoja ma inny, zmień go w
-poleceniach.
+Both packages install the same way. In the commands below the package name is in the variable `P` – use the one you
+install (the examples use the normal version).
 
-## 1. Skopiuj paczkę do auta
+`169.254.1.0` is the head unit's address on the ENET cable in the car this was tested on. If yours differs, change
+it in the commands.
 
-Na komputerze, w folderze projektu:
+## 1. Copy the package to the car
+
+On the computer, in the project folder:
 
 ```sh
-scp dist/gauge-app-entrynav2.tar root@169.254.1.0:/tmp/
+scp dist/EntryNav2/1280x480/gauge-app-entrynav2.tar root@169.254.1.0:/tmp/   # the folder of the screen's resolution
 ssh root@169.254.1.0
 ```
 
-Wszystkie kolejne polecenia wpisujesz w tej sesji SSH, już na jednostce. `/tmp` jest w pamięci RAM: nic jeszcze nie
-trafia do pamięci flash.
+Type all the following commands in this SSH session, on the head unit. `/tmp` is in RAM: nothing is written to
+flash yet.
 
-## 2. Sprawdź paczkę i jednostkę
+## 2. Check the package and the head unit
 
-W tym kroku nic nie jest zmieniane.
+Nothing is changed in this step.
 
 ```sh
 P=gauge-app-entrynav2.tar
@@ -54,22 +56,22 @@ md5sum -c MD5SUMS
 df -k /
 ```
 
-- Każdy plik musi odpowiedzieć `OK`.
-- W kolumnie `Available` musi być co najmniej ok. 20000 (KB) wolnego miejsca (paczka ma ok. 15 MB: klatki
-  czterech ekranów, w czterech kolorach, i gotowe obrazki liczb). Przy aktualizacji stara wersja zwalnia swoje miejsce.
+- Every file must answer `OK`.
+- The `Available` column must show at least about 16000 (KB) of free space (the package is about 12.5 MB: the
+  screen frames in four colours and ready-made pictures of numbers).
 
-Teraz loader systemu sprawdzi, czy jednostka ma każdą bibliotekę i funkcję, której potrzebuje aplikacja, niczego
-przy tym nie uruchamiając:
+Now the system's loader checks that the head unit has every library and function the app needs, without running
+anything:
 
 ```sh
 LD_TRACE_LOADED_OBJECTS=1 LD_WARN=yes LD_BIND_NOW=yes LD_LIBRARY_PATH=/usr/local/lib:/opt/hmi/lib:/usr/lib:/lib \
     /lib/ld-linux-armhf.so.3 ./opt/hmi/data/ro/Plugins/GaugeApp/libGaugeApp.so 2>&1 | grep -E 'not found|undefined symbol'
 ```
 
-**To polecenie nie może nic wypisać.** Każda linia oznacza bibliotekę albo funkcję, której ta jednostka nie ma – wtedy
-nie instaluj i prześlij tę linię.
+**This command must print nothing.** Every line is a library or function this head unit lacks – in that case do
+not install, and send that line.
 
-## 3. Zainstaluj
+## 3. Install
 
 ```sh
 mount -o remount,rw /
@@ -82,27 +84,27 @@ mount -o remount,ro /
 cd / && md5sum -c /tmp/gauge/MD5SUMS
 ```
 
-- `rm -f` przed kopiowaniem jest celowe: iDrive trzyma starą bibliotekę w pamięci aż do restartu, a plik usunięty i
-  skopiowany na nowo nie jest nadpisywany pod działającym programem.
-- Ostatnie `md5sum -c` czyta zainstalowane pliki: każdy musi odpowiedzieć `OK`.
-- Jeśli `mount -o remount,ro /` się nie uda, restart w następnym kroku i tak przywróci tryb tylko do odczytu.
-- Biblioteka musi leżeć na partycji systemowej: `/var/local/data` jest zamontowany z `noexec`, więc iDrive nie
-  załadowałby jej stamtąd. Folder danych tworzy sama aplikacja przy pierwszym starcie.
+- The `rm -f` before copying is on purpose: iDrive keeps the old library in memory until it restarts, and a file
+  that is deleted and copied anew is never overwritten under a running program.
+- The last `md5sum -c` reads the installed files: each must answer `OK`.
+- If `mount -o remount,ro /` fails, the restart in the next step makes the system read-only anyway.
+- The library must be on the system partition: `/var/local/data` is mounted `noexec`, so iDrive could not load it
+  from there. The app creates its data folder itself when it first starts.
 
-Posprzątaj i zrestartuj jednostkę:
+Clean up and restart the head unit:
 
 ```sh
 rm -rf /tmp/gauge /tmp/gauge-app-entrynav2*.tar
 reboot
 ```
 
-## 4. Pierwsze uruchomienie
+## 4. First start
 
-Po restarcie w menu **ConnectedDrive** powinien być wiersz **GAUGE APP** (`applicationType="OnlineServices"` w
-`GaugeApp.xml`). iDrive czyta aplikacje tylko przy starcie, więc bez restartu wiersza nie będzie.
+After the restart the **ConnectedDrive** menu should have a **GAUGE APP** row (`applicationType="OnlineServices"`
+in `GaugeApp.xml`). iDrive reads its apps only when it starts, so without a restart there is no row.
 
-Wiersz z powrotem w menu **Media** (po Bluetooth audio, jak w starszych wersjach) – na komputerze
-`python3 make_db.py --menu media --layout-only` i nowa paczka, albo od razu w aucie:
+To have the row back in the **Media** menu (after Bluetooth audio, as in older versions): on the computer
+`python3 make_db.py --menu media --layout-only` and a new package, or straight on the car:
 
 ```sh
 mount -o remount,rw /
@@ -112,72 +114,44 @@ mount -o remount,ro /
 reboot
 ```
 
-### Wersja diagnostyczna
+### Normal version
 
-Wyniki diagnostyki w aucie (EntryNav2, F40):
-- **diagnostyka 1** (T1–T5): etykiety działają, obrazki nie – przy bazie 635 obrazków (`onError 9`);
-- **diagnostyka 2** (D1–D6): przy małej bazie działa wszystko – obrazek z bazy, ikona na przycisku, obrazek wysłany
-  przez aplikację jako dane (raImage) i etykiety. Problemem była wielkość bazy obrazków;
-- **diagnostyka 3** (E1–E4): pozycje x/y i nakładanie działają, widoczny obszar to ok. 1250 × 470 px, odświeżanie
-  ok. 4,9 klatki/s działa płynnie, `onError 9` znika.
+GAUGE APP opens the screen: coolant and oil on the left, g-meter in the middle with the gear and fuel tiles under
+it, power and torque on the right, each with its maximum. Until the first data from the car arrives (about 1.5 s),
+the values show `--`.
 
-Dlatego zwykła wersja trzyma klatki w `GaugeApp_frames.bin` i wysyła je jako dane, a baza obrazków ma tylko ikonę.
+At start the log should have these lines:
+- `settings: color=… temp=…` – the settings were read,
+- `GaugeApp_frames.bin: … frames, … bytes` and `GaugeApp_frames_c0.bin: … frames` – the app loaded the screen frames
+  (common ones and those in the chosen colour),
+- `onInit: base onInit -> 1, 47 images written` – the screen was sent to iDrive,
+- **no** `onError 9` (that error came from a too large image DB in older versions).
 
-Paczka `gauge-app-entrynav2-diag.tar` (budowana na żądanie: `python3 make_db.py --diag-out diag`,
-`make entrynav2-diag-dist`) to **diagnostyka 3**:
-GAUGE APP otwiera menu z czterema przyciskami. Wejdź w każdy i zrób zdjęcie **całego ekranu**:
+### Settings (OPTION button)
 
-| Przycisk | Co powinno być widać | Co to sprawdza |
-|---|---|---|
-| **E1** | karta „549 x 484”, na niej w lewym górnym rogu ikona zegara, druga ikona dalej w prawo (ok. 150 px niżej niż góra karty) | czy działają pozycje x/y i nakładanie obrazków (z bazy) |
-| **E2** | to samo co E1 | to samo dla obrazków wysłanych jako dane |
-| **E3** | siatka z liczbami co 100 px i czerwoną ramką, napis „1280 x 560” | jak duży obrazek mieści się na ekranie – z liczb przy krawędziach widać, ile pikseli jest widocznych |
-| **E4** | karta z cyfrą 0–9 i niebieskim prostokątem, które zmieniają się 5 razy na sekundę | czy iDrive nadąża z płynnym odświeżaniem (najlepiej nagraj kilka sekund filmu) |
-
-Prześlij:
-1. zdjęcia stron E1–E4 (przy E3 tak, żeby było widać liczby przy prawej i dolnej krawędzi ekranu), przy E4 krótki film,
-2. log aplikacji (patrz [niżej](#log)) – ważne są linie `diag: …`, zwłaszcza `diag: 50 animation frames in … ms`
-   (pojawiają się, gdy strona E4 jest otwarta przez co najmniej 10 s).
-
-Późniejsze ustalenie: iDrive pokazuje najwyżej ok. 60 obrazków w jednym stanie, dlatego ekran ma ich 47.
-
-### Zwykła wersja
-
-GAUGE APP otwiera ekran: płyn i olej po lewej, przeciążenie w środku z kafelkami biegów i paliwa pod nim, moc
-i moment po prawej, z maksimami.
-Zanim przyjdą pierwsze dane z auta (ok. 1,5 s), w miejscu wartości jest `--`.
-
-W logu przy starcie powinny być linie:
-- `settings: color=… temp=…` – wczytane ustawienia,
-- `GaugeApp_frames.bin: … frames, … bytes` i `GaugeApp_frames_c0.bin: … frames` – aplikacja wczytała klatki ekranu
-  (wspólne i w wybranym kolorze),
-- `onInit: base onInit -> 1, 47 images written` – ekran został wysłany do iDrive,
-- **brak** `onError 9` (ten błąd był skutkiem zbyt dużej bazy obrazków w starszych wersjach).
-
-### Ustawienia (klawisz OPTION)
-
-Na ekranie GAUGE APP naciśnij **OPTION** na kontrolerze iDrive i wybierz **Ustawienia**. Każde naciśnięcie
-przycisku przełącza na następną wartość; zmiana jest od razu widoczna na ekranie i zapisuje się w
+On the GAUGE APP screen press **OPTION** on the iDrive controller and choose **Settings**. Each press of a button
+switches to the next value; the change shows on the screen at once and is saved in
 `/var/local/data/GaugeApp/settings.txt`:
 
-| Przycisk | Wartości |
+| Button | Values |
 |---|---|
-| Kolor wskaznikow | niebieski, czerwony, pomarańczowy BMW, zielony |
-| Temperatura | stopnie Celsjusza, stopnie Fahrenheita |
-| Moc | KM, kW, hp |
-| Moment | Nm, lb-ft |
-| Paliwo | litry, galony (US) |
+| Gauge colour | blue, red, BMW orange, green |
+| Temperature | Celsius, Fahrenheit |
+| Power | PS, kW, hp |
+| Torque | Nm, lb-ft |
+| Fuel | litres, US gallons |
 
-W tym samym pliku jest `screen=` – ostatni wyświetlany ekran (0 Silnik … 4 Rozgrzewanie). Wejście do GAUGE APP
-otwiera ekran, na którym ostatnio byłeś, także po restarcie.
+The same file holds `screen=` – the screen shown last (0 Engine … 4 Warm-up). Opening GAUGE APP goes back to
+the screen you were on last, also after a restart.
 
-Maksima są liczone w jednostkach bazowych (°C, KM, Nm), więc zmiana jednostek ich nie psuje – są tylko inaczej
-pokazane. Paliwo (ilość w zbiorniku) ma własny kafelek obok biegów.
+The maxima are kept in base units (°C, PS, Nm), so changing a unit does not spoil them – they are only shown
+differently. The fuel (amount in the tank) has its own tile next to the gears.
 
-**Język** przełącza się sam razem z językiem iDrive: po polsku przy polskim, po angielsku przy każdym innym (tytuły,
-„PS” zamiast „KM”, kropka dziesiętna). W logu widać to jako `CDS vehicle.language = '{"language":18}'` (18 = polski).
+**The language** follows the iDrive language by itself: Polish for Polish, English for any other language (titles,
+"PS" instead of "KM", decimal point). The log shows it as `CDS vehicle.language = '{"language":18}'` (18 = Polish).
 
-**Jeśli po instalacji zniknie wiersz GAUGE APP** (iDrive nie przyjął menu OPTION): usuń menu OPTION z XML i zrestartuj. Reszta (ekran, paliwo, zapisane ustawienia) działa dalej:
+**If the GAUGE APP row disappears after installing** (iDrive did not accept the OPTION menu): remove the OPTION
+menu from the XML and restart. Everything else (screen, fuel, saved settings) keeps working:
 
 ```sh
 mount -o remount,rw /
@@ -187,8 +161,34 @@ mount -o remount,ro /
 reboot
 ```
 
-Prześlij zdjęcie ekranu na postoju i w czasie jazdy oraz log – posłużą do dopracowania układu, jednostek i
-kierunków przeciążenia.
+### Diagnostic version
+
+Results of the diagnostics on the car (EntryNav2, F40):
+- **diagnostics 1** (T1–T5): labels work, images do not – with a 635-image DB (`onError 9`);
+- **diagnostics 2** (D1–D6): with a small DB everything works – an image from the DB, an icon on a button, a picture
+  sent by the app as data (raImage) and labels. The size of the image DB was the problem;
+- **diagnostics 3** (E1–E4): x/y positions and stacking work, the visible area is about 1250 × 470 px, refreshing
+  at about 4.9 frames/s runs smoothly, `onError 9` is gone.
+
+That is why the normal version keeps its frames in `GaugeApp_frames.bin` and sends them as data, and the image DB
+only holds the icon. A later finding: iDrive shows at most about 60 images in one state, so the screen uses 47.
+
+The package `gauge-app-entrynav2-diag.tar` (built on demand: `python3 make_db.py --diag-out diag`,
+`make entrynav2-diag-dist`) is **diagnostics 3**. GAUGE APP opens a menu with four buttons. Open each and take a
+photo of the **whole screen**:
+
+| Button | What you should see | What it checks |
+|---|---|---|
+| **E1** | a "549 x 484" card with a gauge icon in its top left corner, a second icon further right (about 150 px below the top of the card) | whether x/y positions and stacking of images (from the DB) work |
+| **E2** | the same as E1 | the same for pictures sent as data |
+| **E3** | a grid with numbers every 100 px and a red frame, "1280 x 560" written on it | how large a picture fits on the screen – the numbers at the edges show how many pixels are visible |
+| **E4** | a card with a digit 0–9 and a blue square that change 5 times a second | whether iDrive keeps up with smooth refreshing (best: record a few seconds of video) |
+
+Send:
+1. photos of pages E1–E4 (for E3 so that the numbers at the right and bottom edges of the screen can be read), a
+   short video of E4,
+2. the app's log (see [below](#log)) – the `diag: …` lines matter, especially `diag: 50 animation frames in … ms`
+   (they appear once page E4 has been open for at least 10 s).
 
 ## Log
 
@@ -196,24 +196,24 @@ kierunków przeciążenia.
 cat /var/local/data/GaugeApp/gauge-app.log
 ```
 
-Log jest zawsze włączony i ma limit 512 KB (starszy trafia do `gauge-app.old.log`). Najważniejsze linie:
+The log is always on and limited to 512 KB (the older part goes to `gauge-app.old.log`). The important lines:
 
-- `onInit: base onInit -> 1, 47 images written` – aplikacja wystartowała i ustawiła obrazki;
-- `onError …` – błąd zgłoszony przez iDrive (np. `onError 9`);
-- `CDS <nazwa> = '<wartość>' -> ok` – surowe dane z auta, pierwsze 5 odczytów każdej wartości.
+- `onInit: base onInit -> 1, 47 images written` – the app started and set up its images;
+- `onError …` – an error reported by iDrive (e.g. `onError 9`);
+- `CDS <name> = '<value>' -> ok` – raw data from the car, the first 5 readings of every value.
 
-Log można też zbierać na pendrive: utwórz na komputerze pusty plik `gauge-app.log` w głównym folderze pendrive'a i
-włóż go do auta. Aplikacja szuka tego pliku w folderach pod `/media`, `/mnt` i `/run/media`.
+The log can also go to a USB stick: on the computer create an empty file `gauge-app.log` in the stick's root folder
+and plug it into the car. The app looks for that file in the folders under `/media`, `/mnt` and `/run/media`.
 
-## Aktualizacja i zmiana wersji
+## Updating and switching versions
 
-Powtórz kroki 1–3 z nową paczką (np. po diagnostyce z `gauge-app-entrynav2.tar`). Folder danych zostaje, więc
-ustawienia nie giną.
+Repeat steps 1–3 with the new package (e.g. `gauge-app-entrynav2.tar` after the diagnostics). The data folder stays,
+so the settings are kept.
 
-## Maksima
+## Maxima
 
-Maksima płynu, oleju, mocy i momentu liczą się od zera przy każdym uruchomieniu aplikacji (czyli przy każdym
-starcie iDrive). Maksima z ostatniego przejazdu zostają do wglądu w `/var/local/data/GaugeApp/max.txt`, np.:
+The maxima of coolant, oil, power and torque start from zero every time the app starts (that is, every time iDrive
+starts). Those of the last drive stay in `/var/local/data/GaugeApp/max.txt` to look at, e.g.:
 
 ```
 coolant=98.0
@@ -222,20 +222,20 @@ power=277.6
 torque=419.0
 ```
 
-Przy starcie są też zapisane w logu: `maxima reset (last run: coolant=98.0 oil=93.0 …)`.
+They are also written to the log at start: `maxima reset (last run: coolant=98.0 oil=93.0 …)`.
 
-## Wyłączenie i odinstalowanie
+## Switching off and uninstalling
 
-**Wyłączenie bez usuwania** (aplikacja nie wystartuje przy następnym uruchomieniu iDrive):
+**Switch off without removing** (the app does not start the next time iDrive starts):
 
 ```sh
 touch /var/local/data/GaugeApp/app.disable
 reboot
 ```
 
-Ponowne włączenie: `rm -f /var/local/data/GaugeApp/app.disable` i restart.
+To switch it on again: `rm -f /var/local/data/GaugeApp/app.disable` and restart.
 
-**Odinstalowanie:**
+**Uninstall:**
 
 ```sh
 mount -o remount,rw /
@@ -246,15 +246,16 @@ rm -rf /var/local/data/GaugeApp
 reboot
 ```
 
-Bez ostatniego `rm -rf /var/local/data/GaugeApp` zostaną ustawienia na wypadek ponownej instalacji.
+Without the last `rm -rf /var/local/data/GaugeApp` the settings stay for a later installation.
 
-## W razie problemów
+## Troubleshooting
 
-| Objaw | Co zrobić |
+| What you see | What to do |
 |---|---|
-| Brak wiersza GAUGE APP w ConnectedDrive | Sprawdź krok 3 (`md5sum -c`) i zrestartuj jednostkę. Potem zajrzyj do logu: jeśli jest pusty, iDrive nie załadował biblioteki. |
-| iDrive restartuje się kilka razy zaraz po starcie | Ochrona przed pętlą restartów wyłącza aplikację po 3 restartach iDrive w ciągu 2 minut od jej załadowania, a iDrive startuje dalej bez niej. Po sprawdzeniu logu: `rm -f /var/local/data/GaugeApp/app-guard`, restart. |
-| Ekran GAUGE APP jest pusty | Sprawdź w logu linię `GaugeApp_frames.bin: … frames` – jeśli jest `cannot read …GaugeApp_frames.bin`, plik nie został skopiowany (krok 3). Potem prześlij log i zdjęcie. |
-| Wszędzie `--` | Auto nie wysyła danych do aplikacji: po 25 s w logu będzie `no CDS value arrived…`. Prześlij log. |
-| System został w trybie zapisu | `mount -o remount,ro /` albo restart jednostki. |
-| Ekran iDrive nie reaguje | Przytrzymaj przycisk zasilania iDrive ok. 30 s, żeby zrestartować jednostkę. |
+| No GAUGE APP row in ConnectedDrive | Check step 3 (`md5sum -c`) and restart the head unit. Then look at the log: if it is empty, iDrive did not load the library. |
+| iDrive restarts several times right after starting | The crash-loop guard switches the app off after 3 iDrive restarts within 2 minutes of loading it, and iDrive carries on without it. After checking the log: `rm -f /var/local/data/GaugeApp/app-guard`, restart. |
+| The GAUGE APP screen is empty | Look for the line `GaugeApp_frames.bin: … frames` in the log – `cannot read …GaugeApp_frames.bin` means the file was not copied (step 3). Then send the log and a photo. |
+| Part of the screen is empty, the rest works | iDrive shows at most about 60 images in a state. Send a photo – it shows from which element on they are missing. |
+| `--` everywhere | The car sends no data to the app: after 25 s the log shows `no CDS value arrived…`. Send the log. |
+| The system was left writable | `mount -o remount,ro /` or restart the head unit. |
+| The iDrive screen does not respond | Hold the iDrive power button for about 30 s to restart the head unit. |

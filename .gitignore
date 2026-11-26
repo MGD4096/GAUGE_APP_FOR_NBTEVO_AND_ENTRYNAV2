@@ -10,3 +10,6 @@ __pycache__/
 
 # BMW's framework libraries, copied from the head units (not ours, not redistributable): see README, "Biblioteki BMW"
 lib/
+
+# Screen resolutions other than 1280x480 (python3 make_db.py --all): generated, not committed
+gen/

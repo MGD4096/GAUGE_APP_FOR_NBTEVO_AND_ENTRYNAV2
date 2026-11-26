@@ -14,9 +14,6 @@ from .ids import (ANGLE_MAX, BDEC_STRIDE, DEC_STRIDE, IMG_ADEC, IMG_ANGLE, IMG_B
 from .texts import TEXTS, UI_LANGS
 from .canvas import Canvas, font
 from .engine import number_image
-from . import layout as _layout
-
-_layout.require_configured(__name__)
 
 TILE = dict(w=130, h=40, size=30)                 # tile numbers (white, left aligned)
 BIGN = dict(w=260, h=90, size=80)                 # big numbers (white, centred)

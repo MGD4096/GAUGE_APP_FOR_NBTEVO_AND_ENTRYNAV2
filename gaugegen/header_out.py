@@ -13,9 +13,6 @@ from .ids import (ANGLE_MAX, BDEC_STRIDE, DEC_STRIDE, FUELNUM_MAX, GNUM_MAX, IMG
 from .texts import TEXTS, TITLE, UI_LANGS, UI_LANG_DEFS, UI_LANG_FALLBACK
 from .screens import BAR, CHART, SCREEN_LIST, STYLE, WHEEL_STEPS
 from .xml_out import ENTRY_ACTION, SCREEN_EVENT0, SETTINGS_ACTION0, SETTINGS_TEXTMODEL0
-from . import layout as _layout
-
-_layout.require_configured(__name__)
 
 
 def ui_lang_header():

@@ -90,7 +90,8 @@ and 5 words), copies the data. **There is no exported `~Image`**: call `BufferSt
 - **Components:** `image`, `button` (with `action`; its text is changed with `updateModel(TextID)`), `label`,
   `checkbox`, `separator`.
 - **OPTION:** `optionComponents` with `hmiAction` buttons → another state. The HMI shows entries of its own above
-  them (e.g. "Wyłącz pojazd", or its own "Ustawienia" in some contexts), so an app entry named like one of them looks
+  them (e.g. "Wyłącz pojazd" – switch the car off, or its own "Ustawienia" – Settings – in some contexts; the Polish
+  HMI's labels), so an app entry named like one of them looks
   duplicated. Child states (`parentId`) also show the **parent's** OPTION entries, so an entry repeated in a child
   appears twice: GaugeApp puts "Ustawienia" only in the parent state 10, and its settings page holds the screen
   buttons (`hmiAction` to each screen's state) above the settings.

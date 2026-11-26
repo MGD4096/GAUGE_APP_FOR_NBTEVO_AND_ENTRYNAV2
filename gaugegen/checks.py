@@ -13,9 +13,6 @@ from .ids import (ANGLE_MAX, BDEC_STRIDE, DEC_STRIDE, FUELNUM_MAX, GNUM_MAX, IMG
     WARM_STEPS, engine_background)
 from .texts import LANGS, TEXTS, UI_LANGS, UI_LANG_DEFS, UI_LANG_FALLBACK, XML_LANG
 from .screens import BAR, CHART, SCREEN_LIST, STYLE, WHEEL_STEPS
-from . import layout as _layout
-
-_layout.require_configured(__name__)
 
 
 def check_texts():

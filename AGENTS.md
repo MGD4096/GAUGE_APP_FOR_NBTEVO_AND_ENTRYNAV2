@@ -2,7 +2,8 @@
 
 Guide for coding agents working on **GaugeApp**: a native iDrive PluginApp (gauge screens) for BMW **NBT Evo**
 (QNX 6.5) and **EntryNav2 / EntryEVO** (Linux ARMv7 hard-float), built from one C++98 source. The maintainer writes in
-Polish; README_PL.md and docs/*.md are Polish, README.md is the short English version.
+Polish, but every document in the repository is English: README.md (the full description, install and build),
+docs/EntryEvo_Installation.md, docs/NbtEvo_Installation.md (install guides) and docs/EntryNav2 (what we know about the head unit).
 
 ## Layout
 
@@ -23,14 +24,14 @@ Polish; README_PL.md and docs/*.md are Polish, README.md is the short English ve
 | `src/screens_view.hpp` | screens 1..4 (Driving, Fuel and trip, Performance, Warm-up): frame id of every slot |
 | `src/gauge_ids.hpp` | **generated** by `make_db.py` – never edit by hand |
 | `make_db.py` | entry point of the generator (arguments, stages in order); the single source of the look |
-| `gaugegen/` | the generator's modules, each importing only earlier ones: `base`, `layout` (geometry, presets: `configure()` before importing the others), `ids`, `texts` (`TEXTS`, `UI_LANG_DEFS`), `canvas`, `engine`, `screens` (`SCREEN_LIST`), `checks`, `xml_out`, `header_out`, `packs`, `preview`, `diag` (`gaugegen/__init__.py`) |
+| `gaugegen/` | the generator's modules, each importing only earlier ones: `base`, `layout` (geometry, `SCREEN_PRESETS`: scale and position per resolution, `configure()`), `ids`, `texts` (`TEXTS`, `UI_LANG_DEFS`), `canvas`, `engine`, `screens` (`SCREEN_LIST`), `checks`, `xml_out`, `header_out`, `packs`, `preview`, `diag` (`gaugegen/__init__.py`) |
 | `GaugeApp.xml`, `GaugeApp_ALL_*.zip`, `GaugeApp_frames*.bin`, `res/preview*.png` | **generated**, committed so a build needs no Pillow |
 | `GaugeApp.manifest` | plugin manifest (Etch connector id 211) |
 | `tests/` | host tests against a fake framework (`fake_appframework.*`); `check_abi.sh` compares the plugin's `bmw::` imports with `lib/*` |
 | `toolchain/` | Docker image for EntryNav2 (Ubuntu 12.04, armhf GCC 4.6, eglibc 2.15) |
 | `build_nbt.bat` | NBT Evo build with QNX SDP 6.5 `qcc` on Windows |
 | `build_entryNav2.bat` | EntryNav2 package on Windows: starts Docker Desktop, builds the toolchain image once, `make entrynav2-dist`, GLIBC check; `test` = `make check` in WSL first |
-| `lib/NBT_evo_libs`, `lib/Entry_Evo_libs` | the cars' `libAppFramework.A.so` / `libCoreFramework.A.so` – BMW files, not ours: git-ignored, never commit or redistribute. How to copy them from a unit: README_PL.md, "Biblioteki BMW (`lib/`)" |
+| `lib/NBT_evo_libs`, `lib/Entry_Evo_libs` | the cars' `libAppFramework.A.so` / `libCoreFramework.A.so` – BMW files, not ours: git-ignored, never commit or redistribute. How to copy them from a unit: README.md, "BMW libraries (`lib/`)" |
 | `docs/` | installation guides (Polish) |
 | `.ai/skills/` | agent skills with good practices (C++98, PluginApp ABI, the Python generator, host tests) and the project's known gaps against them – read the matching one before changing that area ([`.ai/README.md`](.ai/README.md)) |
 
@@ -43,12 +44,18 @@ temp folder rather than inlining long quoted commands). Docker runs from PowerSh
   `python3 make_db.py` (in WSL). `--layout-only` writes only `GaugeApp.xml` and `src/gauge_ids.hpp` (fast, no Pillow).
 - Host tests (always run before finishing): `make check` (in WSL). Builds both variants with `-std=gnu++98` and runs
   `test_cds_values`, `app_host_test` (NBT + EntryNav2) and the EntryNav2 crash-guard check.
-- EntryNav2 package: `docker run --rm -v "<project>:/work" -w /work gauge-entrynav2-tc make entrynav2-dist`
-  → `dist/gauge-app-entrynav2.tar`. Check the result only needs `GLIBC_2.4`
+- Screen resolutions (`gaugegen/layout.py` `SCREEN_PRESETS`: 800x480, 1280x480, 1440x540): one design scaled.
+  1280x480 files are committed in the project folder; `python3 make_db.py --all` / `make gen` (in WSL, Pillow)
+  writes the others to `gen/<resolution>/` (git-ignored; not `build/`, which Docker owns).
+- EntryNav2 packages: `docker run --rm -v "<project>:/work" -w /work gauge-entrynav2-tc make entrynav2-dist-all`
+  → `dist/EntryNav2/<resolution>/gauge-app-entrynav2.tar` (`make entrynav2-dist RES=…` for one;
+  `toolchain/pack-entrynav2.sh`). Check the result only needs `GLIBC_2.4`
   (`arm-linux-gnueabihf-objdump -T build/entrynav2/libGaugeApp.so`). Image: `docker build -t gauge-entrynav2-tc toolchain`.
-- Windows shortcut for all of the above: `build_entryNav2.bat test` (tests in WSL, then the package).
-- NBT Evo: `build_nbt.bat [QNX folder]` → `dist\nbt\GaugeApp` (no QNX on the dev PC: untested there).
-- `build/`, `dist/`, `diag/`, `__pycache__/` are git-ignored; Docker may create them as root.
+- Windows shortcut for all of the above: `build_entryNav2.bat test` (tests and `make gen` in WSL, then every
+  package).
+- NBT Evo: `build_nbt.bat [QNX folder]` → `dist\NBT\<resolution>\GaugeApp` for 1280x480 and 1440x540 only (NBT Evo
+  has no 6.5" / 800x480 screens; no QNX on the dev PC: untested there).
+- `build/`, `dist/`, `diag/`, `gen/`, `__pycache__/` are git-ignored; Docker may create them as root.
 - Line endings come from `.gitattributes`: LF everywhere (also in the working tree), `*.bat` CRLF, packs / zips /
   PNGs binary.
 
@@ -68,8 +75,8 @@ temp folder rather than inlining long quoted commands). Docker runs from PowerSh
   `base + lang`, or a generated `[kUiLangCount]` table). Everything per language is **generated**: `gaugegen/texts.py`
   `TEXTS` (one complete block per language) and `UI_LANG_DEFS` (vehicle.language values, text DB files) produce the
   enum `UiLang` (`kLangPl`, `kLangEn`, …), `uiLangForVehicle`, `kScreenTitles`, `kEngineBackground` and `kPsUnit` in
-  `gauge_ids.hpp`. C++ never names a language. A new language = a `TEXTS` block + a `UiLangDef` (README_PL,
-  "Tłumaczenia"); `check_texts()` rejects missing keys, other list lengths and non-ASCII text DB texts.
+  `gauge_ids.hpp`. C++ never names a language. A new language = a `TEXTS` block + a `UiLangDef` (README.md,
+  "Translations"); `check_texts()` rejects missing keys, other list lengths and non-ASCII text DB texts.
 - **Pictures are sent as data**, not from the image DB: a large image DB made the EntryNav2 HMI show no images at all
   (onError 9). Frames live in `GaugeApp_frames*.bin` (`"GFR1"`, u32 count, sorted `(id, offset, size)` table, PNGs,
   little endian) and are sent with `PluginApp::updateModel(model, bmw::Image)` into `raImageModel`s. `bmw::Image` has no
@@ -84,7 +91,8 @@ temp folder rather than inlining long quoted commands). Docker runs from PowerSh
 - `make_db.py` refuses to write when the XML has a duplicate id, a dangling reference, more than 60 images in a
   state or non-ASCII text, or when image id ranges overlap (`gaugegen/checks.py` `image_ranges()`: add a new frame
   family there first).
-- Visible area ≈ 1250×470 px; the 960×400 design is scaled by `SCALE` 1.15 and placed at `ORIGIN`. ~5 updates/s is fine;
+- Visible area ≈ 1250×470 px at 1280x480; the 960×400 design is scaled by the resolution's `SCALE` (1.15) and placed
+  at its (ox, oy) (`SCREEN_PRESETS`; 800x480 and 1440x540 are estimates, not car-verified). ~5 updates/s is fine;
   only changed slots are sent.
 - Texts in the text DB must stay **ASCII** (Polish without diacritics); texts drawn into pictures may use diacritics.
 - XML ids (models, components, actions, states) must be globally unique; screen k uses models `1000k+99` (background)
@@ -131,6 +139,6 @@ disable the app), `app.disable` (off switch). A `gauge-app.log` file on a USB st
   `render.cpp`, log in `log.cpp`); only what several modules read or write goes into `AppState`.
 - Nothing in this repo has been confirmed on NBT Evo hardware; EntryNav2 behaviour is what the car showed. Say which
   parts are untested when reporting.
-- Update README_PL.md (full) / README.md (short) and `docs/` when install steps, files or sizes change.
+- Update README.md and `docs/` (English) when install steps, files or sizes change.
 - Never commit BMW libraries, firmware dumps, car logs or `cds-scan.txt` (personal data: contacts, GPS, VIN).
 - License: PolyForm Noncommercial 1.0.0 (patterns from NbtAad / entry-aad).

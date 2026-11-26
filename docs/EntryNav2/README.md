@@ -7,8 +7,7 @@ What was found out about the EntryNav2 (EntryEVO) head unit in a BMW F40 while w
   screen XML, limits checked in the car, good practice).
 - [CDS.md](CDS.md): all 263 CDS names with their JSON format, the result of a scan in the car and notes.
 
-Installing the app: [../EntryEvo_Installation_EN.md](../EntryEvo_Installation_EN.md) (Polish:
-[../EntryEvo_Installation.md](../EntryEvo_Installation.md)). CDS scanning tool:
+Installing the app: [../EntryEvo_Installation.md](../EntryEvo_Installation.md). CDS scanning tool:
 `C:\Dev\BMW_Navi\HU_Tools\CdsScan`.
 
 These files contain no personal data from the car (contacts, position, VIN). BMW files (libraries, `HmiMain3D`) are

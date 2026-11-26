@@ -5,9 +5,6 @@ import math
 import os
 from .base import Image, ImageDraw, ImageFont, SS
 from .layout import sc
-from . import layout as _layout
-
-_layout.require_configured(__name__)
 
 FONT_CANDIDATES = [
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
