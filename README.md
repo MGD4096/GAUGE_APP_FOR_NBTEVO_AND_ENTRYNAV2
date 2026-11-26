@@ -19,8 +19,12 @@ torque scales grow with the maximum. Next to the gears is the **fuel** in the ta
 
 **About 60 images per HMI state** (car-verified: images beyond about 60 stay empty). So only the big values are built
 from digits (3 cells each); every other number (maxima, scale ends, fuel, g) is one picture of the whole number. The
-Engine screen has 47 images. Sample rendering: [`res/preview.png`](res/preview.png), English:
-[`res/preview_en.png`](res/preview_en.png).
+Engine screen has 47 images.
+
+![Engine screen](res/preview_en.png)
+
+The previews are rendered by `make_db.py` (`res/preview*.png`: English `*_en.png`, Polish without a suffix, the
+other gauge colours `preview_red/orange/green.png`).
 
 **Language** follows the iDrive language. Menu and settings texts are in the text DB (`pl.txt` in Polish, every other
 language in English), which iDrive picks itself. Texts drawn on the screens (card titles, "lat./long.", "PS") are in
@@ -56,10 +60,16 @@ Each screen is its own HMI state with its own ~60-image budget:
 | Screen | What it shows | CDS data |
 |---|---|---|
 | **Engine** (state 10) | as above | |
-| **Driving** (state 14), [preview](res/preview_driving.png) | throttle and brake (bars), g-meter with maxima in 4 directions, steering wheel and angle, engine load %, gear, shift hint | `acceleratorPedal`, `brakeContact`, `steeringWheel`, `acceleration`, `torque` + `RPMSpeed`, `gear`, `shiftIndicator` |
-| **Fuel and trip** (state 15), [preview](res/preview_fuel.png) | instant consumption (l/100 km and l/h), last 5 minutes chart, trip average, trip computer averages, range, tank, km and time since start, fuel used, driving style | `engine.consumption`, `speedActual`, `averageConsumption`, `averageSpeed`, `sensors.fuel`, `drivingStyle` |
-| **Performance** (state 16), [preview](res/preview_performance.png) | 0–100 (last and best), 60–100, 80–120, 100–0 (m), 1/4 mile, status, max lateral and braking g | `speedActual`, `acceleration` |
-| **Warm-up** (state 17), [preview](res/preview_warmup.png) | oil and coolant arcs from 0 °C (oil with an 80 °C target and a green zone), status, progress bar, engine running time, estimated time to warm, outside / inside / A/C evaporator temperature, battery % | `engine.temperature`, `engine.status`, `RPMSpeed`, `temperatureExterior`, `temperatureInterior`, `ACSystemTemperatures`, `sensors.battery` |
+| **Driving** (state 14) | throttle and brake (bars), g-meter with maxima in 4 directions, steering wheel and angle, engine load %, gear, shift hint | `acceleratorPedal`, `brakeContact`, `steeringWheel`, `acceleration`, `torque` + `RPMSpeed`, `gear`, `shiftIndicator` |
+| **Fuel and trip** (state 15) | instant consumption (l/100 km and l/h), last 5 minutes chart, trip average, trip computer averages, range, tank, km and time since start, fuel used, driving style | `engine.consumption`, `speedActual`, `averageConsumption`, `averageSpeed`, `sensors.fuel`, `drivingStyle` |
+| **Performance** (state 16) | 0–100 (last and best), 60–100, 80–120, 100–0 (m), 1/4 mile, status, max lateral and braking g | `speedActual`, `acceleration` |
+| **Warm-up** (state 17) | oil and coolant arcs from 0 °C (oil with an 80 °C target and a green zone), status, progress bar, engine running time, estimated time to warm, outside / inside / A/C evaporator temperature, battery % | `engine.temperature`, `engine.status`, `RPMSpeed`, `temperatureExterior`, `temperatureInterior`, `ACSystemTemperatures`, `sensors.battery` |
+
+| Driving | Fuel and trip |
+|---|---|
+| ![Driving](res/preview_driving_en.png) | ![Fuel and trip](res/preview_fuel_en.png) |
+| **Performance** | **Warm-up** |
+| ![Performance](res/preview_performance_en.png) | ![Warm-up](res/preview_warmup_en.png) |
 
 - **Engine load** = torque / the largest torque seen at that rpm. The curve is learned while driving and kept in
   `<data dir>/torque-env.txt`. Until there are at least 60 Nm at that rpm the card shows "--". It stands in for a boost
