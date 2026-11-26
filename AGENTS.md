@@ -29,6 +29,7 @@ docs/EntryEvo_Installation.md, docs/NbtEvo_Installation.md (install guides) and 
 | `GaugeApp.manifest` | plugin manifest (Etch connector id 211) |
 | `tests/` | host tests against a fake framework (`fake_appframework.*`); `check_abi.sh` compares the plugin's `bmw::` imports with `lib/*` |
 | `toolchain/` | Docker image for EntryNav2 (Ubuntu 12.04, armhf GCC 4.6, eglibc 2.15) |
+| `package/` | `install.sh` / `uninstall.sh`: one POSIX `sh` installer for both units (QNX or Linux by `uname`); checks `FILES`, installs with the partition writable only meanwhile, **never restarts** (the user installs several apps, then restarts). `toolchain/pack.sh` (EntryNav2) and `build_nbt.bat` build the same `GaugeApp/` package folder; `tests/install_test.sh` runs both scripts on a fake root as QNX and Linux. The rules other projects follow: `docs/Install_Standard.md` – keep it in step when the scripts change; app-specific values only in the block at the top of both scripts |
 | `build_nbt.bat` | NBT Evo build with QNX SDP 6.5 `qcc` on Windows |
 | `build_entryNav2.bat` | EntryNav2 package on Windows: starts Docker Desktop, builds the toolchain image once, `make entrynav2-dist`, GLIBC check; `test` = `make check` in WSL first |
 | `lib/NBT_evo_libs`, `lib/Entry_Evo_libs` | the cars' `libAppFramework.A.so` / `libCoreFramework.A.so` – BMW files, not ours: git-ignored, never commit or redistribute. How to copy them from a unit: README.md, "BMW libraries (`lib/`)" |
@@ -48,8 +49,8 @@ temp folder rather than inlining long quoted commands). Docker runs from PowerSh
   1280x480 files are committed in the project folder; `python3 make_db.py --all` / `make gen` (in WSL, Pillow)
   writes the others to `gen/<resolution>/` (git-ignored; not `build/`, which Docker owns).
 - EntryNav2 packages: `docker run --rm -v "<project>:/work" -w /work gauge-entrynav2-tc make entrynav2-dist-all`
-  → `dist/EntryNav2/<resolution>/gauge-app-entrynav2.tar` (`make entrynav2-dist RES=…` for one;
-  `toolchain/pack-entrynav2.sh`). Check the result only needs `GLIBC_2.4`
+  → `dist/EntryNav2/<resolution>/GaugeApp/` + `gauge-app-entrynav2.tar` (`make entrynav2-dist RES=…` for one;
+  `toolchain/pack.sh`). On the unit: the folder in `/tmp/GaugeApp`, `sh install.sh`, then the user restarts. Check the result only needs `GLIBC_2.4`
   (`arm-linux-gnueabihf-objdump -T build/entrynav2/libGaugeApp.so`). Image: `docker build -t gauge-entrynav2-tc toolchain`.
 - Windows shortcut for all of the above: `build_entryNav2.bat test` (tests and `make gen` in WSL, then every
   package).

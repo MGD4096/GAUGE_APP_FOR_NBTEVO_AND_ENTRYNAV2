@@ -2,6 +2,7 @@
 # Host tests (Linux g++). From the project root: `make check`.
 #   test_cds_values   parsing, derived values, maxima and image selection (src/cds_values.hpp, src/gauge_view.hpp)
 #   check_abi.sh      every bmw:: import of the plugin is exported by the cars' libraries in ../lib (when there)
+#   install_test.sh   toolchain/pack.sh + package/install.sh / uninstall.sh on a fake root, as QNX and as Linux
 #   app_host_test     host build of the plugin (src/*.cpp), loaded with dlopen against fake_appframework.cpp; run on the
 #                     NBT Evo build and on the EntryNav2 build (-DGAUGE_ENTRYNAV2), each with its data folder moved
 #                     into build/; for EntryNav2 also the log and the crash guard (the 4th start without uptime is
@@ -18,6 +19,7 @@ SRC := $(PLUGIN_SRC) $(wildcard ../src/*.hpp)
 check: $(OUT)/test_cds_values $(OUT)/app_host_test $(OUT)/libGaugeApp.so $(OUT)/libGaugeApp-entrynav2.so
 	$(OUT)/test_cds_values
 	sh check_abi.sh $(OUT)/libGaugeApp-entrynav2.so ../lib/Entry_Evo_libs ../lib/NBT_evo_libs
+	cd .. && sh tests/install_test.sh tests/$(OUT)/install
 	rm -rf $(NBT_DATA)
 	$(OUT)/app_host_test $(OUT)/libGaugeApp.so $(NBT_DATA)
 	rm -rf $(EN2_DATA)
