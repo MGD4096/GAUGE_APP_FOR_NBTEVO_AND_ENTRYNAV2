@@ -289,7 +289,7 @@ bash toolchain/tc-entrynav2.sh make entrynav2-dist-all
 
 Result: for `800x480`, `1280x480` and `1440x540`, `dist/EntryNav2/<resolution>/GaugeApp/` (the library – the same
 in all of them, the manifest, the XML, both zips, the frame packs, `install.sh`, `uninstall.sh`, `FILES`) and the
-same folder as `gauge-app-entrynav2.tar` (`toolchain/pack.sh`). One resolution: `make entrynav2-dist RES=1440x540`.
+same folder as `GaugeApp.tar` (`toolchain/pack.sh`). One resolution: `make entrynav2-dist RES=1440x540`.
 
 ## Install
 
@@ -298,13 +298,14 @@ Step-by-step guides:
 - **EntryNav2:** [docs/EntryEvo_Installation.md](docs/EntryEvo_Installation.md)
 - **NBT Evo:** [docs/NbtEvo_Installation.md](docs/NbtEvo_Installation.md)
 
-Both units get the same package folder `GaugeApp/` (the app, `install.sh`, `uninstall.sh`, `FILES`) and install it
-the same way; only getting the folder to `/tmp/GaugeApp` on the unit differs:
+Both units get the same package: `GaugeApp.tar`, which unpacks to the folder `GaugeApp/` (the app, `install.sh`,
+`uninstall.sh`, `FILES`), and install it the same way; only getting the tar to `/tmp` on the unit differs:
 
 | | NBT Evo | EntryNav2 |
 |---|---|---|
-| Package | `dist\NBT\<resolution>\GaugeApp` | `dist/EntryNav2/<resolution>/gauge-app-entrynav2.tar` (or the `GaugeApp` folder beside it) |
-| To `/tmp/GaugeApp` | USB stick, then on `hu-omap` (`on -f /net/hu-omap/ /bin/sh`): `cp -R /fs/usb0/GaugeApp /tmp/`; or `ssh … cat` per file | `scp` the tar to `/tmp`, then on the unit: `cd /tmp && tar -xf gauge-app-entrynav2.tar` |
+| Package | `dist\NBT\<resolution>\GaugeApp.tar` | `dist/EntryNav2/<resolution>/GaugeApp.tar` |
+| To `/tmp` | USB stick: on `hu-omap` (`on -f /net/hu-omap/ /bin/sh`) `cp /fs/usb0/GaugeApp.tar /tmp/`; or SSH: `ssh root@CAR 'cat > /net/hu-omap/fs/ram5/GaugeApp.tar' < GaugeApp.tar` | `scp GaugeApp.tar root@169.254.1.0:/tmp/` |
+| Unpack (on `hu-omap` / the unit) | `cd /tmp && rm -rf GaugeApp && tar -xf GaugeApp.tar` | `cd /tmp && rm -rf GaugeApp && tar -xf GaugeApp.tar` |
 | Install | `cd /tmp/GaugeApp && sh install.sh` | `cd /tmp/GaugeApp && sh install.sh` |
 | Restart | yourself, when everything is installed: hold the power button about 30 s | yourself, when everything is installed: `reboot` |
 

@@ -22,10 +22,11 @@ is writable only while the files are copied.
 - An **NBT Evo** head unit (ID5 / ID6) with a **root shell over SSH**. This guide does not cover how to get it.
 - One of the codings **A4A, A4A_REMOTE_APPS, REMOTE_HMI, TOUCH_COMMAND** – without it HmiMain3D does not load
   PluginApps (the same as for NbtAad).
-- The built app: the folder **`dist\NBT\<resolution>\GaugeApp`** from `build_nbt.bat` (QNX Momentics IDE 4.7 /
+- The built app: **`dist\NBT\<resolution>\GaugeApp.tar`** from `build_nbt.bat` (QNX Momentics IDE 4.7 /
   QNX SDP 6.5.0, see [README.md](../README.md#build)): `1280x480` (8.8" screen) or `1440x540` (10.25"),
-  whichever the unit has (NBT Evo has no 6.5" screens, so there is no 800x480 version). It holds the 11 files of
-  the app, and `install.sh`, `uninstall.sh` and `FILES` (the list `install.sh` checks):
+  whichever the unit has (NBT Evo has no 6.5" screens, so there is no 800x480 version). It unpacks to the folder
+  `GaugeApp` (also beside the tar): the 11 files of the app, and `install.sh`, `uninstall.sh` and `FILES` (the list
+  `install.sh` checks):
 
   | File | What it is |
   |---|---|
@@ -35,44 +36,37 @@ is writable only while the files are copied.
   | `GaugeApp_ALL_Texts.zip`, `GaugeApp_ALL_Images.zip` | texts and the row icon |
   | `GaugeApp_frames.bin`, `GaugeApp_frames_s.bin`, `GaugeApp_frames_c0.bin` … `c3.bin` | the screen frames (engine screen, the other screens and 4 colours) |
 
-- A **USB stick** (FAT32) **or SSH from the computer** to get the files onto the head unit.
+- A **USB stick** (FAT32) **or SSH from the computer** to get the tar onto the head unit.
 - About **16 MB** of free space on the system partition.
 
-## 1. Get the files onto the head unit
+## 1. Get the tar onto the head unit
 
-The aim is the package folder in `/tmp/GaugeApp` on `hu-omap` – the same place and the same script as on EntryNav2;
-only the way there differs ([the install standard](Install_Standard.md), shared with other apps).
+The aim is `GaugeApp.tar` in `/tmp` of `hu-omap`, unpacked there to `/tmp/GaugeApp` – the same tar, the same place
+and the same script as on EntryNav2; only the way there differs ([the install standard](Install_Standard.md), shared
+with other apps). `/tmp` is RAM: nothing is written to flash yet, and it is emptied at a restart, so finish the
+installation before switching the car off.
 
 ### Option A: USB stick (recommended)
 
-1. On the computer, copy the `GaugeApp` folder (from `dist\NBT\<resolution>`) to the root of the stick.
-2. Plug the stick into the car's USB port, with the ignition on.
-
-The folder will be `/fs/usb0/GaugeApp`. If `ls /fs/usb0` shows nothing, look at `ls /mnt` – the stick may be in a
-folder named `umass…`; then use that instead of `/fs/usb0` below. After logging in (step 2):
-
-```sh
-rm -rf /tmp/GaugeApp && cp -R /fs/usb0/GaugeApp /tmp/
-```
+On the computer, copy `GaugeApp.tar` (from `dist\NBT\<resolution>`) to the root of the stick and plug the stick into
+the car's USB port, with the ignition on. On the head unit it is `/fs/usb0/GaugeApp.tar`; if `ls /fs/usb0` shows
+nothing, look at `ls /mnt` – the stick may be in a folder named `umass…`; then use that instead of `/fs/usb0`. The
+copy is made in step 2, on `hu-omap`.
 
 ### Option B: over SSH, with no stick
 
-The head unit has no `scp` or `sftp`, so each file goes through `cat`. Replace `root@CAR` with however you log in;
-if your SSH client refuses the host key, add `-o HostKeyAlgorithms=+ssh-rsa`. From the `dist\NBT\<resolution>` folder
-on the computer (e.g. in Git Bash or WSL):
+The head unit has no `scp` or `sftp`, so the tar goes through `cat` – one login. Replace `root@CAR` with however you
+log in; if your SSH client refuses the host key, add `-o HostKeyAlgorithms=+ssh-rsa`. From the
+`dist\NBT\<resolution>` folder on the computer (e.g. in Git Bash or WSL):
 
 ```sh
-ssh root@CAR 'mkdir -p /net/hu-omap/fs/ram5/GaugeApp'
-for f in GaugeApp/*; do
-  ssh root@CAR "cat > /net/hu-omap/fs/ram5/$f" < "$f"
-done
+ssh root@CAR 'cat > /net/hu-omap/fs/ram5/GaugeApp.tar' < GaugeApp.tar
 ```
 
-That is 15 logins. After many logins in a short time the head unit shuts SSH off for about 10 minutes, so do not
-run the loop over and over. The files land in `/tmp/GaugeApp` on `hu-omap` – RAM, emptied at a restart, so finish
-the installation before switching the car off.
+`/net/hu-omap/fs/ram5` is `/tmp` of `hu-omap`. After many logins in a short time the head unit shuts SSH off for about
+10 minutes.
 
-## 2. Log in to the right computer of the head unit
+## 2. Log in to the right computer of the head unit and unpack
 
 SSH opens a shell on `hu-jacinto`, while iDrive (HmiMain3D) runs on the other computer, `hu-omap`. Switch to it:
 
@@ -80,7 +74,21 @@ SSH opens a shell on `hu-jacinto`, while iDrive (HmiMain3D) runs on the other co
 on -f /net/hu-omap/ /bin/sh
 ```
 
-Type all the following commands in this shell (`install.sh` refuses to run on `hu-jacinto`).
+Type all the following commands in this shell (`install.sh` refuses to run on `hu-jacinto`). With a USB stick, copy
+the tar first:
+
+```sh
+cp /fs/usb0/GaugeApp.tar /tmp/
+```
+
+Then unpack it:
+
+```sh
+cd /tmp && rm -rf GaugeApp && tar -xf GaugeApp.tar
+```
+
+If the unit says `tar: not found`, use `pax -r -f GaugeApp.tar` instead. (Without any tar the folder itself works too:
+copy the `GaugeApp` folder to the stick and `cp -R /fs/usb0/GaugeApp /tmp/`.)
 
 ## 3. Install
 

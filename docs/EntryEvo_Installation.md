@@ -22,15 +22,15 @@ The system partition is writable only while the files are copied.
 
 | Package | When |
 |---|---|
-| `gauge-app-entrynav2.tar` | **The normal version** – GAUGE APP shows the gauge screen at once. |
-| `gauge-app-entrynav2-diag.tar` | Diagnostics only (`dist/EntryNav2/diag/`): a menu of test pages (see [below](#diagnostic-version)). |
+| `GaugeApp.tar` | **The normal version** – GAUGE APP shows the gauge screen at once. |
+| `GaugeApp-diag.tar` | Diagnostics only (`dist/EntryNav2/diag/`): a menu of test pages (see [below](#diagnostic-version)). |
 
 **Screen resolution.** There are three packages, one per resolution: `800x480` (6.5" screens), `1280x480`
 (8.8", e.g. F40 – car-verified) and `1440x540` (10.25"). On an EntryNav2, `cat /sys/class/drm/card0-*/modes`
 (over SSH) shows it. 800x480 and 1440x540 are the same look at another scale; not yet tried in a car.
 
-Both packages install the same way, and the same way as on NBT Evo: the package folder goes to `/tmp/GaugeApp` and
-`install.sh` runs there ([the install standard](Install_Standard.md), shared with other apps).
+Both packages install the same way, and the same way as on NBT Evo: the tar goes to `/tmp`, unpacks to
+`/tmp/GaugeApp` and `install.sh` runs there ([the install standard](Install_Standard.md), shared with other apps).
 
 `169.254.1.0` is the head unit's address on the ENET cable in the car this was tested on. If yours differs, change
 it in the commands.
@@ -40,14 +40,14 @@ it in the commands.
 On the computer, in the project folder (pick the folder of the screen's resolution):
 
 ```sh
-scp dist/EntryNav2/1280x480/gauge-app-entrynav2.tar root@169.254.1.0:/tmp/
+scp dist/EntryNav2/1280x480/GaugeApp.tar root@169.254.1.0:/tmp/
 ssh root@169.254.1.0
 ```
 
 Type the following commands in this SSH session, on the head unit:
 
 ```sh
-cd /tmp && rm -rf GaugeApp && tar -xf gauge-app-entrynav2.tar
+cd /tmp && rm -rf GaugeApp && tar -xf GaugeApp.tar
 ```
 
 (Or copy the folder itself: `scp -r dist/EntryNav2/1280x480/GaugeApp root@169.254.1.0:/tmp/`.) `/tmp` is in RAM:
@@ -159,7 +159,7 @@ Results of the diagnostics on the car (EntryNav2, F40):
 That is why the normal version keeps its frames in `GaugeApp_frames.bin` and sends them as data, and the image DB
 only holds the icon. A later finding: iDrive shows at most about 60 images in one state, so the screen uses 47.
 
-The package `gauge-app-entrynav2-diag.tar` (built on demand: `python3 make_db.py --diag-out diag`,
+The package `GaugeApp-diag.tar` (built on demand: `python3 make_db.py --diag-out diag`,
 `make entrynav2-diag-dist`) is **diagnostics 3**. GAUGE APP opens a menu with four buttons. Open each and take a
 photo of the **whole screen**:
 
@@ -193,7 +193,7 @@ and plug it into the car. The app looks for that file in the folders under `/med
 
 ## Updating and switching versions
 
-Repeat steps 1–3 with the new package (e.g. `gauge-app-entrynav2.tar` after the diagnostics): `install.sh` replaces
+Repeat steps 1–3 with the new package (e.g. `GaugeApp.tar` after the diagnostics): `install.sh` replaces
 the old version. The data folder stays, so the settings are kept.
 
 ## Maxima

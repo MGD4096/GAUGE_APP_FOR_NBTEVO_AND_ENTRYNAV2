@@ -48,12 +48,12 @@ temp folder rather than inlining long quoted commands). Docker runs from PowerSh
   1280x480 files are committed in `plugin/`; `python3 make_db.py --all` / `make gen` (in WSL, Pillow)
   writes the others to `gen/<resolution>/` (git-ignored; not `build/`, which Docker owns).
 - EntryNav2 packages: `docker run --rm -v "<project>:/work" -w /work gauge-entrynav2-tc make entrynav2-dist-all`
-  → `dist/EntryNav2/<resolution>/GaugeApp/` + `gauge-app-entrynav2.tar` (`make entrynav2-dist RES=…` for one;
-  `toolchain/pack.sh`). On the unit: the folder in `/tmp/GaugeApp`, `sh install.sh`, then the user restarts. Check the result only needs `GLIBC_2.4`
+  → `dist/EntryNav2/<resolution>/GaugeApp/` + `GaugeApp.tar` (`make entrynav2-dist RES=…` for one;
+  `toolchain/pack.sh`). On both units: `GaugeApp.tar` to `/tmp`, `tar -xf`, `cd GaugeApp && sh install.sh`, then the user restarts. Check the result only needs `GLIBC_2.4`
   (`arm-linux-gnueabihf-objdump -T build/entrynav2/libGaugeApp.so`). Image: `docker build -t gauge-entrynav2-tc toolchain`.
 - Windows shortcut for all of the above: `build_entryNav2.bat test` (tests and `make gen` in WSL, then every
   package).
-- NBT Evo: `build_nbt.bat [QNX folder]` → `dist\NBT\<resolution>\GaugeApp` for 1280x480 and 1440x540 only (NBT Evo
+- NBT Evo: `build_nbt.bat [QNX folder]` → `dist\NBT\<resolution>\GaugeApp` + `GaugeApp.tar` (Windows `tar.exe`) for 1280x480 and 1440x540 only (NBT Evo
   has no 6.5" / 800x480 screens; no QNX on the dev PC: untested there).
 - `build/`, `dist/`, `diag/`, `gen/`, `__pycache__/` are git-ignored; Docker may create them as root.
 - Line endings come from `.gitattributes`: LF everywhere (also in the working tree), `*.bat` CRLF, packs / zips /
