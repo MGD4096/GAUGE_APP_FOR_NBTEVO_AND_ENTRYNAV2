@@ -5,9 +5,13 @@
 #
 #   make                 NBT Evo: libGaugeApp.so and the text/image DBs          (needs qcc, see below)
 #   make entrynav2       EntryNav2: build/entrynav2/libGaugeApp.so               (needs the armhf GCC 4.7, see below)
-#   make entrynav2-dist  EntryNav2: dist/gauge-app-entrynav2.tar, ready to copy to the car
-#   make db              GaugeApp.xml, src/gauge_ids.hpp and the image / text DBs (python3 + Pillow, make_db.py);
-#                        the same files serve both head units. They are kept in git, so a build needs no Pillow.
+#   make entrynav2-dist  EntryNav2: dist/EntryNav2/$(RES)/gauge-app-entrynav2.tar (RES=1280x480 by default)
+#   make entrynav2-dist-all  the same for every resolution (800x480, 1280x480, 1440x540)
+#   make db              GaugeApp.xml, src/gauge_ids.hpp and the image / text DBs (python3 + Pillow, make_db.py) for
+#                        1280x480; the same files serve both head units. They are kept in git, so a build needs no
+#                        Pillow.
+#   make gen             the other resolutions into gen/<resolution> (python3 + Pillow; only when make_db.py or
+#                        gaugegen/ changed since). Run it outside Docker (the toolchain image has no Pillow).
 #   make check           host tests with the Linux g++ (no QNX / ARM compiler needed), both targets
 #   make clean           build outputs only (not the generated files kept in git)
 #
@@ -44,13 +48,17 @@ EN2_LDFLAGS   = -Wl,--allow-shlib-undefined -L$(EN2_LIBDIR) -Wl,-rpath-link,$(EN
                 -Wl,-rpath-link,$(SYSROOT)/usr/lib:$(SYSROOT)/lib:$(SYSROOT)/usr/local/lib
 EN2_OUT       = build/entrynav2
 EN2_PLUGIN    = opt/hmi/data/ro/Plugins/GaugeApp
-EN2_STAGE     = dist/entrynav2
+# Screen resolutions (gaugegen/layout.py SCREEN_PRESETS). 1280x480 uses the committed files in the project folder,
+# the others gen/<resolution>. The library is the same for all of them.
+RESOLUTIONS   = 800x480 1280x480 1440x540
+RES          ?= 1280x480
+GEN_RES       = $(filter-out 1280x480,$(RESOLUTIONS))
 
 # The plugin's modules (src/app.hpp lists what each one does) and the headers they share.
 PLUGIN_SRC = src/engine_data.cpp src/cds.cpp src/render.cpp src/frames.cpp src/storage.cpp src/log.cpp
 SRC = $(PLUGIN_SRC) $(wildcard src/*.hpp)
 
-.PHONY: all lib db check clean entrynav2 entrynav2-dist entrynav2-diag-dist
+.PHONY: all lib db gen check clean entrynav2 entrynav2-dist entrynav2-dist-all entrynav2-diag-dist
 all: lib
 
 lib: libGaugeApp.so
@@ -71,16 +79,13 @@ $(EN2_OUT)/libGaugeApp.so: $(SRC)
 	    $(EN2_LDFLAGS) -l:libAppFramework.A.so -l:libCoreFramework.A.so -lpthread -ldl
 	@echo [DONE] $@ - make entrynav2-dist packs it with the manifest, the XML and the two zips
 
-# The archive mirrors the car's file system: unpack it in /tmp on the car and copy opt/ over / (README, EntryNav2).
-entrynav2-dist: $(EN2_OUT)/libGaugeApp.so GaugeApp_ALL_Texts.zip GaugeApp_ALL_Images.zip GaugeApp_frames.bin
-	rm -rf $(EN2_STAGE)
-	mkdir -p $(EN2_STAGE)/$(EN2_PLUGIN)
-	cp $(EN2_OUT)/libGaugeApp.so GaugeApp.manifest GaugeApp.xml GaugeApp_ALL_Texts.zip GaugeApp_ALL_Images.zip \
-	    GaugeApp_frames*.bin $(EN2_STAGE)/$(EN2_PLUGIN)/
-	chmod 755 $(EN2_STAGE)/$(EN2_PLUGIN)/libGaugeApp.so
-	cd $(EN2_STAGE) && md5sum $(EN2_PLUGIN)/* > MD5SUMS
-	tar -cf $(CURDIR)/dist/gauge-app-entrynav2.tar -C $(EN2_STAGE) MD5SUMS opt
-	@echo [DONE] dist/gauge-app-entrynav2.tar
+# dist/EntryNav2/<resolution>/gauge-app-entrynav2.tar (toolchain/pack-entrynav2.sh). The archive mirrors the car's file
+# system: unpack it in /tmp on the car and copy opt/ over / (docs/EntryEvo_Installation.md).
+entrynav2-dist: $(EN2_OUT)/libGaugeApp.so
+	sh toolchain/pack-entrynav2.sh $(EN2_OUT)/libGaugeApp.so $(RES)
+
+entrynav2-dist-all: $(EN2_OUT)/libGaugeApp.so
+	for r in $(RESOLUTIONS); do sh toolchain/pack-entrynav2.sh $(EN2_OUT)/libGaugeApp.so $$r || exit 1; done
 
 # Diagnostic package: the same library with the test pages of `python3 make_db.py --diag-out diag` (run that first,
 # it needs Pillow): XML, a 3-image DB, the texts and test.png.
@@ -98,6 +103,11 @@ entrynav2-diag-dist: $(EN2_OUT)/libGaugeApp.so
 
 db:
 	python3 make_db.py
+
+GEN_SRC = make_db.py $(wildcard gaugegen/*.py)
+gen: $(foreach r,$(GEN_RES),gen/$(r)/GaugeApp_frames.bin)
+gen/%/GaugeApp_frames.bin: $(GEN_SRC)
+	python3 make_db.py --screen $*
 
 check:
 	$(MAKE) -C tests check

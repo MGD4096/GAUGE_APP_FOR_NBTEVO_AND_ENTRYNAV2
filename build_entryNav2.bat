@@ -1,18 +1,23 @@
 @echo off
 rem SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
-rem Builds the EntryNav2 package on Windows with Docker Desktop: dist\gauge-app-entrynav2.tar, ready for the car
-rem (install: docs\EntryEvo_Installation.md). The compiler is the image of toolchain\Dockerfile (Ubuntu 12.04, armhf
-rem GCC 4.6, eglibc 2.15 - the car's C library); it is built the first time.
+rem Builds the EntryNav2 packages on Windows, one per screen resolution:
+rem   dist\EntryNav2\800x480\gauge-app-entrynav2.tar
+rem   dist\EntryNav2\1280x480\gauge-app-entrynav2.tar   (EntryNav2 F40: car-verified)
+rem   dist\EntryNav2\1440x540\gauge-app-entrynav2.tar
+rem ready for the car (install: docs\EntryEvo_Installation.md; pick the folder of the unit's screen). The compiler is
+rem the image of toolchain\Dockerfile (Ubuntu 12.04, armhf GCC 4.6, eglibc 2.15 - the car's C library); it is built
+rem the first time.
 rem
-rem   build_entryNav2.bat           build the package
+rem   build_entryNav2.bat           build the packages
 rem   build_entryNav2.bat test      run the host tests in WSL first (make check), then build
 rem
-rem Needs Docker Desktop (started here when it is not running) and the car's libAppFramework.A.so and
-rem libCoreFramework.A.so (/opt/hmi/lib) in lib\Entry_Evo_libs. The pictures, the XML and the frame packs are already
-rem in the project (python3 make_db.py regenerates them).
+rem Needs Docker Desktop (started here when it is not running), the car's libAppFramework.A.so and
+rem libCoreFramework.A.so (/opt/hmi/lib) in lib\Entry_Evo_libs, and for 800x480 / 1440x540 python3 with Pillow in WSL
+rem (make gen draws those pictures into gen\<resolution> when the generator changed; 1280x480 is in the project).
 setlocal
 cd /d "%~dp0"
 set IMAGE=gauge-entrynav2-tc
+set TARGET=entrynav2-dist-all
 
 if not exist lib\Entry_Evo_libs\libAppFramework.A.so goto nolibs
 if not exist lib\Entry_Evo_libs\libCoreFramework.A.so goto nolibs
@@ -25,6 +30,13 @@ if errorlevel 1 (
     exit /b 1
 )
 :notest
+
+echo [GEN] pictures of the other screen resolutions in WSL (make gen; only when the generator changed)
+wsl --cd "%CD%" -e make gen
+if errorlevel 1 (
+    echo [WARNING] make gen failed ^(python3 with Pillow in WSL?^) - only the 1280x480 package is built
+    set TARGET=entrynav2-dist
+)
 
 where docker >nul 2>nul
 if errorlevel 1 (
@@ -56,10 +68,10 @@ if errorlevel 1 (
 )
 
 :imageready
-echo [BUILD] libGaugeApp.so for EntryNav2 and dist\gauge-app-entrynav2.tar
-docker run --rm -v "%CD%:/work" -w /work %IMAGE% make entrynav2-dist
+echo [BUILD] libGaugeApp.so for EntryNav2 and the packages (make %TARGET%)
+docker run --rm -v "%CD%:/work" -w /work %IMAGE% make %TARGET%
 if errorlevel 1 (
-    echo [FAILED] make entrynav2-dist reported an error - see the messages above
+    echo [FAILED] make %TARGET% reported an error - see the messages above
     exit /b 1
 )
 
@@ -67,8 +79,9 @@ echo.
 echo C library versions the library needs (the car has 2.15; only GLIBC_2.4 expected):
 docker run --rm -v "%CD%:/work" -w /work %IMAGE% sh -c "arm-linux-gnueabihf-objdump -T build/entrynav2/libGaugeApp.so | grep -o 'GLIBC_[0-9.]*' | sort -u"
 echo.
-for %%f in (dist\gauge-app-entrynav2.tar) do echo [DONE] %%~ff (%%~zf bytes)
-echo Copy it to the car: scp dist\gauge-app-entrynav2.tar root@169.254.1.0:/tmp/   (then docs\EntryEvo_Installation.md)
+for /d %%d in (dist\EntryNav2\*) do if exist "%%d\gauge-app-entrynav2.tar" for %%f in ("%%d\gauge-app-entrynav2.tar") do echo [DONE] %%~ff (%%~zf bytes)
+echo Copy the package of the unit's screen to the car, e.g.:
+echo   scp dist\EntryNav2\1280x480\gauge-app-entrynav2.tar root@169.254.1.0:/tmp/   (then docs\EntryEvo_Installation.md)
 exit /b 0
 
 :nolibs

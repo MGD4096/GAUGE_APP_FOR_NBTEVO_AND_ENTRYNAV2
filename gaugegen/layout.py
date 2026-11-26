@@ -1,18 +1,32 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
-"""Geometry of the engine screen (design pixels, scaled by SCALE on the car) and the screen presets.
-configure() must run before any other gaugegen module is imported: apply_screen_preset() rebinds the
-geometry names here, and the other modules copy them when they are imported (make_db.py does this)."""
+"""Geometry of the screens (design pixels, 960 x 400) and the screen resolutions. Every resolution shows the same
+design, scaled by SCALE and placed at (ox, oy) in the plugin state; configure() picks one. Only SCALE changes between
+resolutions and it is read when a picture is saved (sc()), so one run can generate every resolution in turn."""
 
-from .base import FAINT, MUTED
+from .base import FAINT
 
-# ---- layout (design pixels; scaled by SCALE on the car and placed at ORIGIN, moved with --x / --y) -----------------
+# ---- layout (design pixels; scaled by SCALE on the car and placed at the preset's ox / oy, moved with --x / --y) ----
 W, H = 960, 400
-SCALE = 1.15                                      # 960 x 400 -> 1104 x 460 of the ~1250 x 470 visible area
-ORIGIN = (73, 4)                                  # where the scaled screen starts in the state (centred)
+
+# The panel modes of the head units (docs/EntryNav2/System.md: the EntryNav2 panel driver has 800x480, 1280x480 and
+# 1440x540; the HMI also knows 1280x720 / 1920x720, but no unit drives them). The plugin state is about 30 x 10 px
+# smaller than the panel (1250 x 470 measured at 1280x480); the design is scaled to fit it and centred.
+#   resolution: (scale, ox, oy, verified in a car)
 SCREEN_PRESETS = {
-    "1280x480": (1.15, 73, 4),
-    "800x480": (1.0, 20, 10),                     # own 760 x 446 layout with bigger fonts (apply_screen_preset)
+    "800x480": (0.80, 1, 75, False),               # 768 x 320 of ~770 x 470 (6.5" screens): small text
+    "1280x480": (1.15, 73, 4, True),               # 1104 x 460 of ~1250 x 470 (EntryNav2 F40, car-verified)
+    "1440x540": (1.30, 81, 5, False),              # 1248 x 520 of ~1410 x 530 (10.25" screens)
 }
+DEFAULT_SCREEN = "1280x480"                       # its files are the ones in the project folder (committed)
+SCALE = SCREEN_PRESETS[DEFAULT_SCREEN][0]
+
+
+def configure(screen, scale=None):
+    """Switches to a resolution (or a --scale override); returns its (ox, oy)."""
+    global SCALE
+    preset_scale, ox, oy, _verified = SCREEN_PRESETS[screen]
+    SCALE = scale if scale is not None else preset_scale
+    return ox, oy
 
 
 def sc(v):
@@ -59,69 +73,3 @@ FUEL_BOX = (36, 26, 44, 32)                       # x, y, w, h: the fuel number,
 FUEL_UNIT_BOX = (36 + 44 + 4, 33, 28, 22)         # x, y, w, h: the unit, left aligned, right after the number
 
 WARM_OIL, WARM_COOLANT, WARM_TARGET = (0, 140), (0, 120), 80   # deg C: warm-up arcs, oil "warm" from 80
-
-
-def apply_screen_preset(screen):
-    """Adjust layout geometry for the chosen screen preset (1280x480 default or 800x480).
-
-    800x480 (6.5" screens): the same pieces, but bigger fonts and thicker arcs instead of a scaled-down 1280 design -
-    the smaller physical screen needs larger pixels per character to stay readable."""
-    global W, H, SCALE, CARD_W, CARD_H, GAUGES, ARC_C, ARC_R, ARC_W, ARC_BOX, BIG, UNIT_BOX
-    global BIG_Y, MAX_BOX, SCALE_BOX, SCALE_Y, G_CARD, G_C, G_R, G_BOX, G_BIG_BOX, G_LAT_BOX, G_LON_BOX
-    global GEAR_CARD, GEAR_CELLS, GEAR_Y, GEAR_H, FUEL_CARD, FUEL_ICON, FUEL_BOX, FUEL_UNIT_BOX
-    global MAX_SIZE, SCALE_SIZE, FUEL_SIZE, G_SIZE, LAT_SIZE
-    global TITLE_SIZE, UNIT_SIZE, SMALL_SIZE, FUEL_UNIT_SIZE, GEAR_SIZE, DOT_R, PUMP_K, SCALE_COLOR, TITLE_POS, MAX_LABEL
-    if screen != "800x480":
-        return
-    W, H, SCALE = 760, 446, 1.0
-    CARD_W, CARD_H = 262, 218                       # 262 + 8 + 220 + 8 + 262 = 760
-    GAUGES = [
-        ("COOLANT", (0, 0), "P\u0142yn ch\u0142odniczy", "\u00b0C", (50, 130), 115),
-        ("OIL", (0, 228), "Olej silnikowy", "\u00b0C", (50, 150), 135),
-        ("POWER", (498, 0), "Moc", "KM", None, None),
-        ("TORQUE", (498, 228), "Moment obrotowy", "Nm", None, None),
-    ]
-    ARC_C, ARC_R, ARC_W = (131, 150), 100, 15
-    ARC_BOX = (ARC_C[0] - ARC_R - 8, ARC_C[1] - ARC_R - 8, 2 * ARC_R + 16, ARC_R + 18)
-    BIG = dict(cell=42, h=70, size=66)
-    BIG_Y = 72
-    UNIT_BOX = (70, 26)
-    SCALE_BOX = (56, 26)
-    SCALE_Y = ARC_C[1] + 6
-    MAX_BOX = (64, 184, 70, 30)
-    MAX_SIZE, SCALE_SIZE, SMALL_SIZE, UNIT_SIZE, TITLE_SIZE = 26, 21, 21, 22, 24
-    SCALE_COLOR = MUTED
-    TITLE_POS, MAX_LABEL = (14, 10), (14, MAX_BOX[3] / 2.0, "lm")
-    G_CARD = (270, 0, 220, 300)
-    G_C, G_R = (110, 132), 80
-    G_BOX = 2 * G_R + 28
-    DOT_R = 11
-    G_SIZE, LAT_SIZE = 50, 22
-    G_BIG_BOX = (110 - 75, 214, 150, 54)
-    G_LAT_BOX, G_LON_BOX = (46, 268, 54, 28), (166, 268, 52, 28)
-    GEAR_CARD = (270, 308, 220, 66)
-    GEAR_CELLS = [("P", 8, 44), ("R", 54, 44), ("N", 100, 44), ("D", 146, 66)]
-    GEAR_Y, GEAR_H, GEAR_SIZE = 6, 54, 38
-    FUEL_CARD = (270, 382, 220, 64)
-    FUEL_ICON, PUMP_K = (40, 32), 1.4
-    FUEL_BOX, FUEL_SIZE = (62, 10, 80, 44), 38
-    FUEL_UNIT_BOX, FUEL_UNIT_SIZE = (146, 18, 50, 32), 26
-
-
-CONFIGURED = False
-
-
-def configure(screen, scale=None):
-    """Applies the screen preset (and a --scale override). Must run before any module that copies the geometry is
-    imported (they do `from .layout import ...`); require_configured() in each of them checks it."""
-    global SCALE, CONFIGURED
-    apply_screen_preset(screen)
-    if scale is not None:
-        SCALE = scale
-    CONFIGURED = True
-
-
-def require_configured(module):
-    if not CONFIGURED:
-        raise SystemExit("gaugegen: %s was imported before layout.configure() - the screen preset would be ignored"
-                         % module)

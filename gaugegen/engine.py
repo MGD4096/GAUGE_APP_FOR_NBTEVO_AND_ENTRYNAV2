@@ -13,9 +13,6 @@ from .ids import (FUELNUM_MAX, GLYPHS, GNUM_MAX, IMG_ARC, IMG_BIG, IMG_BLANK, IM
     IMG_SCALENUM, IMG_UNIT, MAXNUM_MAX, SCALENUM_MAX, SEP_STRIDE, engine_background)
 from .texts import TEXTS, UI_LANGS
 from .canvas import Canvas, arc_point, font
-from . import layout as _layout
-
-_layout.require_configured(__name__)
 
 
 # ---- slots: one image component each; the C++ side writes slot i into model kFirstModel + i ----------------------------

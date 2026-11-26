@@ -91,10 +91,12 @@ itself refuses to produce bad output.
 ## Where GaugeApp differs today
 
 - Done: `make_db.py` is a short entry point and the stages are modules in `gaugegen/` (S), each importing only
-  earlier ones. Still open: the modules read module-level constants rather than receiving them (D); the layout
-  geometry is rebound by `apply_screen_preset`, so `layout.configure()` must run before the other modules are
-  imported (`require_configured()` in each stops a wrong order). Per-screen drawing and preview values are still `if screen == k` branches
-  (`s_background`, `screen_preview`) (O).
+  earlier ones. Resolutions are data (`layout.SCREEN_PRESETS`: scale + position of the one 960x400 design); only
+  `SCALE` changes between them and it is read when a picture is saved (`sc()`), so `--all` runs them in one process.
+  Still open: the modules read module-level constants rather than receiving them (D); per-screen drawing and preview
+  values are still `if screen == k` branches (`s_background`, `screen_preview`) (O).
+- Never rebind module-level geometry at run time (the removed 800x480 preset did, and broke screens 1..4 and the
+  import order): a resolution is a scale and a position, not another layout.
 - XML is built with `%` string formatting; attributes are not escaped (safe only because all texts are ASCII
   literals, which `check_xml` enforces).
 - The engine screen's background ids are not one `base + lang` range (`IMG_BG`, `IMG_BG_EN`, then the ids after
