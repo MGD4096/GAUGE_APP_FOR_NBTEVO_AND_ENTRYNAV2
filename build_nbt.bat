@@ -7,8 +7,8 @@ rem each with libGaugeApp.so (the same for all), GaugeApp.manifest, GaugeApp.xml
 rem install.sh, uninstall.sh and FILES (the same package folder as EntryNav2's), and the same folder as
 rem dist\NBT\<resolution>\GaugeApp.tar (Windows' own tar, ustar format), and dist\NBT\<resolution>\usb\GaugeApp: the
 rem plugin files only. docs\NbtEvo_Installation.md has two ways (neither restarts the unit):
-rem   A  the unit has scp and tar: scp the tar to /tmp, then on hu-omap
-rem      cd /tmp && tar -xf GaugeApp.tar && cd GaugeApp && sh install.sh
+rem   A  the unit has tar: the tar streamed over SSH (/tmp holds only 14 MB), in dist\NBT\<resolution>:
+rem      ssh root@CAR "cd /tmp && rm -rf GaugeApp && tar -xf - && cd GaugeApp && sh install.sh" < GaugeApp.tar
 rem   B  usb\GaugeApp on a USB stick, copied by hand (mount rw, cp, chmod, mount ro)
 rem
 rem   build_nbt.bat                     (QNX found in C:\QNX650 or already on the PATH)
@@ -69,9 +69,9 @@ for %%r in (1440x540) do (
         echo [SKIPPED] %%r - gen\%%r is missing: run python3 make_db.py --all ^(or make gen^) in WSL
     )
 )
-echo A - the unit has scp and tar: scp -O GaugeApp.tar root@CAR:/tmp/ then on hu-omap:
-echo   cd /tmp ^&^& rm -rf GaugeApp ^&^& tar -xf GaugeApp.tar ^&^& cd GaugeApp ^&^& sh install.sh
-echo B - without them: usb\GaugeApp to a USB stick, then the commands of docs\NbtEvo_Installation.md (B)
+echo A - the unit has tar: in dist\NBT\^<resolution^> (from PowerShell inside cmd /c '...'):
+echo   ssh root@CAR "cd /tmp && rm -rf GaugeApp && tar -xf - && cd GaugeApp && sh install.sh" ^< GaugeApp.tar
+echo B - without tar: usb\GaugeApp to a USB stick, then the commands of docs\NbtEvo_Installation.md (B)
 exit /b 0
 
 rem :pack <resolution> <folder with its XML, zips and frame packs> - like toolchain\pack.sh

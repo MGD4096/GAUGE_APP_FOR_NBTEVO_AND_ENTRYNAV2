@@ -54,7 +54,8 @@ temp folder rather than inlining long quoted commands). Docker runs from PowerSh
 - Windows shortcut for all of the above: `build_entryNav2.bat test` (tests and `make gen` in WSL, then every
   package).
 - NBT Evo: `build_nbt.bat [QNX folder]` → `dist\NBT\<resolution>\GaugeApp` + `GaugeApp.tar` (Windows `tar.exe`;
-  install variant A: the user put `scp` and `tar` on the unit) and `usb\GaugeApp` (the 11 plugin files only; variant
+  install variant A: the user put `tar` on the unit; the tar is streamed over SSH into `tar -xf -` in `/tmp`, which
+  holds only 14 MB, and `install.sh` runs in the same command) and `usb\GaugeApp` (the 11 plugin files only; variant
   B: USB stick, copied by hand, no checks) for 1280x480 and 1440x540 only (NBT Evo has no 6.5" / 800x480 screens).
   A stock NBT Evo `hu-omap` has no `tar`, `pax`, `scp`, `dirname`, `tr`, `wc` (car-verified).
 - `build/`, `dist/`, `diag/`, `gen/`, `__pycache__/` are git-ignored; Docker may create them as root.

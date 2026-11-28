@@ -1,8 +1,8 @@
 # GAUGE APP – installing on NBT Evo
 
 The installation is done in the head unit's shell, in one of two ways (see [Two ways to install](#two-ways-to-install)):
-**A** with `scp` and `tar` on the unit and the installer script, or **B** the plain way, from a USB stick with a few
-commands typed by hand. Nothing in the system is replaced: one folder with the app is added
+**A** with `tar` on the unit and the installer script, the package streamed over SSH, or **B** the plain way, from a
+USB stick with a few commands typed by hand. Nothing in the system is replaced: one folder with the app is added
 (`/opt/hmi/ID5/data/ro/Plugins/GaugeApp`) and one folder with its data (`/var/opt/gaugeapp`). The system partition
 is writable only while the files are copied.
 
@@ -39,16 +39,17 @@ is writable only while the files are copied.
   | `GaugeApp_ALL_Texts.zip`, `GaugeApp_ALL_Images.zip` | texts and the row icon |
   | `GaugeApp_frames.bin`, `GaugeApp_frames_s.bin`, `GaugeApp_frames_c0.bin` … `c3.bin` | the screen frames (engine screen, the other screens and 4 colours) |
 
-- For **A**: `scp` and `tar` on the head unit (it has neither out of the box). For **B**: a **USB stick** (FAT32).
+- For **A**: `tar` on the head unit (it has none out of the box; `scp` is not needed). For **B**: a **USB stick**
+  (FAT32).
 - About **16 MB** of free space on the system partition.
 
 ## Two ways to install
 
-| | **A: `scp` + `tar` + `install.sh`** | **B: USB stick, by hand** |
+| | **A: SSH + `tar` + `install.sh`** | **B: USB stick, by hand** |
 |---|---|---|
-| The head unit needs | `scp` and `tar`, put there by you (e.g. the QNX SDP 6.5 `armle-v7` ones) | nothing more |
+| The head unit needs | `tar`, put there by you (e.g. the QNX SDP 6.5 `armle-v7` one) | nothing more |
 | Package | `dist\NBT\<resolution>\GaugeApp.tar` | the folder `dist\NBT\<resolution>\usb\GaugeApp` |
-| Way onto the unit | `scp` over SSH | USB stick |
+| Way onto the unit | streamed over SSH into `tar` (one login, the tar itself is never stored on the unit) | USB stick |
 | Checks | `install.sh` checks every file's size, before and after copying, and stops on any error | none: you compare `ls -l` yourself |
 | The same as | EntryNav2 ([the install standard](Install_Standard.md)) | the first versions of this guide |
 
@@ -65,27 +66,29 @@ on -f /net/hu-omap/ /bin/sh
 Type everything below on `hu-omap`. After many logins in a short time the head unit shuts SSH off for about 10
 minutes.
 
-## A: `scp` + `tar` + `install.sh`
+## A: SSH + `tar` + `install.sh`
 
-### A1. Copy the tar
+`/tmp` on `hu-omap` (`/fs/ram5`) is a RAM disk of only **14 MB**: the 12 MB tar and the 12 MB it unpacks to do not
+fit there together (car-verified: `No space left on device`). So the tar is not copied to the unit: SSH feeds it to
+`tar -xf -`, which unpacks it straight into `/tmp/GaugeApp`, and `install.sh` runs in the same command.
 
-On the computer, in `dist\NBT\<resolution>` (PowerShell, Git Bash or WSL):
+On the computer, in `dist\NBT\<resolution>`, in **PowerShell** (`cmd /c`, because PowerShell has no `<`
+redirection; add `-o HostKeyAlgorithms=+ssh-rsa -m hmac-sha1` if your SSH client needs them):
 
-```sh
-scp -O GaugeApp.tar root@CAR:/tmp/
+```powershell
+cmd /c 'ssh root@CAR "cd /tmp && rm -rf GaugeApp && tar -xf - && cd GaugeApp && sh install.sh" < GaugeApp.tar'
 ```
 
-`-O` makes a new OpenSSH client (Windows 10/11 too) use the classic scp protocol, which an `scp` on the unit
-understands without an SFTP server; drop it if your client does not know the option. `/tmp` is RAM: nothing is
-written to flash yet, and it is emptied at a restart, so finish the installation before switching the car off.
-
-### A2. Unpack and install
-
-Log in (see above) and:
+or in Git Bash / WSL:
 
 ```sh
-cd /tmp && rm -rf GaugeApp && tar -xf GaugeApp.tar && cd GaugeApp && sh install.sh
+ssh root@CAR "cd /tmp && rm -rf GaugeApp && tar -xf - && cd GaugeApp && sh install.sh" < GaugeApp.tar
 ```
+
+The output of `install.sh` appears on the computer. If SSH lands on `hu-jacinto` rather than `hu-omap` (see
+[Logging in](#two-ways-to-install)), put the commands in quotes after `on -f /net/hu-omap/ /bin/sh -c`. If an earlier
+attempt left a tar in `/tmp`, delete it first (`rm -f /tmp/GaugeApp.tar`) – it takes the room the unpacked folder
+needs. `/tmp` is emptied at a restart.
 
 `install.sh` is the same on NBT Evo and EntryNav2. It:
 
@@ -239,7 +242,7 @@ echo off > /var/opt/gaugeapp/app.disable
 
 and restart. To switch it on again: `rm /var/opt/gaugeapp/app.disable` and restart.
 
-**Uninstall** (A): from the package folder (in `/tmp/GaugeApp` as in A2), on `hu-omap`:
+**Uninstall** (A): from the package folder (in `/tmp/GaugeApp` after A, until the next restart), on `hu-omap`:
 
 ```sh
 cd /tmp/GaugeApp && sh uninstall.sh --purge

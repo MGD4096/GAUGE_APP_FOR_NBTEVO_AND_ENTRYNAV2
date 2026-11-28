@@ -86,23 +86,27 @@ scp <App>.tar root@169.254.1.0:/tmp/
 ssh root@169.254.1.0
 ```
 
-**NBT Evo** has **no `tar`, `pax` or `scp`** out of the box (car-verified on `hu-omap`). With both put on the unit by
-the user (e.g. the QNX SDP 6.5 `armle-v7` ones – QNX's files: never in a repository or a package), it is the same
-as EntryNav2; `-O` makes a new OpenSSH client use the classic scp protocol, which needs no SFTP server on the unit.
-SSH may land on `hu-omap` directly (the prompt says so); on `hu-jacinto` switch with `on -f /net/hu-omap/ /bin/sh`:
-
-```sh
-scp -O <App>.tar root@CAR:/tmp/
-ssh root@CAR
-```
-
-Then, the same on both units:
+Then on the unit:
 
 ```sh
 cd /tmp && rm -rf <App> && tar -xf <App>.tar
 ```
 
-**NBT Evo without `scp` and `tar` – the plain way.** Ship the plugin files also as a folder with nothing else
+**NBT Evo** has **no `tar`, `pax` or `scp`** out of the box, and its `/tmp` (`/fs/ram5` on `hu-omap`) is a RAM disk
+of only **14 MB** (car-verified): a package of more than about 7 MB and its unpacked folder do not fit there
+together. With `tar` put on the unit by the user (e.g. the QNX SDP 6.5 `armle-v7` one – QNX's file: never in a
+repository or a package), the tar is therefore **streamed over SSH into `tar -xf -`** – never stored on the unit, one
+login, `scp` not needed – and `install.sh` runs in the same command (car-verified). From PowerShell `cmd /c` is
+needed, because PowerShell has no `<` redirection:
+
+```sh
+ssh root@CAR "cd /tmp && rm -rf <App> && tar -xf - && cd <App> && sh install.sh" < <App>.tar
+```
+
+SSH may land on `hu-omap` directly (the prompt says so); if it lands on `hu-jacinto`, run the quoted commands with
+`on -f /net/hu-omap/ /bin/sh -c '…'`. The same streaming works on EntryNav2 too.
+
+**NBT Evo without `tar` – the plain way.** Ship the plugin files also as a folder with nothing else
 (GaugeApp: `dist/NBT/<resolution>/usb/<App>/`). The user copies it to a USB stick and, on `hu-omap`, by hand:
 `/bin/mount -u -o rw /fs/sda0`, `mkdir -p` the plugin folder, `rm -f` its old files, `cp /fs/usb0/<App>/*` into it,
 `chmod 755` the library, `ls -l` to compare the sizes, `/bin/mount -u -o ro /fs/sda0`. Nothing is checked for the
