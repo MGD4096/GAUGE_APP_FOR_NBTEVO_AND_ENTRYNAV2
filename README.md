@@ -303,15 +303,16 @@ Step-by-step guides:
 - **NBT Evo:** [docs/NbtEvo_Installation.md](docs/NbtEvo_Installation.md)
 
 The package `GaugeApp.tar` unpacks to the folder `GaugeApp/` (the app, `install.sh`, `uninstall.sh`, `FILES`) and
-installs the same way on both units – on NBT Evo when you have put `scp` and `tar` on the unit (it has neither out
-of the box; variant **A**). Without them NBT Evo is installed the plain way (variant **B**): the app's files from a
-USB stick, copied by hand, nothing checked for you.
+installs with `install.sh` on both units – on NBT Evo when you have put `tar` on the unit (it has none out of the
+box; variant **A**). NBT Evo's `/tmp` holds only 14 MB, so there the tar is streamed over SSH into `tar -xf -`
+instead of being copied first. Without `tar` NBT Evo is installed the plain way (variant **B**): the app's files from
+a USB stick, copied by hand, nothing checked for you.
 
-| | NBT Evo A (`scp` + `tar` on the unit) | NBT Evo B (USB stick, by hand) | EntryNav2 |
+| | NBT Evo A (`tar` on the unit) | NBT Evo B (USB stick, by hand) | EntryNav2 |
 |---|---|---|---|
 | Package | `dist\NBT\<resolution>\GaugeApp.tar` | `dist\NBT\<resolution>\usb\GaugeApp` | `dist/EntryNav2/<resolution>/GaugeApp.tar` |
-| Onto the unit | `scp -O GaugeApp.tar root@CAR:/tmp/` | copy the folder to a stick | `scp GaugeApp.tar root@169.254.1.0:/tmp/` |
-| Install (on `hu-omap` / the unit) | `cd /tmp && rm -rf GaugeApp && tar -xf GaugeApp.tar && cd GaugeApp && sh install.sh` | `mount -u -o rw /fs/sda0`, `cp`, `chmod`, `mount -u -o ro` ([the guide](docs/NbtEvo_Installation.md#b-usb-stick-by-hand)) | `cd /tmp && rm -rf GaugeApp && tar -xf GaugeApp.tar && cd GaugeApp && sh install.sh` |
+| Onto the unit | streamed, in the install command | copy the folder to a stick | `scp GaugeApp.tar root@169.254.1.0:/tmp/` |
+| Install | from the computer (PowerShell): `cmd /c 'ssh root@CAR "cd /tmp && rm -rf GaugeApp && tar -xf - && cd GaugeApp && sh install.sh" < GaugeApp.tar'` | on `hu-omap`: `mount -u -o rw /fs/sda0`, `cp`, `chmod`, `mount -u -o ro` ([the guide](docs/NbtEvo_Installation.md#b-usb-stick-by-hand)) | on the unit: `cd /tmp && rm -rf GaugeApp && tar -xf GaugeApp.tar && cd GaugeApp && sh install.sh` |
 | Restart | yourself, when everything is installed: hold the power button about 30 s | the same | yourself: `reboot` |
 
 `install.sh` (`package/install.sh`, POSIX `sh`, QNX or Linux by `uname`) checks every file against `FILES`, on
