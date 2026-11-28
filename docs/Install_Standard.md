@@ -49,12 +49,13 @@ The reference implementation is in this repository:
 ```
 
 - `FILES` lists **exactly the files copied into the plugin folder** – not itself, not the scripts. It may have CRLF
-  line ends (written on Windows); `install.sh` accepts both. Sizes rather than MD5 sums: the QNX shell may have no
-  `md5sum`, while `wc -c` exists everywhere.
+  line ends (written on Windows); `install.sh` accepts both. Sizes rather than MD5 sums, read from `ls -l` (field 5):
+  NBT Evo's `hu-omap` has no `md5sum`, `wc` or `tr`.
 - **The package is shipped as `<App>.tar`**, on both units, which unpacks to `<App>/`
   (`tar --format=ustar -cf <App>.tar -C <out> <App>`; on Windows `tar.exe --format ustar`, built in since
   Windows 10 1803). One file to copy, one `tar -xf` in `/tmp` gives `/tmp/<App>`. ustar, because BusyBox tar and
-  QNX's tar / `pax` read it. The folder itself is kept beside the tar (`dist/<Unit>/<resolution>/<App>/`).
+  QNX's tar / `pax` read it (a stock NBT Evo has neither: see below). The folder itself is kept beside the tar
+  (`dist/<Unit>/<resolution>/<App>/`).
 - Per screen resolution (if the app has resolution-specific files): one package folder each, in
   `dist/<Unit>/<resolution>/<App>/` (GaugeApp: `dist/EntryNav2/1280x480/GaugeApp/`, `dist/NBT/1440x540/GaugeApp/`).
 
@@ -71,7 +72,7 @@ The reference implementation is in this repository:
 | … read-only again | `/bin/mount -u -o ro /fs/sda0` | `mount -o remount,ro /` |
 | Restart (by the user) | hold the iDrive power button ~30 s, or switch off until the unit shuts down | `reboot` |
 | Library check | – | the loader: `LD_TRACE_LOADED_OBJECTS=1 … /lib/ld-linux-armhf.so.3 lib<App>.so` must print no `not found` / `undefined symbol` |
-| Missing tools | no `scp`, `sftp`, `touch`; maybe no `md5sum` | BusyBox |
+| Missing tools | no `scp`, `sftp`, `tar`, `pax`, `touch`, `dirname`, `tr`, `wc` (car-verified on `hu-omap`); maybe no `md5sum`, `grep`, `sync` | BusyBox |
 
 The scripts recognise a wrong place by the HMI's `lib` folder (`/opt/hmi/ID5/lib` / `/opt/hmi/lib`): on NBT Evo's
 `hu-jacinto` it is missing, and `install.sh` says to switch to `hu-omap`.
@@ -85,20 +86,14 @@ scp <App>.tar root@169.254.1.0:/tmp/
 ssh root@169.254.1.0
 ```
 
-**NBT Evo**, USB stick (copy `<App>.tar` to the stick's root; on the unit it is `/fs/usb0/<App>.tar`, or under
-`/mnt/umass…`), in the shell on `hu-omap` (`on -f /net/hu-omap/ /bin/sh`):
+**NBT Evo** has **no `tar`, `pax` or `scp`** out of the box (car-verified on `hu-omap`). With both put on the unit by
+the user (e.g. the QNX SDP 6.5 `armle-v7` ones – QNX's files: never in a repository or a package), it is the same
+as EntryNav2; `-O` makes a new OpenSSH client use the classic scp protocol, which needs no SFTP server on the unit.
+SSH may land on `hu-omap` directly (the prompt says so); on `hu-jacinto` switch with `on -f /net/hu-omap/ /bin/sh`:
 
 ```sh
-cp /fs/usb0/<App>.tar /tmp/
-```
-
-**NBT Evo** over SSH (no `scp`, so `cat`: one login for the whole tar; `/net/hu-omap/fs/ram5` is `/tmp` of
-`hu-omap`), then log in and switch to `hu-omap`:
-
-```sh
-ssh root@CAR 'cat > /net/hu-omap/fs/ram5/<App>.tar' < <App>.tar
+scp -O <App>.tar root@CAR:/tmp/
 ssh root@CAR
-on -f /net/hu-omap/ /bin/sh
 ```
 
 Then, the same on both units:
@@ -107,8 +102,12 @@ Then, the same on both units:
 cd /tmp && rm -rf <App> && tar -xf <App>.tar
 ```
 
-If a QNX unit has no `tar`: `pax -r -f <App>.tar` does the same. Without the tar the folder itself works too
-(`scp -r`, `cp -R` from a stick): `install.sh` only needs the folder.
+**NBT Evo without `scp` and `tar` – the plain way.** Ship the plugin files also as a folder with nothing else
+(GaugeApp: `dist/NBT/<resolution>/usb/<App>/`). The user copies it to a USB stick and, on `hu-omap`, by hand:
+`/bin/mount -u -o rw /fs/sda0`, `mkdir -p` the plugin folder, `rm -f` its old files, `cp /fs/usb0/<App>/*` into it,
+`chmod 755` the library, `ls -l` to compare the sizes, `/bin/mount -u -o ro /fs/sda0`. Nothing is checked for the
+user and nothing restarts; the rules above still hold. `install.sh` also works from a stick (`cp -R` the package
+folder to `/tmp`, then `sh install.sh`), if the user prefers its checks.
 
 ## Installing, then one restart
 
@@ -169,9 +168,13 @@ folder (after a restart `/tmp` is empty, so copy the folder there again first).
    uninstall with and without `--purge`, and that nothing restarts.
 4. Write the app's install guide as: get `<App>.tar` to `/tmp` (the unit's way), `tar -xf`, `sh install.sh`, restart.
 
-Keep the scripts to POSIX `sh` and the tools both units have (`uname`, `dirname`, `wc`, `tr`, `cp`, `rm`, `mkdir`,
-`chmod`, `mount`): NBT Evo runs QNX's `ksh`, EntryNav2 BusyBox `ash`. No `local`, arrays, `[[ ]]`, `md5sum` or
-`touch`.
+Keep the scripts to POSIX `sh` built-ins (`cd`, `pwd`, `echo`, `read`, `case`, `${var%…}`, `$(( ))`, `command -v`)
+and the few tools both units have: `uname`, `ls`, `cp`, `rm`, `mkdir`, `chmod`, `mount`. NBT Evo runs QNX's `ksh`
+on a minimal `hu-omap`: `dirname`, `tr` and `wc` are **missing** there (the first install on a car stopped on them),
+so `install.sh` takes its folder from `${0%/*}`, sizes from `ls -l` and strips a CR with `case`. EntryNav2 runs
+BusyBox `ash`. No `local`, arrays, `[[ ]]`, `md5sum`, `touch`, `dirname`, `tr`, `wc`, `grep` (EntryNav2-only parts
+excepted). `install.sh` checks for its tools first and names a missing one before anything is written; the host
+test runs it with only those tools on the `PATH`.
 
 ## Ids in use
 
@@ -185,5 +188,6 @@ The `pluginAppConnector` id (manifest) and `entryButtonFocusID` (XML) must diffe
 
 ## Status
 
-The scripts pass the host test (`make check`, run in `dash`). They have not yet run on a real unit; the first
-installation on each unit (QNX `ksh`, BusyBox `ash`) is their real test.
+The scripts pass the host test (`make check`, run in `dash`, also with only the tools above on the `PATH`). The
+first run on an NBT Evo (`hu-omap`) found `dirname` and `tr` missing; the scripts no longer use them. A full
+installation has not yet been confirmed on either unit.

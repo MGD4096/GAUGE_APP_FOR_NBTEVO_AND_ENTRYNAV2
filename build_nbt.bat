@@ -5,9 +5,11 @@ rem puts everything the head unit needs into one folder per screen resolution:
 rem   dist\NBT\1280x480\GaugeApp, dist\NBT\1440x540\GaugeApp   (no 800x480: NBT Evo has no 6.5" screens)
 rem each with libGaugeApp.so (the same for all), GaugeApp.manifest, GaugeApp.xml, the two zips, the frame packs,
 rem install.sh, uninstall.sh and FILES (the same package folder as EntryNav2's), and the same folder as
-rem dist\NBT\<resolution>\GaugeApp.tar (Windows' own tar, ustar format). On the unit, on hu-omap:
-rem   cd /tmp && tar -xf GaugeApp.tar && cd GaugeApp && sh install.sh
-rem (docs\NbtEvo_Installation.md; it does not restart the unit)
+rem dist\NBT\<resolution>\GaugeApp.tar (Windows' own tar, ustar format), and dist\NBT\<resolution>\usb\GaugeApp: the
+rem plugin files only. docs\NbtEvo_Installation.md has two ways (neither restarts the unit):
+rem   A  the unit has scp and tar: scp the tar to /tmp, then on hu-omap
+rem      cd /tmp && tar -xf GaugeApp.tar && cd GaugeApp && sh install.sh
+rem   B  usb\GaugeApp on a USB stick, copied by hand (mount rw, cp, chmod, mount ro)
 rem
 rem   build_nbt.bat                     (QNX found in C:\QNX650 or already on the PATH)
 rem   build_nbt.bat D:\QNX650           (another QNX folder)
@@ -67,8 +69,9 @@ for %%r in (1440x540) do (
         echo [SKIPPED] %%r - gen\%%r is missing: run python3 make_db.py --all ^(or make gen^) in WSL
     )
 )
-echo Copy GaugeApp.tar of the unit's screen to /tmp on hu-omap, then there:
+echo A - the unit has scp and tar: scp -O GaugeApp.tar root@CAR:/tmp/ then on hu-omap:
 echo   cd /tmp ^&^& rm -rf GaugeApp ^&^& tar -xf GaugeApp.tar ^&^& cd GaugeApp ^&^& sh install.sh
+echo B - without them: usb\GaugeApp to a USB stick, then the commands of docs\NbtEvo_Installation.md (B)
 exit /b 0
 
 rem :pack <resolution> <folder with its XML, zips and frame packs> - like toolchain\pack.sh
@@ -82,6 +85,11 @@ copy /y "%~2\GaugeApp.xml" "%OUT%\" >nul
 copy /y "%~2\GaugeApp_ALL_Texts.zip" "%OUT%\" >nul
 copy /y "%~2\GaugeApp_ALL_Images.zip" "%OUT%\" >nul
 copy /y "%~2\GaugeApp_frames*.bin" "%OUT%\" >nul
+rem B (USB stick, by hand): the plugin files only, copied before FILES and the scripts join them
+set USB=dist\NBT\%~1\usb\GaugeApp
+if exist "%USB%" rmdir /s /q "%USB%"
+mkdir "%USB%"
+copy /y "%OUT%\*" "%USB%\" >nul
 rem FILES: size and name of every plugin file (install.sh checks them; it accepts these CRLF line ends)
 if exist "%OUT%\..\FILES.new" del "%OUT%\..\FILES.new"
 for %%f in ("%OUT%\*") do >>"%OUT%\..\FILES.new" echo %%~zf %%~nxf
@@ -92,11 +100,11 @@ rem the same folder as a tar that unpacks to GaugeApp\ (like toolchain\pack.sh)
 set TAR=dist\NBT\%~1\GaugeApp.tar
 if exist "%TAR%" del "%TAR%"
 if not exist "%SystemRoot%\System32\tar.exe" (
-    echo [DONE] %OUT% - no tar.exe ^(Windows 10 1803 or later^): copy the folder instead of the tar
+    echo [DONE] %OUT% and %USB% - no tar.exe ^(Windows 10 1803 or later^): copy the folder instead of the tar
     exit /b 0
 )
 "%SystemRoot%\System32\tar.exe" --format ustar -cf "%TAR%" -C "dist\NBT\%~1" GaugeApp || (echo tar failed & exit /b 1)
-for %%f in ("%TAR%") do echo [DONE] %OUT% and %%~ff (%%~zf bytes)
+for %%f in ("%TAR%") do echo [DONE] %%~ff (%%~zf bytes), %OUT% and %USB%
 exit /b 0
 
 :nolibs

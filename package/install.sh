@@ -22,10 +22,25 @@ GUARD=app-guard                               # crash guard file in the data fol
 # --------------------------------------------------------------------------------------------------------------------
 ROOT=${GA_ROOT:-}
 SYSTEM=${GA_SYSTEM:-$(uname -s)}
-here=$(cd "$(dirname "$0")" && pwd)
 
 say() { echo "install: $*"; }
 die() { echo "install: ERROR: $*" >&2; exit 1; }
+
+# Only shell built-ins and ls, cp, rm, mkdir, chmod, mount: NBT Evo's hu-omap has no dirname, tr or wc (car-verified).
+for tool in ls cp rm mkdir chmod; do
+    command -v $tool > /dev/null 2>&1 || die "this unit has no '$tool' command (nothing installed)"
+done
+case "$0" in
+*/*) here=${0%/*} ;;
+*) here=. ;;
+esac
+here=$(cd "$here" && pwd)
+
+# fsize <file>: its size in bytes (field 5 of ls -l), empty when it is not there
+fsize() {
+    set -- $(ls -l "$1" 2>/dev/null)
+    echo "${5:-}"
+}
 
 case "$SYSTEM" in
 QNX)
@@ -61,11 +76,11 @@ fi
 [ -f "$here/FILES" ] || die "$here/FILES is missing: copy the whole $APP folder"
 names=""
 n=0
-while read -r size name; do
-    name=$(echo "$name" | tr -d '\r')
+while read -r size name rest; do
+    case "$name" in *[!A-Za-z0-9._-]) name=${name%?} ;; esac   # a CR at the end (FILES written on Windows)
     [ -n "$name" ] || continue
     [ -f "$here/$name" ] || die "$name is missing from the package: copy the whole $APP folder again"
-    got=$(wc -c < "$here/$name" | tr -d ' ')
+    got=$(fsize "$here/$name")
     [ "$got" = "$size" ] || die "$name has $got bytes instead of $size: copy the package again"
     names="$names $name"
     n=$((n + 1))
@@ -94,10 +109,10 @@ for name in $names; do
     cp "$here/$name" "$DEST/$name" || die "cannot copy $name to $DEST (full?)"
 done
 chmod 755 "$DEST/$LIB" || die "cannot make $LIB executable"
-sync 2>/dev/null
+command -v sync > /dev/null 2>&1 && sync
 for name in $names; do
-    want=$(wc -c < "$here/$name" | tr -d ' ')
-    got=$(wc -c < "$DEST/$name" 2>/dev/null | tr -d ' ')
+    want=$(fsize "$here/$name")
+    got=$(fsize "$DEST/$name")
     [ "$got" = "$want" ] || die "$DEST/$name has ${got:-no} bytes instead of $want (full?)"
 done
 trap - 0

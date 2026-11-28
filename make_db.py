@@ -105,7 +105,8 @@ def generate(a, screen, out):
         raise SystemExit("frame ids in both the common and the screens pack: %s" % sorted(set(common) & set(scr))[:20])
     size = write_frames(os.path.join(out, "GaugeApp_frames.bin"), common)
     size += write_frames(os.path.join(out, "GaugeApp_frames_s.bin"), scr)
-    res = os.path.join(out, "res")
+    # previews: res/ of the project for plugin/ (README shows them), else beside the files
+    res = os.path.join(HERE, "res") if os.path.abspath(out) == default_out(layout.DEFAULT_SCREEN) else os.path.join(out, "res")
     os.makedirs(res, exist_ok=True)
     for k, color in enumerate(COLORS):
         colored = color_images(fp, color)

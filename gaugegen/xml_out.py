@@ -126,6 +126,11 @@ DIAG_TEXTS = {
 }
 DIAG_LAYOUT = [(0, 0, 549, 484), (20, 20, 63, 54), (700, 150, 63, 54)]   # card, icon on the card, icon to the right
 WIDE_W, WIDE_H = 1280, 560
+# The preview beside the menu while the row is highlighted. With an hmiAction entry button the HMI previews the
+# action's target state by itself; the raAction entry button (it opens the screen shown last) has no target, and NBT
+# Evo showed an X there (car-verified). So the entry button names it, the way entry-aad does: previewModel ->
+# raPreviewModel StatePreview -> the engine screen (state 10), a live preview as before.
+PREVIEW_MODEL, PREVIEW_STATE = 22, 10
 
 
 def xml(slot_list, ox, oy, diag=False, menu_name=DEFAULT_MENU):
@@ -134,9 +139,12 @@ def xml(slot_list, ox, oy, diag=False, menu_name=DEFAULT_MENU):
     gm, gc = gauge_parts(slot_list, ox, oy)
     models += gm
     actions = ["      <hmiAction id=\"5\" target=\"10\"/>\n"]
-    entry_action, events = 5, []
+    entry_action, events, preview_attr = 5, [], ""
     if not diag:
         entry_action = ENTRY_ACTION
+        preview_attr = " previewModel=\"%d\"" % PREVIEW_MODEL
+        models += ["      <raPreviewModel id=\"%d\" modelType=\"StatePreview\" previewState=\"%d\"/>\n"
+                   % (PREVIEW_MODEL, PREVIEW_STATE)]
         actions = ["      <raAction id=\"%d\"/>\n" % ENTRY_ACTION]
         events = ["      <focusEvent id=\"%d\" target=\"%d\"/>\n" % (SCREEN_EVENT0 + k, sid)
                   for k, sid in enumerate(scr.state for scr in SCREEN_LIST)]
@@ -192,7 +200,7 @@ def xml(slot_list, ox, oy, diag=False, menu_name=DEFAULT_MENU):
         "  <pluginApp applicationType=\"%s\" applicationWeight=\"210\" entryButtonFocusID=\"32751\" "
         "insertAfterFocusID=\"2270\" insertStateID=\"20\" text=\"%s\">\n"
         "    <comment/>\n"
-        "    <entryButton action=\"%d\" id=\"1\" model=\"3\" imageModel=\"4\">\n      <properties/>\n    </entryButton>\n"
+        "    <entryButton action=\"%d\" id=\"1\" model=\"3\" imageModel=\"4\"%s>\n      <properties/>\n    </entryButton>\n"
         "    <actions>\n%s    </actions>\n"
         "    <models>\n%s    </models>\n"
         "%s"
@@ -200,6 +208,6 @@ def xml(slot_list, ox, oy, diag=False, menu_name=DEFAULT_MENU):
         "  </pluginApp>\n"
         "</pluginApps>\n" % (app_type, "the ConnectedDrive menu" if menu_name == "connected" else
                              "the Media/Radio list after the Bluetooth audio row", what, app_type, TITLE,
-                             entry_action, "".join(actions), "".join(models),
+                             entry_action, preview_attr, "".join(actions), "".join(models),
                              "    <events>\n%s    </events>\n" % "".join(events) if events else "",
                              "".join(states)))

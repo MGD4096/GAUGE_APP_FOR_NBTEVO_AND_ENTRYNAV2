@@ -55,6 +55,23 @@ for sys in Linux QNX; do
     GA_ROOT=$root GA_SYSTEM=$sys sh "$pkg/uninstall.sh" --purge > "$work/log" 2>&1
     check "$sys: uninstall --purge removes the data" '[ ! -d $data ]'
 done
+# NBT Evo's hu-omap: no dirname, tr, wc, grep, sync (car-verified) - only these tools on the PATH, run as
+# "cd /tmp/GaugeApp && sh install.sh" (no folder in $0), FILES with CRLF
+sh_bin=$(command -v sh)
+mkdir -p "$work/bin"
+for t in ls cp rm mkdir chmod; do ln -s "$(command -v $t)" "$work/bin/$t"; done
+root=$work/root-min
+mkdir -p "$root/opt/hmi/ID5/lib"
+sed 's/$/\r/' "$pkg/FILES" > "$work/FILES.crlf" && cp "$work/FILES.crlf" "$pkg/FILES"
+(cd "$pkg" && PATH=$work/bin GA_ROOT=$root GA_SYSTEM=QNX "$sh_bin" install.sh) > "$work/log" 2>&1
+check "QNX with only ls/cp/rm/mkdir/chmod: installs" '[ $? -eq 0 ] && ! grep -q "cannot execute\|not found" $work/log'
+check "QNX with only ls/cp/rm/mkdir/chmod: every file there" '[ $(ls $root/opt/hmi/ID5/data/ro/Plugins/GaugeApp | wc -l) -eq 11 ]'
+rm "$work/bin/chmod"
+(cd "$pkg" && PATH=$work/bin GA_ROOT=$root GA_SYSTEM=QNX "$sh_bin" install.sh) > "$work/log" 2>&1
+check "a missing tool is named before anything is written" '[ $? -ne 0 ] && grep -q "no .chmod. command" $work/log'
+(cd "$pkg" && PATH=$work/bin GA_ROOT=$root GA_SYSTEM=QNX "$sh_bin" uninstall.sh) > "$work/log" 2>&1
+check "uninstall with the same tools" '[ $? -eq 0 ] && [ ! -d $root/opt/hmi/ID5/data/ro/Plugins/GaugeApp ]'
+
 GA_ROOT=$work/root-Linux GA_SYSTEM=Darwin sh "$pkg/install.sh" > "$work/log" 2>&1
 check "an unknown system is refused" '[ $? -ne 0 ] && grep -q "unknown system" $work/log'
 
