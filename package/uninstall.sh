@@ -52,7 +52,7 @@ if [ -d "$DEST" ]; then
     rw || die "cannot make the system partition writable"
     trap 'ro' 0
     rm -rf "$DEST" || die "cannot remove $DEST"
-    sync 2>/dev/null
+    command -v sync > /dev/null 2>&1 && sync
     trap - 0
     ro || say "could not make the system partition read-only again: the restart will"
     say "removed $HMI/data/ro/Plugins/$APP"

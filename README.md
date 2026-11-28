@@ -106,7 +106,9 @@ pictures:
   of it. Each has a pixel position and a `raImageModel`, a picture the app sends as PNG data.
 - The frame packs `GaugeApp_frames*.bin` hold every frame: arcs (61 steps), max markers, digits in two sizes, the
   g-meter dot (21×21 grid, 0.2 g steps), gear cells, the pictures of screens 1–4. The iDrive image DB
-  (`GaugeApp_ALL_Images.zip`) holds only the menu row icon.
+  (`GaugeApp_ALL_Images.zip`) holds only the menu row icon. The picture beside the menu while the row is highlighted is a live preview of the
+  engine screen: the entry button's `previewModel` names state 10 (the entry button is a `raAction`, which has no
+  target state to preview; without it NBT Evo shows an X there).
 - `libGaugeApp.so`:
   1. maps the frame packs at start;
   2. after about 1.5 s subscribes to 22 **CDS** (Car Data Service) properties with the call NbtAad and entry-aad use
@@ -300,16 +302,17 @@ Step-by-step guides:
 - **EntryNav2:** [docs/EntryEvo_Installation.md](docs/EntryEvo_Installation.md)
 - **NBT Evo:** [docs/NbtEvo_Installation.md](docs/NbtEvo_Installation.md)
 
-Both units get the same package: `GaugeApp.tar`, which unpacks to the folder `GaugeApp/` (the app, `install.sh`,
-`uninstall.sh`, `FILES`), and install it the same way; only getting the tar to `/tmp` on the unit differs:
+The package `GaugeApp.tar` unpacks to the folder `GaugeApp/` (the app, `install.sh`, `uninstall.sh`, `FILES`) and
+installs the same way on both units – on NBT Evo when you have put `scp` and `tar` on the unit (it has neither out
+of the box; variant **A**). Without them NBT Evo is installed the plain way (variant **B**): the app's files from a
+USB stick, copied by hand, nothing checked for you.
 
-| | NBT Evo | EntryNav2 |
-|---|---|---|
-| Package | `dist\NBT\<resolution>\GaugeApp.tar` | `dist/EntryNav2/<resolution>/GaugeApp.tar` |
-| To `/tmp` | USB stick: on `hu-omap` (`on -f /net/hu-omap/ /bin/sh`) `cp /fs/usb0/GaugeApp.tar /tmp/`; or SSH: `ssh root@CAR 'cat > /net/hu-omap/fs/ram5/GaugeApp.tar' < GaugeApp.tar` | `scp GaugeApp.tar root@169.254.1.0:/tmp/` |
-| Unpack (on `hu-omap` / the unit) | `cd /tmp && rm -rf GaugeApp && tar -xf GaugeApp.tar` | `cd /tmp && rm -rf GaugeApp && tar -xf GaugeApp.tar` |
-| Install | `cd /tmp/GaugeApp && sh install.sh` | `cd /tmp/GaugeApp && sh install.sh` |
-| Restart | yourself, when everything is installed: hold the power button about 30 s | yourself, when everything is installed: `reboot` |
+| | NBT Evo A (`scp` + `tar` on the unit) | NBT Evo B (USB stick, by hand) | EntryNav2 |
+|---|---|---|---|
+| Package | `dist\NBT\<resolution>\GaugeApp.tar` | `dist\NBT\<resolution>\usb\GaugeApp` | `dist/EntryNav2/<resolution>/GaugeApp.tar` |
+| Onto the unit | `scp -O GaugeApp.tar root@CAR:/tmp/` | copy the folder to a stick | `scp GaugeApp.tar root@169.254.1.0:/tmp/` |
+| Install (on `hu-omap` / the unit) | `cd /tmp && rm -rf GaugeApp && tar -xf GaugeApp.tar && cd GaugeApp && sh install.sh` | `mount -u -o rw /fs/sda0`, `cp`, `chmod`, `mount -u -o ro` ([the guide](docs/NbtEvo_Installation.md#b-usb-stick-by-hand)) | `cd /tmp && rm -rf GaugeApp && tar -xf GaugeApp.tar && cd GaugeApp && sh install.sh` |
+| Restart | yourself, when everything is installed: hold the power button about 30 s | the same | yourself: `reboot` |
 
 `install.sh` (`package/install.sh`, POSIX `sh`, QNX or Linux by `uname`) checks every file against `FILES`, on
 EntryNav2 also every library the app needs, then makes the system partition writable, replaces the old version,
